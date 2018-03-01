@@ -2,8 +2,10 @@ env/
 
 Exemple_excel_dccd.png
 
+.ipynb_checkpoints/
+
 *.pyc
 
 # ignore cache
-__pycache__
+__pycache__/
 .cache/
