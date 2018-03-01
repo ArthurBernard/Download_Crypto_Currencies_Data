@@ -1,114 +1,49 @@
 # coding: utf-8
-#!/usr/bin/env python3 
+#!/usr/bin/env python
 
-import pandas as pd
-import numpy as np
-import time
-import pickle
 import json
-import requests
-import pathlib
 import os
+import pathlib
+import time
 
-class TimeFunction():
-    """ Some functions to manage timestamp and date  
+import numpy as np
+import pandas as pd
+import requests
+
+from dccd.timetools import TimeTools
+
+class ImportDataCryptoCurrencies:
+    """ Class to import data about crypto-currencies from some exchanges
+    platform. Don't use directly this class, use the respective class 
+    for each exchange.
     
     """
-    def __init__(self):
-        pass
+    def __init__(self, path, crypto, span, platform, fiat='EUR', form='xlsx'):
+        """ Parameters :
         
-    
-    def TS_to_date(self, TS, form = '%Y-%m-%d %H:%M:%S'):
-        """ Convert timestamp to date in specific format
-        
-        """
-        return time.strftime(form, time.localtime(TS))
-        
-    
-    def date_to_TS(self, date, form = '%Y-%m-%d %H:%M:%S'):
-        """ Convert date in specific format to timestamp
-        
-        """
-        return time.mktime(time.strptime(date, form))
-        
-    
-    def TS_to_YMD(self, TS):
-        a = time.strftime('%Y %m %d', time.localtime(int(TS))).split(' ')
-        return dt.datetime(int(a[0]), int(a[1]), int(a[2]))
-        
-    
-    def str_to_TS(self, string):
-        """ Return the equivalent interval time in seconds.
+        path: The path where data will be save.
+        crypto: The abreviation of the crypto-currencies as string.
+        span: As string for 'weekly', 'daily', 'hourly', or the integer 
+        of the seconds between each observations.
+        platform: The platform of your choice as string : 'Kraken', 
+        'Poloniex'.
+        start: Timestamp of the first observation of you want, as 
+        integer.
+        end: Timestamp of the last observation of you want as integer.
+        fiat: Basically the fiat as you want, but can also be an 
+        crypto-currencies.
+        form: As string, your favorit format. Only 'xlsx' for the 
+        moment.
         
         """
-        if string.lower() in ['weekly', 'week', '7d', '1w']:
-            return 604800
-        elif string.lower() in ['daily', 'day', '24h', '1d']:
-            return 86400
-        elif string.lower() in ['bi-hourly', 'bi-hour', '2h']:
-            return 7200
-        elif string.lower() in ['hourly', 'hour', '1h', '60min']:
-            return 3600
-        elif string.lower() in ['half-hourly', 'half-hour', '30min']:
-            return 1800
-        elif string.lower() in ['5-minute', 'five-minute', '5 minute', 'five minute', '5min']:
-            return 300
-        elif string.lower() in ['minutely', 'minute', '1min']:
-            return 60
-        else:
-            print('Error, string not understood.\nString must be "minutely", "5 minute", "hourly", "daily" or "weekly".')
-        
-    
-    def TS_to_str(self, TS):
-        """ Return interval seconds in a sting
-        
-        """
-        if TS == 60:
-            return 'Minutely'
-        elif TS == 300:
-            return 'Five_Minutely'
-        elif TS == 1800:
-            return 'Half_Hourly'
-        elif TS == 3600:
-            return 'Hourly'
-        elif TS == 7200:
-            return 'Bi_Hourly'
-        elif TS == 86400:
-            return 'Daily'
-        elif TS == 604800:
-            return 'Weekly'
-        else:
-            print('Error, no string correspond to this time in seconds.')
-
-
-class ImportDataCryptoCurrencies():
-    """ Class to import data about crypto-currencies from some exchanges 
-        platform. Don't use directly this class, use the respective class 
-        for each exchange.
-    
-    """
-    def __init__(self, path, crypto, span, platform, fiat = 'EUR', 
-                 form = 'xlsx'):
-        """ Initialisation.
-        
-            path :     The path where data will be save.
-            crypto :   The abreviation of the crypto-currencies as string.
-            span :     As string for 'weekly', 'daily', 'hourly', or the integer 
-                       of the seconds between each observations.
-            platform : The platform of your choice as string : 'Kraken', 'Poloniex'
-            start :    Timestamp of the first observation of you want, as integer.
-            end :      Timestamp of the last observation of you want as integer.
-            fiat :     Basically the fiat as you want, but can also be an 
-                       crypto-currencies.
-            form :     As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
-            
-        """
+        self.tools = TimeTools()
         self.path = path
         self.crypto = crypto
         self.span, self.per = self.period(span)
         self.fiat = fiat
-        self.pair = crypto+fiat
-        self.full_path = self.path+'/'+platform+'/Data/Clean_Data/'+str(self.per)+'/'+str(self.pair)
+        self.pair = crypto + fiat
+        self.full_path = self.path + '/' + platform + '/Data/Clean_Data/' + \
+            str(self.per) + '/' + str(self.pair)
         self.last_df = pd.DataFrame()
         
     
@@ -120,13 +55,14 @@ class ImportDataCryptoCurrencies():
         if not os.listdir(self.full_path):
             return 1325376000
         else: 
-            last_file = sorted(os.listdir(self.full_path), reverse = True)[0]
+            last_file = sorted(os.listdir(self.full_path), reverse=True)[0]
             print(last_file.split('.')[-1])
             if last_file.split('.')[-1] == 'xlsx':
                 self.last_df = pd.read_excel(self.full_path+'/'+str(last_file))
                 return self.last_df.TS.iloc[-1]
             else:
-                print('Last saved file is in format not allowing. Start at 1st January 2012.')
+                print('Last saved file is in format not allowing. Start at',
+                    '1st January 2012.')
                 return 1325376000
         
     
@@ -142,25 +78,27 @@ class ImportDataCryptoCurrencies():
             end = time.time()
         else:
             pass
-        return int((start//self.span)*self.span), int((end//self.span)*self.span)
+        return int((start // self.span) * self.span), \
+            int((end // self.span) * self.span)
         
     
     def by_period(self, TS):
-        return TimeFunction().TS_to_date(TS, form = '%'+self.by)
+        return self.tools.TS_to_date(TS, form='%'+self.by)
         
     
     def name_file(self, date):
-        return self.per+'_of_'+self.crypto+self.fiat+'_in_'+date
+        return self.per + '_of_' + self.crypto + self.fiat + '_in_' + date
         
     
-    def save(self, form = 'xlsx', by = 'Y'):
-        """ Save data by period (default is year) in the corresponding format and file
+    def save(self, form='xlsx', by='Y'):
+        """ Save data by period (default is year) in the corresponding
+        format and file.
         to finish
         """
         df = (self.last_df.append(self.df)
               .drop_duplicates(subset='TS', keep='last')
               .reset_index(drop=True)
-              .drop('Date', axis = 1)
+              .drop('Date', axis=1)
               .reindex(columns = ['TS', 'date', 'time', 'close', 'high', 'low', 'open', 
                                   'quoteVolume', 'volume', 'weightedAverage']))
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True) 
@@ -208,43 +146,44 @@ class ImportDataCryptoCurrencies():
         
         """
         return self.df
-    
+        
     
     def period(self, span):
         if type(span) is str:
-            return TimeFunction().str_to_TS(span), span
+            return self.tools.str_to_TS(span), span
         elif type(span) is int:
-            return span, TimeFunction().TS_to_str(span)
+            return span, self.tools.TS_to_str(span)
         else:
             print("Error, span don't have the appropiate format as string or integer (seconds)")
         
     
     def specific_hierarchy(self, liste):
         """ You can determine the specific hierarchy of the files where will save your data.
-        
+        to finish
         """
         self.full_path = self.path
         for elt in liste:
             self.full_path += '/'+elt
+        
+    
 
-
-class ImportFromPoloniex(ImportDataCryptoCurrencies):
+class FromPoloniex(ImportDataCryptoCurrencies):
     """ Class to download data from Poloniex exchange.
     
     """
     def __init__(self, path, crypto, span, fiat = 'USDT', form = 'xlsx'):
         """ Initialisation.
         
-            path :   The path where data will be save.
-            crypto : The abreviation of the crypto-currencies as string.
-            span :   As string for 'weekly', 'daily', 'hourly', or the integer 
-                     of the seconds between each observations. Min 300 seconds.
-            fiat :   Basically the fiat as you want, but can also be an 
-                     crypto-currencies. Poloniex don't allow fiat currencies, 
-                     but USD theter.
-            form :   As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
-                     Only xlsx is allowed for the moment.
-            
+        path: The path where data will be save.
+        crypto: The abreviation of the crypto-currencies as string.
+        span: As string for 'weekly', 'daily', 'hourly', or the integer 
+        of the seconds between each observations. Min 300 seconds.
+        fiat: Basically the fiat as you want, but can also be an 
+        crypto-currencies. Poloniex don't allow fiat currencies, but 
+        USD theter.
+        form: As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
+        Only xlsx is allowed for the moment.
+        
         """
         if fiat in ['EUR', 'USD']:
             print("Poloniex don't allow fiat currencies, the equivalent of US dollar is Tether USD.")
@@ -258,9 +197,10 @@ class ImportFromPoloniex(ImportDataCryptoCurrencies):
     
     def import_data(self, start = 'last', end = 'now'):
         """ Download data from poloniex for specific time interval
-            
-            start : Timestamp of the first observation of you want, as integer.
-            end :   Timestamp of the last observation of you want as integer.
+        
+        start: Timestamp of the first observation of you want, as 
+        integer.
+        end: Timestamp of the last observation of you want as integer.
             
         """
         self.start, self.end = self.time(start, end)
@@ -273,25 +213,27 @@ class ImportFromPoloniex(ImportDataCryptoCurrencies):
         }
         r = requests.get('https://poloniex.com/public', param)
         return self.sort_data(json.loads(r.text))
+        
+    
 
-
-class ImportFromKraken(ImportDataCryptoCurrencies):
+class FromKraken(ImportDataCryptoCurrencies):
     """ Class to download data from Kraken exchange.
     
     """
     def __init__(self, path, crypto, span, fiat = 'USD', form = 'xlsx'):
         """ Initialisation.
         
-            path :   The path where data will be save.
-            crypto : The abreviation of the crypto-currencies as string.
-            span :   As string for 'weekly', 'daily', 'hourly', or the integer 
-                     of the seconds between each observations. Min 60 seconds.
-            fiat :   Basically the fiat as you want, but can also be an 
-                     crypto-currencies.
-            form :   As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
-            
+        path: The path where data will be save.
+        crypto: The abreviation of the crypto-currencies as string.
+        span: As string for 'weekly', 'daily', 'hourly', or the integer
+        of the seconds between each observations. Min 60 seconds.
+        fiat: Basically the fiat as you want, but can also be an 
+        crypto-currencies.
+        form: As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
+        Only xlsx is allow for the moment.
+        
         """
-        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'Kraken', fiat, form)
+        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'Kraken', fiat = fiat, form = form)
         if crypto == 'BTC':
             crypto = 'XBT'
         if crypto == 'BCH' or crypto == 'DASH':
@@ -305,8 +247,9 @@ class ImportFromKraken(ImportDataCryptoCurrencies):
     def import_data(self, start = 'last'):
         """ Download data from Kraken since a specific time until now
         
-            start : Timestamp of the first observation of you want, as integer.
-            
+        start : Timestamp of the first observation of you want, as 
+        integer.
+        
         """
         self.start, self.end = self.time(start, time.time())
         param = {
