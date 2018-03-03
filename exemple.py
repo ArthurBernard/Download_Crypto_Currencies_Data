@@ -21,6 +21,7 @@ format.
 If start is the string 'last' the programm try to find the last data 
 download if it exist and update the data base. 
 If end is the string 'now' end will be the current time.
+start and end can also be date format 'yyyy-mm-dd hh:mm:ss' as string.
 
 The method 'save' without parameter save the data downloaded.
 
@@ -35,8 +36,8 @@ from dccd.dl_cc_data import FromPoloniex as pk
 
 xbtusd = pk('D:/Users/Arthur/Crypto_Currencies/', 'XBT', 86400, fiat='USD')
 
-start = time.time()-86400*10 # start 10 days before today
-end = time.time()-86400*5 # stop 5 days before today
+start = '2018-02-20 00:00:00' # date format 'yyyy-mm-dd hh:mm:ss' as string
+end = time.time()-86400*5 # date format timestamp of 5 days before today
 
 xbtusd.import_data(start=start, end=end).save().show()
 

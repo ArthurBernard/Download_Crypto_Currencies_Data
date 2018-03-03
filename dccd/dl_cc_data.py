@@ -67,15 +67,19 @@ class ImportDataCryptoCurrencies:
         
     
     def time(self, start, end):
-        """ Determine the end and start.
-        to finish
+        """ Determine the end and start in timestamp if is not yet.
+        
         """
         if start is 'last':
             start = self.last_date()
+        elif isinstance(start, str):
+            start = self.tools.date_to_TS(start)
         else:
             pass
         if end is 'now':
             end = time.time()
+        elif isinstance(end, str):
+            end = self.tools.date_to_TS(end)
         else:
             pass
         return int((start // self.span) * self.span), \
@@ -198,9 +202,10 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     def import_data(self, start = 'last', end = 'now'):
         """ Download data from poloniex for specific time interval
         
-        start: Timestamp of the first observation of you want, as 
-        integer.
-        end: Timestamp of the last observation of you want as integer.
+        start: Timestamp of the first observation of you want as 
+        integer, or date format 'yyyy-mm-dd hh:mm:ss' as string.
+        end: Timestamp of the last observation of you want as integer,
+        or date format 'yyyy-mm-dd hh:mm:ss' as string.
             
         """
         self.start, self.end = self.time(start, end)
@@ -247,8 +252,8 @@ class FromKraken(ImportDataCryptoCurrencies):
     def import_data(self, start = 'last'):
         """ Download data from Kraken since a specific time until now
         
-        start : Timestamp of the first observation of you want, as 
-        integer.
+        start : Timestamp of the first observation of you want as 
+        integer, or date format 'yyyy-mm-dd hh:mm:ss' as string.
         
         """
         self.start, self.end = self.time(start, time.time())
