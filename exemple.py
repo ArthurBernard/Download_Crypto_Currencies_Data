@@ -32,6 +32,8 @@ The method 'show' without parameter show the data downloaded.
 
 import time
 
+import pandas as pd
+
 from dccd.dl_cc_data import FromPoloniex as pk
 
 xbtusd = pk('D:/Users/Arthur/Crypto_Currencies/', 'XBT', 86400, fiat='USD')

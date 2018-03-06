@@ -45,6 +45,7 @@ class ImportDataCryptoCurrencies:
         self.full_path = self.path + '/' + platform + '/Data/Clean_Data/' + \
             str(self.per) + '/' + str(self.pair)
         self.last_df = pd.DataFrame()
+        self.form = form
         
     
     def last_date(self):
@@ -56,9 +57,8 @@ class ImportDataCryptoCurrencies:
             return 1325376000
         else: 
             last_file = sorted(os.listdir(self.full_path), reverse=True)[0]
-            print(last_file.split('.')[-1])
             if last_file.split('.')[-1] == 'xlsx':
-                self.last_df = pd.read_excel(self.full_path+'/'+str(last_file))
+                self.last_df = pd.read_excel(self.full_path + '/' + str(last_file))
                 return self.last_df.TS.iloc[-1]
             else:
                 print('Last saved file is in format not allowing. Start at',
@@ -87,7 +87,7 @@ class ImportDataCryptoCurrencies:
         
     
     def by_period(self, TS):
-        return self.tools.TS_to_date(TS, form='%'+self.by)
+        return self.tools.TS_to_date(TS, form='%' + self.by)
         
     
     def name_file(self, date):
@@ -107,12 +107,12 @@ class ImportDataCryptoCurrencies:
                                   'quoteVolume', 'volume', 'weightedAverage']))
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True) 
         self.by = by
-        grouped = df.set_index('TS', drop = False).groupby(self.by_period, axis = 0)#.reset_index()
+        grouped = df.set_index('TS', drop=False).groupby(self.by_period, axis=0)#.reset_index()
         for name, group in grouped:
             if form is 'xlsx':
-                writer = pd.ExcelWriter(self.full_path+'/'+self.name_file(name)+'.'+form, engine='xlsxwriter')
+                writer = pd.ExcelWriter(self.full_path + '/' + self.name_file(name) + '.' + form, engine='xlsxwriter')
                 df_group = group.reset_index(drop=True)
-                df_group.to_excel(writer, header = True, index = False, sheet_name='Sheet1')
+                df_group.to_excel(writer, header=True, index=False, sheet_name='Sheet1')
                 work_book = writer.book
                 work_sheet = writer.sheets['Sheet1']
                 fmt = work_book.add_format({'align': 'center', 'num_format': '#,##0.00'})
@@ -134,14 +134,14 @@ class ImportDataCryptoCurrencies:
         """ Clean and sort the data.
         to finish
         """
-        df = pd.DataFrame(data).rename(columns = {'date' : 'TS'})#, index = range(self.start, self.end, self.span))
+        df = pd.DataFrame(data).rename(columns = {'date': 'TS'})#, index = range(self.start, self.end, self.span))
         TS = pd.DataFrame(list(range(self.start, self.end, self.span)), columns = ['TS'])
-        df = (df.merge(TS, on = 'TS', how ='outer')
+        df = (df.merge(TS, on='TS', how='outer')
               .sort_values('TS')
               .reset_index(drop=True)
-              .fillna(method = 'pad'))
+              .fillna(method='pad'))
         df = df.assign(Date = pd.to_datetime(df.TS, unit='s'))
-        self.df = df.assign(date = df.Date.dt.date, time = df.Date.dt.time)
+        self.df = df.assign(date=df.Date.dt.date, time=df.Date.dt.time)
         return self
         
     
@@ -167,7 +167,7 @@ class ImportDataCryptoCurrencies:
         """
         self.full_path = self.path
         for elt in liste:
-            self.full_path += '/'+elt
+            self.full_path += '/' + elt
         
     
 
@@ -175,7 +175,7 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     """ Class to download data from Poloniex exchange.
     
     """
-    def __init__(self, path, crypto, span, fiat = 'USDT', form = 'xlsx'):
+    def __init__(self, path, crypto, span, fiat='USDT', form='xlsx'):
         """ Initialisation.
         
         path: The path where data will be save.
@@ -190,16 +190,16 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         
         """
         if fiat in ['EUR', 'USD']:
-            print("Poloniex don't allow fiat currencies, the equivalent of US dollar is Tether USD.")
+            print("Poloniex don't allow fiat currencies, the equivalent of US dollar is Tether USD as USDT.")
             self.fiat = fiat = 'USDT'
         if crypto == 'XBT':
             crypto = 'BTC'
         ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'Poloniex', fiat, form)
-        self.pair = self.fiat+'_'+crypto
-        self.full_path = self.path+'/Poloniex/Data/Clean_Data/'+str(self.per)+'/'+str(self.crypto)+str(self.fiat)
+        self.pair = self.fiat + '_' + crypto
+        self.full_path = self.path + '/Poloniex/Data/Clean_Data/' + str(self.per) + '/' + str(self.crypto) + str(self.fiat)
         
     
-    def import_data(self, start = 'last', end = 'now'):
+    def import_data(self, start='last', end='now'):
         """ Download data from poloniex for specific time interval
         
         start: Timestamp of the first observation of you want as 
@@ -210,11 +210,11 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         """
         self.start, self.end = self.time(start, end)
         param = {
-            'command' : 'returnChartData', 
-            'currencyPair' : self.pair, 
-            'start':self.start, 
+            'command': 'returnChartData', 
+            'currencyPair': self.pair, 
+            'start': self.start, 
             'end': self.end, 
-            'period' : self.span
+            'period': self.span
         }
         r = requests.get('https://poloniex.com/public', param)
         return self.sort_data(json.loads(r.text))
@@ -225,7 +225,7 @@ class FromKraken(ImportDataCryptoCurrencies):
     """ Class to download data from Kraken exchange.
     
     """
-    def __init__(self, path, crypto, span, fiat = 'USD', form = 'xlsx'):
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         """ Initialisation.
         
         path: The path where data will be save.
@@ -238,7 +238,7 @@ class FromKraken(ImportDataCryptoCurrencies):
         Only xlsx is allow for the moment.
         
         """
-        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'Kraken', fiat = fiat, form = form)
+        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'Kraken', fiat=fiat, form=form)
         if crypto == 'BTC':
             crypto = 'XBT'
         if crypto == 'BCH' or crypto == 'DASH':
@@ -249,7 +249,7 @@ class FromKraken(ImportDataCryptoCurrencies):
             self.pair = 'X'+crypto+'Z'+fiat
         
     
-    def import_data(self, start = 'last'):
+    def import_data(self, start='last'):
         """ Download data from Kraken since a specific time until now
         
         start : Timestamp of the first observation of you want as 
@@ -258,14 +258,111 @@ class FromKraken(ImportDataCryptoCurrencies):
         """
         self.start, self.end = self.time(start, time.time())
         param = {
-            'pair' : self.pair, 
-            'interval' : int(self.span/60), 
-            'since' : self.start-self.span
+            'pair': self.pair, 
+            'interval': int(self.span / 60), 
+            'since': self.start - self.span
         }
         r = requests.get('https://api.kraken.com/0/public/OHLC', param)
         text = json.loads(r.text)['result'][self.pair]
-        data = [{'date' : float(e[0]), 'open' : float(e[1]), 'high' : float(e[2]), 
-                 'low' : float(e[3]), 'close' : float(e[4]), 
-                 'weightedAverage' : float(e[5]), 'volume': float(e[6]), 
-                 'quoteVolume':float(e[6])*float(e[5])} for e in text]
+        data = [{'date': float(e[0]), 'open': float(e[1]), 'high': float(e[2]), 
+                 'low': float(e[3]), 'close': float(e[4]), 
+                 'weightedAverage': float(e[5]), 'volume': float(e[6]), 
+                 'quoteVolume': float(e[6])*float(e[5])} for e in text]
+        return self.sort_data(data)
+
+
+class FromGDAX(ImportDataCryptoCurrencies):
+    """ Class to download data from GDAX exchange.
+    
+    """
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+        """ Initialisation.
+        
+        path :   The path where data will be save.
+        crypto : The abreviation of the crypto-currencies as string.
+        span :   As string for 'daily', 'hourly', 'minutely' or the integer 
+        of the seconds between each observations. Min 60 seconds.
+        fiat :   Basically the fiat as you want, but can also be an 
+        crypto-currenciy. 
+        form :   As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
+        Only xlsx is allowed for the moment.
+        
+        """
+        if crypto is 'XBT':
+            crypto = 'BTC'
+        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'GDAX', fiat, form)
+        self.pair = crypto + '-' + fiat
+        self.full_path = self.path + '/GDAX/Data/Clean_Data/' + str(self.per) + '/' + str(self.crypto) + str(self.fiat)
+        
+    
+    def import_data(self, start = 'last', end = 'now'):
+        """ Download data from poloniex for specific time interval
+        
+        start : Timestamp of the first observation of you want, as integer.
+        end :   Timestamp of the last observation of you want as integer.
+        
+        """
+        self.start, self.end = self.time(start, end)
+        param = {
+            'start': self.tools.TS_to_date(self.start - self.span),
+            'end': self.tools.TS_to_date(self.end),
+            'granularity': self.span
+        }
+        r = requests.get('https://api.gdax.com/products/{}/candles'.format(self.pair), param)
+        text = json.loads(r.text)
+        data = [{'date': float(e[0]), 'open': float(e[3]), 'high': float(e[2]), 
+                 'low': float(e[1]), 'close': float(e[4]), 
+                 'volume': float(e[5]), 'quoteVolume': float(e[4]) * float(e[5])} for e in text]
+        return self.sort_data(data)
+
+
+class FromBinance(ImportDataCryptoCurrencies):
+    """ Class to download data from Binance exchange.
+    
+    """
+    def __init__(self, path, crypto, span, fiat='USDT', form='xlsx'):
+        """ Initialisation.
+        
+        path :   The path where data will be save.
+        crypto : The abreviation of the crypto-currencies as string.
+        span :   As string for 'daily', 'hourly', 'minutely' or the integer 
+        of the seconds between each observations. Min 60 seconds.
+        fiat :   Basically the fiat as you want, but can also be an 
+        crypto-currenciy. Binance don't allow fiat currencies, 
+        but USD theter.
+        form :   As string, your favorit format e.g. 'csv', 'txt', 'xlsx'.
+        Only xlsx is allowed for the moment.
+        
+        """
+        if fiat in ['EUR', 'USD']:
+            print("Binance don't allow fiat currencies, the equivalent of US dollar is Tether USD as USDT.")
+            self.fiat = fiat = 'USDT'
+        if crypto is 'XBT':
+            crypto = 'BTC'
+        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'GDAX', fiat, form)
+        self.pair = crypto + fiat
+        self.full_path = self.path + '/Binance/Data/Clean_Data/' + str(self.per) + '/' + str(self.crypto) + str(self.fiat)
+        
+    
+    def import_data(self, start = 'last', end = 'now'):
+        """ Download data from poloniex for specific time interval
+        
+        start : Timestamp of the first observation of you want, as integer.
+        end :   Timestamp of the last observation of you want as integer.
+        
+        """
+        self.start, self.end = self.time(start, end)
+        param = {
+            'symbol' : self.pair,
+            'startTime': self.start * 1000,
+            'endTime': self.end * 1000,
+            'interval': self.tools.binance_interval(self.span),
+        }
+        r = requests.get('https://api.binance.com/api/v1/klines', param)
+        text = json.loads(r.text)
+        print(param)
+        print(text)
+        data = [{'date': float(e[0] / 1000), 'open': float(e[1]), 
+                 'high': float(e[2]), 'low': float(e[3]), 'close': float(e[4]), 
+                 'volume': float(e[5]), 'quoteVolume': float(e[7])} for e in text]
         return self.sort_data(data)

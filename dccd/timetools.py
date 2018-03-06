@@ -72,3 +72,23 @@ class TimeTools():
             return 'Weekly'
         else:
             print('Error, no string correspond to this time in seconds.')
+        
+    def binance_interval(self, interval):
+        """ Return the time interval in the format allow by Binance.
+        
+        :interval: must be in seconds as 60, 180, 300, 900, 1800, 3600, 
+        7200, 14400, 21600, 28800, 43200, 86400, 259200, 604800, 2592000.
+        
+        """
+        if interval / 60 in [1, 3, 5, 15, 30]:
+            return '{}m'.format(int(interval / 60))
+        elif interval / 3600 in [1, 2, 4, 6, 8, 12]:
+            return '{}h'.format(int(interval / 3600))
+        elif interval / 86400 in [1, 3]:
+            return '{}d'.format(int(interval / 86400))
+        elif interval == 604800:
+            return '1w'
+        elif interval == 2592000:
+            return '1M'
+        else:
+            print('No format allowed.')
