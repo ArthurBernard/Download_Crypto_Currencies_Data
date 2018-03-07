@@ -1,7 +1,15 @@
-# coding: utf-8
 #!/usr/bin/env python 
+# -*- coding: utf-8 -*-
+
 
 import time
+
+
+""" timetools is a module with TimeTools class to manage some time 
+functions with respect to each specific API exchange. 
+
+"""
+
 
 class TimeTools():
     """ Some functions to manage timestamp and date  

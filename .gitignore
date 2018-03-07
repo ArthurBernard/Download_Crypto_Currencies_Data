@@ -1,4 +1,7 @@
 env/
+dccd.egg-info/
+dist/
+setup.cfg
 
 Exemple_excel_dccd.png
 

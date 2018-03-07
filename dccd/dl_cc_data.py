@@ -1,5 +1,24 @@
-# coding: utf-8
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+
+""" dl_cc_data is a module with classes to download data on different
+crypto-currency exchanges. Only FromBinance, FromGDAX, FromKraken and 
+FromPoloniex is allowed for the moment. 
+
+Use: 
+
+>>> from dccd import FromBinance
+>>> one_day = 86400 # time in seconds
+>>> fb = FromBinance('your/path/where/save/data', 'BTC', one_day)
+>>> (fb.import_data(start='last', end='now')
+>>>    .save()
+>>>    .show())
+
+More complex used in exemple files.
+
+"""
+
 
 import json
 import os
@@ -11,6 +30,8 @@ import pandas as pd
 import requests
 
 from dccd.timetools import TimeTools
+
+__all__ = ['FromBinance', 'FromGDAX', 'FromKraken', 'FromPoloniex']
 
 class ImportDataCryptoCurrencies:
     """ Class to import data about crypto-currencies from some exchanges
