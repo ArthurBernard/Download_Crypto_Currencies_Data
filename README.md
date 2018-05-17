@@ -1,6 +1,6 @@
 # Download_Crypto_Currencies_Data
 ***
-#### This is a python package to *download* and *upload* data about *crypto-currencies* (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, GDAX, Kraken and Poloniex for the moment).
+#### This is a beta version of a python package to *download* and *upload* data about *crypto-currencies* (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, GDAX, Kraken and Poloniex for the moment).
 
 ## Presentation:
 
@@ -34,4 +34,4 @@ Install the library from pip:
 > pip install dccd
 
 ***
-*Package not achieved, always in progress. All advice is welcome.*
+*Package not achieved, always in progress. This is my first one package, all advice is welcome.*
