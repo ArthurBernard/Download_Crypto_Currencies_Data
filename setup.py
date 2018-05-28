@@ -14,11 +14,11 @@ setup(
     description='Download Crypto Currenciy Data from different exchanges.',
     long_description=open('README.md').read(),
     install_requires=[
-        'numpy<=1.14.1', 
-        'pandas<=0.22.0', 
-        'requests<=2.18.4', 
-        'xlrd<=1.1.0', 
-        'xlsxwriter<=1.0.2'
+        'numpy>=1.14.1', 
+        'pandas>=0.22.0', 
+        'requests>=2.18.4', 
+        'xlrd>=1.1.0', 
+        'xlsxwriter>=1.0.2'
     ],
     url='https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
     classifiers=[
