@@ -2,6 +2,7 @@ env/
 dccd.egg-info/
 dist/
 setup.cfg
+build/
 
 Exemple_excel_dccd.png
 
