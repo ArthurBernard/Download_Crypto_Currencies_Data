@@ -5,6 +5,9 @@ from setuptools import setup, find_packages
 
 import dccd
 
+with open('README.md') as f:
+    long_description = f.read()
+
 setup(
     name='dccd',
     version=dccd.__version__,
@@ -12,7 +15,7 @@ setup(
     author='Arthur Bernard',
     author_email='arthur.bernard.92@gmail.com',
     description='Download Crypto Currenciy Data from different exchanges.',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     install_requires=[
         'numpy>=1.14.1', 
         'pandas>=0.22.0', 
