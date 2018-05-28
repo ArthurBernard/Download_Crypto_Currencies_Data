@@ -39,6 +39,6 @@ Method chaining is available.
 
 """
 
-__version__ = "0.1"
+__version__ = "0.1.1"
 
 from .dl_cc_data import FromBinance, FromGDAX, FromKraken, FromPoloniex
