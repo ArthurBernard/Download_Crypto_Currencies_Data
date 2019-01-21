@@ -24,25 +24,27 @@ download if it exist and update the data base.
 If end is the string 'now' end will be the current time.
 start and end can also be date format 'yyyy-mm-dd hh:mm:ss' as string.
 
-The method 'save' without parameter save the data downloaded.
+The method 'save' without parameter saves the data downloaded.
 
-The method 'show' without parameter show the data downloaded.
+The method 'get_data' without parameter returns the data downloaded as 
+pd.DataFrame.
+
 """
 
 import time
 
 import pandas as pd
 
-from dccd.dl_cc_data import FromPoloniex as pk
+from dccd import FromPoloniex as pk
 
-xbtusd = pk('D:/Users/Arthur/Crypto_Currencies/', 'XBT', 86400, fiat='USD')
+xbtusd = pk('/home/arthur/Data/Crypto_Currencies/', 'XBT', 86400, fiat='USD')
 
 start = '2018-03-01 00:00:00' # date format 'yyyy-mm-dd hh:mm:ss' as string
 end = time.time() - 86400 * 5 # date format timestamp of 5 days before today
 
-xbtusd.import_data(start=start, end=end).save().show()
+xbtusd.import_data(start=start, end=end).save().get_data()
 
-xbtusd.import_data(start='last', end='now').save().show() # update data base
+xbtusd.import_data(start='last', end='now').save().get_data() # update data base
 
 input('press ENTER to close')
 exit()
