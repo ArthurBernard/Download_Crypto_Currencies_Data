@@ -10,6 +10,7 @@ functions with respect to each specific API exchange.
 
 """
 
+__all__ = ['TimeTools']
 
 class TimeTools():
     """ Some functions to manage timestamp and date  
