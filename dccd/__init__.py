@@ -39,6 +39,26 @@ Method chaining is available.
 
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2"
 
-from .dl_cc_data import FromBinance, FromGDAX, FromKraken, FromPoloniex
+from . import time_tools
+from .time_tools import *
+from . import exchange
+from .exchange import ImportDataCryptoCurrencies
+from . import kraken
+from .kraken import FromKraken
+from . import gdax
+from .gdax import FromGDax
+from . import binance
+from .binance import FromBinance
+from . import poloniex
+from .poloniex import FromPoloniex
+
+__all__ = time_tools.__all__
+__all__ += exchange.__all__
+__all__ += kraken.__all__
+__all__ += binance.__all__
+__all__ += gdax.__all__
+__all__ += poloniex.__all__
+
+#from .dl_cc_data import FromBinance, FromGDAX, FromKraken, FromPoloniex
