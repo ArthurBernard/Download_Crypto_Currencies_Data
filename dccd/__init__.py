@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 
-"""The 'dccd' package contain the module 'dl_cc_data' with 5 classes to 
-download and update data for each exchange, and a module 'timetools' to 
-manage specific time functions needed for each API.
+"""The 'dccd' package contains a main class and four classes to download 
+and update data for each exchange, and a module 'timetools' to manage 
+specific time functions needed for each API.
 
-The four classes to download data are FromBinance, FromGDAX, FromKraken 
+The four classes to download data are FromBinance, FromGDax, FromKraken 
 and FromPoloniex. All have the same methods and almost the same 
 parameters:
 
@@ -33,13 +33,13 @@ saved file (default is 'Y' as an entire year). Exclusion: This optional
 parameters are in progress, let the default parameter for the moment, 
 other are not allow.
 
-show(): print the data frame without any parameter.
+get_data(): returns the data frame without any parameter.
 
 Method chaining is available.
 
 """
 
-__version__ = "0.2"
+__version__ = "0.2.1"
 
 from . import time_tools
 from .time_tools import *
@@ -60,5 +60,3 @@ __all__ += kraken.__all__
 __all__ += binance.__all__
 __all__ += gdax.__all__
 __all__ += poloniex.__all__
-
-#from .dl_cc_data import FromBinance, FromGDAX, FromKraken, FromPoloniex
