@@ -9,7 +9,7 @@ Download_Crypto_Currencies_Data
 .. image:: https://img.shields.io/travis/ArthurBernard/dccd.svg
     :target: https://travis-ci.org/ArthurBernard/dccd
 .. image:: https://img.shields.io/github/license/ArthurBernard/dccd.svg
-    :target: https://github.com/ArthurBernard/dccd/blob/master/LICENSE.txt
+    :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/blob/master/LICENSE.txt
 .. image:: https://pepy.tech/badge/dccd 
     :target: https://pepy.tech/project/dccd
 
