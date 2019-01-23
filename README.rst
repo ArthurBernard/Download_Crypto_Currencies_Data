@@ -2,12 +2,23 @@
 Download_Crypto_Currencies_Data
 ===============================
 
+.. image:: https://img.shields.io/pypi/v/dccd.svg
+    :target: https://pypi.org/project/dccd/
+.. image:: https://img.shields.io/pypi/status/dccd.svg?colorB=blue
+    :target: https://pypi.org/project/dccd/
+.. image:: https://img.shields.io/travis/ArthurBernard/dccd.svg
+    :target: https://travis-ci.org/ArthurBernard/dccd
+.. image:: https://img.shields.io/github/license/ArthurBernard/dccd.svg
+    :target: https://github.com/ArthurBernard/dccd/blob/master/LICENSE.txt
+.. image:: https://pepy.tech/badge/dccd 
+    :target: https://pepy.tech/project/dccd
+
 This is a beta version of a python package [*]_ to *download* and *upload* data about *crypto-currencies* (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, GDAX, Kraken and Poloniex for the moment).
 
 Presentation:
 =============
 
-The **'dccd'** package contains a main class and four classes to download and update data for each exchange, and a module **'timetools'** to manage specific time functions needed for each API.
+The **'dccd'** package contains a main class and four classes to download and update data for each exchange, and a module **'time_tools'** to manage specific time functions needed for each API.
 
 The four classes to download data are **FromBinance**, **FromGDax**, **FromKraken** and **FromPoloniex**. All have the same methods and almost the same parameters:    
 
