@@ -6,9 +6,9 @@ Download_Crypto_Currencies_Data
     :target: https://pypi.org/project/dccd/
 .. image:: https://img.shields.io/pypi/status/dccd.svg?colorB=blue
     :target: https://pypi.org/project/dccd/
-.. image:: https://img.shields.io/travis/ArthurBernard/dccd.svg
-    :target: https://travis-ci.org/ArthurBernard/dccd
-.. image:: https://img.shields.io/github/license/ArthurBernard/dccd.svg
+.. image:: https://travis-ci.org/ArthurBernard/Download_Crypto_Currencies_Data.svg?branch=master
+    :target: https://travis-ci.org/ArthurBernard/Download_Crypto_Currencies_Data
+.. image:: https://img.shields.io/github/license/ArthurBernard/Download_Crypto_Currencies_Data.svg
     :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/blob/master/LICENSE.txt
 .. image:: https://pepy.tech/badge/dccd 
     :target: https://pepy.tech/project/dccd
