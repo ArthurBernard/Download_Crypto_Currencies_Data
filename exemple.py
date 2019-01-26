@@ -42,9 +42,6 @@ xbtusd = pk('/home/arthur/Data/Crypto_Currencies/', 'XBT', 86400, fiat='USD')
 start = '2018-03-01 00:00:00' # date format 'yyyy-mm-dd hh:mm:ss' as string
 end = time.time() - 86400 * 5 # date format timestamp of 5 days before today
 
-xbtusd.import_data(start=start, end=end).save().get_data()
+xbtusd.import_data(start=start, end=end).save(form='csv').get_data()
 
-xbtusd.import_data(start='last', end='now').save().get_data() # update data base
-
-input('press ENTER to close')
-exit()
+xbtusd.import_data(start='last', end='now').save(form='xlsx').get_data() # update data base
