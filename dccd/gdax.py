@@ -17,7 +17,7 @@ import requests
 import json
 
 # Import local packages
-from dccd.time_tools import TimeTools
+from dccd.time_tools import *
 from dccd.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromGDax']
@@ -58,12 +58,15 @@ class FromGDax(ImportDataCryptoCurrencies):
         """
         if crypto is 'XBT':
             crypto = 'BTC'
-        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'GDAX', fiat, form)
+        ImportDataCryptoCurrencies.__init__(
+            self, path, crypto, span, 'GDAX', fiat, form
+        )
         self.pair = crypto + '-' + fiat
-        self.full_path = self.path + '/GDAX/Data/Clean_Data/' + str(self.per) + '/' + str(self.crypto) + str(self.fiat)
+        self.full_path = self.path + '/GDAX/Data/Clean_Data/' 
+        self.full_path += str(self.per) + '/' + str(self.crypto) + str(self.fiat)
         
     
-    def import_data(self, start = 'last', end = 'now'):
+    def _import_data(self, start='last', end='now'):
         """ 
         Download data from GDax for specific time interval
         
@@ -73,15 +76,20 @@ class FromGDax(ImportDataCryptoCurrencies):
             Timestamp of the last observation of you want.
         
         """
-        self.start, self.end = self._time(start, end)
+        self.start, self.end = self._set_time(start, end)
         param = {
-            'start': self.tools.TS_to_date(self.start - self.span),
-            'end': self.tools.TS_to_date(self.end),
+            'start': TS_to_date(self.start - self.span),
+            'end': TS_to_date(self.end),
             'granularity': self.span
         }
-        r = requests.get('https://api.gdax.com/products/{}/candles'.format(self.pair), param)
+        r = requests.get(
+            'https://api.gdax.com/products/{}/candles'.format(self.pair), 
+            param
+        )
         text = json.loads(r.text)
-        data = [{'date': float(e[0]), 'open': float(e[3]), 'high': float(e[2]), 
-                 'low': float(e[1]), 'close': float(e[4]), 
-                 'volume': float(e[5]), 'quoteVolume': float(e[4]) * float(e[5])} for e in text]
-        return self._sort_data(data)
+        data = [{
+            'date': float(e[0]), 'open': float(e[3]), 'high': float(e[2]), 
+            'low': float(e[1]), 'close': float(e[4]), 'volume': float(e[5]), 
+            'quoteVolume': float(e[4]) * float(e[5])
+        } for e in text]
+        return data #self._sort_data(data)

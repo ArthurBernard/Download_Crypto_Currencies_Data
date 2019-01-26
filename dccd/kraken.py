@@ -17,7 +17,7 @@ import requests
 import json
 
 # Import local packages
-from dccd.time_tools import TimeTools
+from dccd.time_tools import *
 from dccd.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromKraken']
@@ -41,7 +41,8 @@ class FromKraken(ImportDataCryptoCurrencies):
     
     """
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
-        """ 
+        """ Set parameters
+
         Parameters
         ----------
         :path: str
@@ -55,8 +56,11 @@ class FromKraken(ImportDataCryptoCurrencies):
             A fiat currency or a crypto-currency.
         :form: str 
             Your favorit format. Only 'xlsx' for the moment.
+        
         """
-        ImportDataCryptoCurrencies.__init__(self, path, crypto, span, 'Kraken', fiat=fiat, form=form)
+        ImportDataCryptoCurrencies.__init__(
+            self, path, crypto, span, 'Kraken', fiat=fiat, form=form
+        )
         if crypto == 'BTC':
             crypto = 'XBT'
         if crypto == 'BCH' or crypto == 'DASH':
@@ -67,9 +71,8 @@ class FromKraken(ImportDataCryptoCurrencies):
             self.pair = 'X'+crypto+'Z'+fiat
         
     
-    def import_data(self, start='last'):
-        """ 
-        Download data from Kraken since a specific time until now.
+    def _import_data(self, start='last', end=None):
+        """ Download data from Kraken since a specific time until now.
         
         Parameters
         ----------
@@ -90,4 +93,4 @@ class FromKraken(ImportDataCryptoCurrencies):
                  'low': float(e[3]), 'close': float(e[4]), 
                  'weightedAverage': float(e[5]), 'volume': float(e[6]), 
                  'quoteVolume': float(e[6])*float(e[5])} for e in text]
-        return self._sort_data(data)
+        return data #self._sort_data(data)
