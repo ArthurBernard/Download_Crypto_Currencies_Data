@@ -61,8 +61,8 @@ def date_to_TS(date, form='%Y-%m-%d %H:%M:%S'):
 
     Exemples
     --------
-    >>> date_to_TS('19-01-25 16:01:39', form='%y-%m-%d %H:%M:%S')
-    1548428499
+    # >>> date_to_TS('19-01-25 16:01:39', form='%y-%m-%d %H:%M:%S')
+    # 1548428499
 
     """
     return int(time.mktime(time.strptime(date, form)))
