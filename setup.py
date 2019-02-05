@@ -15,6 +15,7 @@ setup(
     author='Arthur Bernard',
     author_email='arthur.bernard.92@gmail.com',
     description='Download Crypto Currenciy Data from different exchanges.',
+    license='MIT',
     long_description=str(long_description),
     install_requires=[
         'numpy>=1.14.1', 
@@ -31,6 +32,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Topic :: Database',
         'Topic :: Office/Business :: Financial',
     ],
