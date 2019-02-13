@@ -23,39 +23,37 @@ from dccd.exchange import ImportDataCryptoCurrencies
 __all__ = ['FromGDax']
 
 class FromGDax(ImportDataCryptoCurrencies):
-    """ 
-    GDax class to import crypto-currencies data.
-
-    Methods
-    -------
-    - save : Save data by period (default is year) in the corresponding
-        format and file. TO FINISH
-    - get_data : Print the dataframe. 
-    - set_hierarchy : You can determine the specific hierarchy of the files 
-        where will save your data. TO FINISH
-    - import_data : Download data since a specified date.
-
-    Attributes
+    """ Class to import crypto-currencies data from the GDax exchange.
+    
+    Parameters
     ----------
-    TO LIST
+    path : str
+        The path where data will be save.
+    crypto : str
+        The abreviation of the crypto-currency.
+    span : {int, 'weekly', 'daily', 'hourly'}
+        If str, periodicity of observation. 
+        If int, number of the seconds between each observation. Minimal 
+        span is 60 seconds.
+    fiat : str
+        A fiat currency or a crypto-currency.
+    form : {'xlsx', 'csv'}
+        Your favorit format. Only 'xlsx' and 'csv' for the moment.
+
+    See Also
+    --------
+    FromBinance, FromKraken, FromPoloniex
+
+    Notes
+    -----
+    See GDax API documentation [1]_ for more details on parameters.
+
+    References
+    ----------
+    .. [1] https://docs.pro.coinbase.com/
     
     """
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
-        """ 
-        Parameters
-        ----------
-        :path: str
-            The path where data will be save.
-        :crypto: str
-            The abreviation of the crypto-currencie.
-        :span: str ot int
-            'weekly', 'daily', 'hourly', or the integer of the seconds 
-            between each observations. Min 60 seconds.
-        :fiat: str
-            A fiat currency or a crypto-currency.
-        :form: str 
-            Your favorit format. Only 'xlsx' for the moment.
-        """
         if crypto is 'XBT':
             crypto = 'BTC'
         ImportDataCryptoCurrencies.__init__(
@@ -67,12 +65,13 @@ class FromGDax(ImportDataCryptoCurrencies):
         
     
     def _import_data(self, start='last', end='now'):
-        """ 
-        Download data from GDax for specific time interval
+        """ Download data from GDax for specific time interval
         
-        :start: int
+        Parameters
+        ----------
+        start : int
             Timestamp of the first observation of you want.
-        :end: int
+        end : int
             Timestamp of the last observation of you want.
         
         """
@@ -93,3 +92,4 @@ class FromGDax(ImportDataCryptoCurrencies):
             'quoteVolume': float(e[4]) * float(e[5])
         } for e in text]
         return data #self._sort_data(data)
+    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__

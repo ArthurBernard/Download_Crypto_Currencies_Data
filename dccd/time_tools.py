@@ -5,7 +5,7 @@
 import time
 
 
-""" time_tools is a module to manage some time functions with respect 
+""" ``time_tools`` is a module to manage some time functions with respect 
 to each specific API exchanges. 
 
 """
@@ -20,18 +20,19 @@ def TS_to_date(TS, form='%Y-%m-%d %H:%M:%S', local=True):
 
     Parameters
     ----------
-    :TS: int
+    TS : int
         A timestamp to convert.
-    :form: str (default '%Y-%m-%d %H:%M:%S')
+    form : str (default '%Y-%m-%d %H:%M:%S')
         Time format.
-    :local: bool (default is True)
+    local : bool (default is True)
         Local time is used if true else return UTC time.
     
     Returns
     -------
-    Time as str
+    date : str
+        Date as specified format.
 
-    Exemples
+    Examples
     --------
     >>> TS_to_date(1548432099, form='%y-%m-%d %H:%M:%S', local=False)
     '19-01-25 16:01:39'
@@ -50,16 +51,17 @@ def date_to_TS(date, form='%Y-%m-%d %H:%M:%S'):
 
     Parameters
     ----------
-    :date: str
+    date : str
         A date to convert.
-    :form: str (default '%Y-%m-%d %H:%M:%S')
+    form : str (default '%Y-%m-%d %H:%M:%S')
         Time format.
 
     Returns
     -------
-    Timestamp as int
+    TS : int
+        Timestamp of specified date.
 
-    Exemples
+    Examples
     --------
     # >>> date_to_TS('19-01-25 16:01:39', form='%y-%m-%d %H:%M:%S')
     # 1548428499
@@ -78,14 +80,15 @@ def str_to_span(string):
     
     Parameters
     ----------
-    :string: str
+    string : str
         Time periodicity
 
     Returns
     -------
-    Number of seconds in time interval as int
+    span : int
+        Number of seconds in time interval.
 
-    Exemples
+    Examples
     --------
     >>> str_to_span('minutely')
     60
@@ -114,14 +117,15 @@ def span_to_str(span):
     
     Parameters
     ----------
-    :span: int
+    span : int
         Time interval in second.
 
     Returns
     -------
-    Time periodicity as str
+    date : str 
+        Time periodicity.
 
-    Exemples
+    Examples
     --------
     >>> span_to_str(3600)
     'Hourly'
@@ -149,15 +153,16 @@ def binance_interval(interval):
     
     Parameters
     ----------
-    :interval: int
+    interval : int
         Must be in seconds as 60, 180, 300, 900, 1800, 3600, 7200, 14400, 
         21600, 28800, 43200, 86400, 259200, 604800, 2592000.
     
     Returns
     -------
-    Specific format allowed by Binance as str
+    form : str
+        Specific format allowed by Binance.
 
-    Exemples
+    Examples
     --------
     >>> binance_interval(7200)
     '2h'

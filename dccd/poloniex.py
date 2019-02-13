@@ -23,42 +23,38 @@ from dccd.exchange import ImportDataCryptoCurrencies
 __all__ = ['FromPoloniex']
 
 class FromPoloniex(ImportDataCryptoCurrencies):
-    """ 
-    Poloniex class to import crypto-currencies data.
-
-    Methods
-    -------
-    - save : Save data by period (default is year) in the corresponding
-        format and file. TO FINISH
-    - get_data : Print the dataframe. 
-    - set_hierarchy : You can determine the specific hierarchy of the files 
-        where will save your data. TO FINISH
-    - import_data : Download data since a specified date.
-
-    Attributes
+    """ Class to import crypto-currencies data from the Poloniex exchange.
+    
+    Parameters
     ----------
-    TO LIST
+    path : str
+        The path where data will be save.
+    crypto : str
+        The abreviation of the crypto-currency.
+    span : {int, 'weekly', 'daily', 'hourly'}
+        If str, periodicity of observation. 
+        If int, number of the seconds between each observation. Minimal 
+        span is 300 seconds.
+    fiat : str
+        A fiat currency or a crypto-currency. Poloniex don't allow fiat 
+        currencies, but USD theter.
+    form : {'xlsx', 'csv'}
+        Your favorit format. Only 'xlsx' and 'csv' for the moment.
+
+    See Also
+    --------
+    FromBinance, FromGDax, FromKraken
+
+    Notes
+    -----
+    See Poloniex API documentation [1]_ for more details on parameters.
+
+    References
+    ----------
+    .. [1] https://docs.poloniex.com/#introduction
     
     """
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
-        """ Set parameters
-
-        Parameters
-        ----------
-        :path: str
-            The path where data will be save.
-        :crypto: str
-            The abreviation of the crypto-currencie.
-        :span: str ot int
-            'weekly', 'daily', 'hourly', or the integer of the seconds 
-            between each observations. Min 300 seconds.
-        :fiat: str
-            A fiat currency or a crypto-currency. Poloniex don't allow fiat 
-            currencies, but USD theter.
-        :form: str 
-            Your favorit format. Only 'xlsx' for the moment.
-
-        """
         if fiat in ['EUR', 'USD']:
             print("Poloniex don't allow fiat currencies.", 
                 "The equivalent of US dollar is Tether USD as USDT.")
@@ -76,10 +72,12 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     def _import_data(self, start='last', end='now'):
         """ Download data from Poloniex for specific time interval.
         
-        :start: int or str
+        Parameters
+        ----------
+        start : int or str
             Timestamp of the first observation of you want as int or date 
             format 'yyyy-mm-dd hh:mm:ss' as string.
-        :end: int or str
+        end : int or str
             Timestamp of the last observation of you want as int or date 
             format 'yyyy-mm-dd hh:mm:ss' as string.
             
@@ -94,3 +92,4 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         }
         r = requests.get('https://poloniex.com/public', param)
         return json.loads(r.text) #self._sort_data(json.loads(r.text))
+    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__

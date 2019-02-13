@@ -23,40 +23,38 @@ from dccd.exchange import ImportDataCryptoCurrencies
 __all__ = ['FromBinance']
 
 class FromBinance(ImportDataCryptoCurrencies):
-    """ 
-    Binance class to import crypto-currencies data.
-
-    Methods
-    -------
-    - save : Save data by period (default is year) in the corresponding
-        format and file. TO FINISH
-    - get_data : Print the dataframe. 
-    - set_hierarchy : You can determine the specific hierarchy of the files 
-        where will save your data. TO FINISH
-    - import_data : Download data since a specified date.
-
-    Attributes
+    """ Class to import crypto-currencies data from the Binance exchange.
+    
+    Parameters
     ----------
-    TO LIST
+    path : str
+        The path where data will be save.
+    crypto : str
+        The abreviation of the crypto-currency.
+    span : {int, 'weekly', 'daily', 'hourly'}
+        If str, periodicity of observation. 
+        If int, number of the seconds between each observation. Minimal 
+        span is 60 seconds.
+    fiat : str
+        A fiat currency or a crypto-currency. Binance don't allow fiat 
+        currencies, but USD theter.
+    form : {'xlsx', 'csv'}
+        Your favorit format. Only 'xlsx' and 'csv' for the moment.
+
+    See Also
+    --------
+    FromGDax, FromKraken, FromPoloniex
+
+    Notes
+    -----
+    See Binance API documentation [1]_ for more details on parameters.
+
+    References
+    ----------
+    .. [1] https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md
     
     """
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
-        """ 
-        Parameters
-        ----------
-        :path: str
-            The path where data will be save.
-        :crypto: str
-            The abreviation of the crypto-currencie.
-        :span: str ot int
-            'weekly', 'daily', 'hourly', or the integer of the seconds 
-            between each observations. Min 60 seconds.
-        :fiat: str
-            A fiat currency or a crypto-currency. Binance don't allow fiat 
-            currencies, but USD theter.
-        :form: str 
-            Your favorit format. Only 'xlsx' for the moment.
-        """
         if fiat in ['EUR', 'USD']:
             print("Binance don't allow fiat currencies.", 
                 "The equivalent of US dollar is Tether USD as USDT.")
@@ -76,13 +74,10 @@ class FromBinance(ImportDataCryptoCurrencies):
         
         Parameters
         ----------
-        :start: int
+        start : int
             Timestamp of the first observation of you want.
-        :end: int
+        end : int
             Timestamp of the last observation of you want.
-
-        Returns
-        -------
         
         """
         self.start, self.end = self._set_time(start, end)
@@ -94,9 +89,8 @@ class FromBinance(ImportDataCryptoCurrencies):
         }
         r = requests.get('https://api.binance.com/api/v1/klines', param)
         text = json.loads(r.text)
-        #print(param)
-        #print(text)
         data = [{'date': float(e[0] / 1000), 'open': float(e[1]), 
                  'high': float(e[2]), 'low': float(e[3]), 'close': float(e[4]), 
                  'volume': float(e[5]), 'quoteVolume': float(e[7])} for e in text]
         return data #self._sort_data(data)
+    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
