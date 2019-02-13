@@ -12,6 +12,9 @@ Download_Crypto_Currencies_Data
     :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/blob/master/LICENSE.txt
 .. image:: https://pepy.tech/badge/dccd 
     :target: https://pepy.tech/project/dccd
+.. image:: https://readthedocs.org/projects/download-crypto-currencies-data/badge/?version=latest
+    :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
 
 This is a beta version of a python package [*]_ to *download* and *upload* data about *crypto-currencies* (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, GDAX, Kraken and Poloniex for the moment).
 
