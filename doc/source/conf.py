@@ -1,6 +1,5 @@
 import os
 import sys
-import dccd
 
 sys.path.insert(0, os.path.abspath('../..'))
 
@@ -28,8 +27,8 @@ napoleon_use_rtype = False
 project = 'dccd'
 copyright = '2017-2019, Arthur Bernard'
 author = 'Arthur Bernard'
-version = dccd.__version__
-release = version
+version = 1.0
+release = 1.0.0
 templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
