@@ -25,40 +25,30 @@ class ImportDataCryptoCurrencies:
     """ Base class to import data about crypto-currencies from some 
     exchanges platform. Don't use directly this class, use the respective 
     class for each exchange.
-
-    Methods
-    -------
-    - save : Save data by period (default is year) in the corresponding
-        format and file. TO FINISH
-    - get_data : Print the dataframe. 
-    - set_hierarchy : You can determine the specific hierarchy of the files 
-        where will save your data. TO FINISH
-
-    Attributes
+    
+    Parameters
     ----------
-    TO LIST
+    path : str
+        The path where data will be save.
+    crypto : str
+        The abreviation of the crypto-currencie.
+    span : {int, 'weekly', 'daily', 'hourly'}
+        If str, periodicity of observation. 
+        If int, number of the seconds between each observation. Minimal 
+        span is 60 seconds.
+    platform : str
+        The platform of your choice: 'Kraken', 'Poloniex'.
+    fiat : str
+        A fiat currency or a crypto-currency.
+    form : {'xlsx', 'csv'}
+        Your favorit format. Only 'xlsx' and 'csv' at the moment.
+    
+    See Also
+    --------
+    FromBinance, FromKraken, FromGDax, FromPoloniex
     
     """
     def __init__(self, path, crypto, span, platform, fiat='EUR', form='xlsx'):
-        """ Set initial parameters.
-
-        Parameters
-        ----------
-        :path: str
-            The path where data will be save.
-        :crypto: str
-            The abreviation of the crypto-currencie.
-        :span: str ot int
-            'weekly', 'daily', 'hourly', or the integer of the seconds 
-            between each observations.
-        :platform: str
-            The platform of your choice: 'Kraken', 'Poloniex'.
-        :fiat: str
-            A fiat currency or a crypto-currency.
-        :form: str 
-            Your favorit format. Only 'xlsx' and 'csv' at the moment.
-        
-        """
         self.path = path
         self.crypto = crypto
         self.span, self.per = self._period(span)
@@ -72,7 +62,7 @@ class ImportDataCryptoCurrencies:
     
     def _get_last_date(self):
         """ Find the last observation imported.
-        to finish
+        TODO : to finish
         """
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
         if not os.listdir(self.full_path):
@@ -93,10 +83,11 @@ class ImportDataCryptoCurrencies:
 
         Parameters
         ----------
-        :start: int
+        start : int
             Timestamp of the first observation of you want.
-        :end: int 
+        end : int 
             Timestamp of the last observation of you want.
+        
         """
         if start is 'last':
             start = self._get_last_date()
@@ -124,16 +115,17 @@ class ImportDataCryptoCurrencies:
     
     def save(self, form='xlsx', by_period='Y'):
         """ Save data by period (default is year) in the corresponding
-        format and file.
+        format and file. 
+        TODO : to finish
 
         Parameters
         ----------
-        :form: str (default 'xlsx')
+        form : {'xlsx', 'csv'}
             Format to save data.
-        :by_period: str (default 'Y')
-            Period to group data in a same file.
+        by_period : {'Y', 'M', 'D'}
+            Period to group data in a same file. If 'Y' by year, if 'M' by 
+            month, if 'D' by day.
 
-        to finish
         """
         df = (self.last_df.append(self.df, sort=True)
               .drop_duplicates(subset='TS', keep='last')
@@ -190,7 +182,7 @@ class ImportDataCryptoCurrencies:
     
     def _sort_data(self, data):
         """ Clean and sort the data.
-        to finish
+        TODO : to finish
         """
         df = pd.DataFrame(data).rename(columns = {'date': 'TS'})#, index = range(self.start, self.end, self.span))
         TS = pd.DataFrame(
@@ -212,16 +204,16 @@ class ImportDataCryptoCurrencies:
         Parameters
         ----------
 
-        :start: int or str
+        start : int or str
             Timestamp of the first observation of you want as int or date 
             format 'yyyy-mm-dd hh:mm:ss' as string.
-        :end: int or str /! NOT ALLOWED TO KRAKEN EXCHANGE /!
+        end : int or str /! NOT ALLOWED TO KRAKEN EXCHANGE /!
             Timestamp of the last observation of you want as int or date 
             format 'yyyy-mm-dd hh:mm:ss' as string.
             
         Returns
         -------
-        :data: pd.DataFrame
+        data : pd.DataFrame
             Data sorted and cleaned in a data frame.
         
         """
@@ -234,7 +226,8 @@ class ImportDataCryptoCurrencies:
         
         Returns
         -------
-        Data as pd.DataFrame
+        Data : pd.DataFrame
+            Current data.
 
         """
         return self.df
@@ -254,7 +247,7 @@ class ImportDataCryptoCurrencies:
     
     def set_hierarchy(self, liste):
         """ You can determine the specific hierarchy of the files where will save your data.
-        to finish
+        TODO : to finish
         """
         self.full_path = self.path
         for elt in liste:
