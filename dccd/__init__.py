@@ -42,7 +42,7 @@ Method chaining is available.
 
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from . import time_tools
 from .time_tools import *
