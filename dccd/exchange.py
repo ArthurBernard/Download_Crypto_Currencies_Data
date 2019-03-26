@@ -192,8 +192,6 @@ class ImportDataCryptoCurrencies:
             list(range(self.start, self.end, self.span)),
             columns=['TS']
         )
-        print(df.head())
-        print(TS.head())
         df = (df.merge(TS, on='TS', how='outer', sort=False)
               .sort_values('TS')
               .reset_index(drop=True)
