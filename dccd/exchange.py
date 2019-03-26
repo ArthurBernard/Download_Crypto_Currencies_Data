@@ -185,13 +185,15 @@ class ImportDataCryptoCurrencies:
         """
         df = pd.DataFrame(
             data,
-            index=range((self.end - self.start) // self.span),
+            index=range((self.end - self.start) // self.span + 1),
             # index=range(self.start, self.end, self.span)
         ).rename(columns={'date': 'TS'})
         TS = pd.DataFrame(
             list(range(self.start, self.end, self.span)),
             columns=['TS']
         )
+        print(df.head())
+        print(TS.head())
         df = (df.merge(TS, on='TS', how='outer', sort=False)
               .sort_values('TS')
               .reset_index(drop=True)
