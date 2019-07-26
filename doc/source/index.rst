@@ -12,4 +12,5 @@ This is the documentation of `dccd` package, a very simple package to download c
     kraken
     poloniex
     time_tools
+    io_tools
     
