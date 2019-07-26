@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-26 17:13:47
+# @Last modified time: 2019-07-26 17:47:26
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -59,7 +59,16 @@ class IODataBase:
     """
 
     def __init__(self, path='./', method='csv'):
-        """ Initialize saver object. """
+        """ Initialize saver object.
+
+        Parameters
+        ----------
+        path : str, optional
+            Path of the database, default is `'./'` (current directory).
+        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel'}, optional
+            Format of database, default is CSV.
+
+        """
         # Verify path exist
         makedirs(path, exist_ok=True)
 
@@ -81,7 +90,16 @@ class IODataBase:
             )
 
     def __call__(self, new_data, **kwargs):
-        """ Append and save `new_data` in database as `method` format. """
+        """ Append and save `new_data` in database as `method` format.
+
+        Parameters
+        ----------
+        new_data : pd.DataFrame
+            Data to append to the database.
+        kwargs : dict, optional
+            Cf parameters of corresponding `method`.
+
+        """
         return self.parser[self.method](new_data, **kwargs)
 
     def save_as_dataframe(self, new_data, name=None, ext='.dat'):
