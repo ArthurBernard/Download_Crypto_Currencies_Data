@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# coding: utf-8
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-07-26 16:54:02
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-07-26 16:54:54
+
 """
 dccd
 ====
@@ -46,6 +54,8 @@ __version__ = "1.0.2"
 
 from . import time_tools
 from .time_tools import *
+from . import io_tools
+from .io_tools import *
 from . import exchange
 from .exchange import ImportDataCryptoCurrencies
 from . import kraken
@@ -59,6 +69,7 @@ from .poloniex import FromPoloniex
 
 # __all__ = time_tools.__all__
 __all__ = ['time_tools']
+__all__ += ['io_tools']
 __all__ += exchange.__all__
 __all__ += kraken.__all__
 __all__ += binance.__all__
