@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-26 16:56:10
+# @Last modified time: 2019-07-26 17:13:47
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -25,7 +25,38 @@ __all__ = ['IODataBase', 'get_df', 'save_df']
 
 
 class IODataBase:
-    """ Object to save a pd.DataFrame into different kind of database. """
+    """ Object to save a pd.DataFrame into different kind of database.
+
+    Attributes
+    ----------
+    path : str
+        Path of the database.
+    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel'}
+        Kind of database.
+    parser : dict
+        Values are function to corresponding to `method`.
+
+    Methods
+    -------
+    save_as_dataframe(new_data, name=None, ext='.dat')
+        Append and save `new_data` in database as pd.DataFrame binary object.
+    save_as_sqlite(new_data, table='main_table', name=None, ext='.db',
+                   index=True, index_label=None)
+        Append and save `new_data` in SQLite database.
+    save_as_csv(new_data, name=None, ext='.csv', index=True, index_label=None)
+        Append and save `new_data` in database as CSV format.
+    save_as_excel(new_data, name=None, sheet_name='Sheet1', ext='.xlsx',
+                  index=True, index_label=None)
+        Append and save `new_data` in database as Excel format.
+    __call__(new_data, **kwargs)
+        Append and save `new_data` in database as `method` format.
+
+    TODO:
+    - Add SQL method
+    - Add InfluxDB method
+    - Add output methods
+
+    """
 
     def __init__(self, path='./', method='csv'):
         """ Initialize saver object. """
@@ -45,11 +76,13 @@ class IODataBase:
         # Verify method
         if method not in self.parser.keys():
 
-            raise NotImplementedError("'method' should be DataFrame or SQLite")
+            raise NotImplementedError(
+                "'method' should be DataFrame, SQLite, CSV or Excel"
+            )
 
-    def __call__(self, *args, **kwargs):
-        """ Callable method. """
-        return self.parser[self.method](*args, **kwargs)
+    def __call__(self, new_data, **kwargs):
+        """ Append and save `new_data` in database as `method` format. """
+        return self.parser[self.method](new_data, **kwargs)
 
     def save_as_dataframe(self, new_data, name=None, ext='.dat'):
         """ Append and save `new_data` as pd.DataFrame binary object.
@@ -116,7 +149,7 @@ class IODataBase:
 
     def save_as_csv(self, new_data, name=None, ext='.csv', index=True,
                     index_label=None):
-        """ Append and save `new_data` as pd.DataFrame binary object.
+        """ Append and save `new_data` in database as CSV format.
 
         With pickle save as binary pd.DataFrame object, if `file_name` exists
         append to it `new_data` and save it, else save `new_data`.
@@ -154,7 +187,7 @@ class IODataBase:
 
     def save_as_excel(self, new_data, name=None, sheet_name='Sheet1',
                       ext='.xlsx', index=True, index_label=None):
-        """ Append and save `new_data` as pd.DataFrame binary object.
+        """ Append and save `new_data` in database as Excel format.
 
         With pickle save as binary pd.DataFrame object, if `file_name` exists
         append to it `new_data` and save it, else save `new_data`.
