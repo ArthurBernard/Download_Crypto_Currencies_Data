@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-26 16:51:59
+# @Last modified time: 2019-07-26 16:56:10
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -109,7 +109,8 @@ class IODataBase:
         # Open connection with database
         conn = sqlite3.connect(self.path + name + ext)
         # Append data
-        new_data.to_sql(table, con=conn, if_exists='append')
+        new_data.to_sql(table, con=conn, if_exists='append', index=index,
+                        index_label=index_label)
         # Close connection
         conn.close()
 
