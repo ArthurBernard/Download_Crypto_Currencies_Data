@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-30 17:35:56
+# @Last modified time: 2019-07-30 18:07:57
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -135,11 +135,26 @@ class IODataBase:
             name = time.strftime('%y-%m-%d', time.time())
 
         # Load data
-        database = get_df(self.path, name, ext='.dat')
+        database = get_df(self.path, name, ext=ext)
         # Append new data
         database = database.append(new_data, sort=False)
         # Save new data
-        save_df(database, self.path, name, ext='.dat')
+        save_df(database, self.path, name, ext=ext)
+
+    def get_from_dataframe(self, name, ext='.dat'):
+        """ Get data from pd.DataFrame binary object.
+
+        With pickle get as binary pd.DataFrame object.
+
+        Parameters
+        ----------
+        name : str
+            Name of the database.
+        ext : str, optional
+            Extension of the database, default is `'.dat'`.
+
+        """
+        return get_df(self.path, name, ext=ext)
 
     def save_as_sqlite(self, new_data, table='main_table', name=None,
                        ext='.db', index=True, index_label=None):
