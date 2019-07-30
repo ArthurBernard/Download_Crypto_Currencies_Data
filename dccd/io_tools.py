@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-26 17:47:26
+# @Last modified time: 2019-07-30 17:18:17
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -14,6 +14,8 @@ import os.path
 import time
 import sqlite3
 from pickle import Pickler, Unpickler
+from sqlalchemy import create_engine
+from sqlalchemy.engine.url import URL
 
 # External packages
 import pandas as pd
@@ -31,7 +33,7 @@ class IODataBase:
     ----------
     path : str
         Path of the database.
-    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel'}
+    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'SQL'}
         Kind of database.
     parser : dict
         Values are function to corresponding to `method`.
@@ -40,8 +42,8 @@ class IODataBase:
     -------
     save_as_dataframe(new_data, name=None, ext='.dat')
         Append and save `new_data` in database as pd.DataFrame binary object.
-    save_as_sqlite(new_data, table='main_table', name=None, ext='.db',
-                   index=True, index_label=None)
+    save_as_sql(new_data, table='main_table', name=None, ext='.db',
+                index=True, index_label=None)
         Append and save `new_data` in SQLite database.
     save_as_csv(new_data, name=None, ext='.csv', index=True, index_label=None)
         Append and save `new_data` in database as CSV format.
@@ -80,13 +82,17 @@ class IODataBase:
             'sqlite': self.save_as_sqlite,
             'csv': self.save_as_csv,
             'excel': self.save_as_excel,
+            'postgresql': self.save_as_sql,
+            'mysql': self.save_as_sql,
+            'oracle': self.save_as_sql,
+            'mssql': self.save_as_sql,
         }
 
         # Verify method
-        if method not in self.parser.keys():
+        if self.method not in self.parser.keys():
 
             raise NotImplementedError(
-                "'method' should be DataFrame, SQLite, CSV or Excel"
+                "`method` should be DataFrame, SQLite, CSV or Excel"
             )
 
     def __call__(self, new_data, **kwargs):
@@ -130,7 +136,7 @@ class IODataBase:
 
     def save_as_sqlite(self, new_data, table='main_table', name=None,
                        ext='.db', index=True, index_label=None):
-        """ Append and save `new_data` in SQL database.
+        """ Append and save `new_data` in SQL(ite) database.
 
         With sqlite, if `database` exists append to it `new_data`, else create
         a new data base.
@@ -159,6 +165,60 @@ class IODataBase:
 
         # Open connection with database
         conn = sqlite3.connect(self.path + name + ext)
+        # Append data
+        new_data.to_sql(table, con=conn, if_exists='append', index=index,
+                        index_label=index_label)
+        # Close connection
+        conn.close()
+
+    def save_as_sql(self, new_data, table='main_table', name=None,
+                    ext='.db', index=True, index_label=None, driver=None,
+                    username=None, password=None, host=None, port=None):
+        """ Append and save `new_data` in SQL(ite) database.
+
+        With sqlite, if `database` exists append to it `new_data`, else create
+        a new data base.
+
+        Parameters
+        ----------
+        new_data : pd.DataFrame
+            Data to append to the database.
+        table : str, optional
+            Name of the table, default is `'main_table'`.
+        name : str, optional
+            Name of the database, default is the current year.
+        ext : str, optional
+            Extension of the database, default is `'.db'`.
+        index : bool, optional
+            Write pd.DataFrame index as a column. Uses index_label as the
+            column name in the table. Default is `True`.
+        index_label : string or sequence, optional
+            Column label for index column(s). If `None` is given (default) and
+            index is `True`, then the index names are used. A sequence should
+            be given if the pd.DataFrame uses pd.MultiIndex.
+        driver : str {'psycopg2', 'pg8000', 'mysqlclient', pymysql',
+                      'cx_oracle', 'pyodbc', 'pymssql'}, optional
+            The name of the DBAPI to be used to connect to the database using
+            all lowercase letters. If not specified, a default DBAPI will be
+            imported if available - this default is typically the most widely
+            known driver available for that backend.
+        username, password : str
+            Username and password to connect to the SQL database.
+        host : str, optional
+            Host to connect, default is `'localhost'`.
+        port : str, optional
+            The port number, default is `None`.
+
+
+        """
+        if name is None:
+            name = time.strftime('%y', time.gmtime(time.time()))
+
+        # Open connection with database
+        conn = create_engine(URL(
+            self.method, username=username, password=password, host=host,
+            port=port, database=self.path + name + ext,
+        ))
         # Append data
         new_data.to_sql(table, con=conn, if_exists='append', index=index,
                         index_label=index_label)
