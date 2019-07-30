@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-30 17:29:07
+# @Last modified time: 2019-07-30 17:35:56
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -33,8 +33,8 @@ class IODataBase:
     ----------
     path : str
         Path of the database.
-    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'postgresql',
-                  'oracle', 'mssql', 'mysql'}
+    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',
+                  'Oracle', 'MSSQL', 'MySQL'}
         Kind of database.
     parser : dict
         Values are function to corresponding to `method`.
@@ -73,8 +73,8 @@ class IODataBase:
         ----------
         path : str, optional
             Path of the database, default is `'./'` (current directory).
-        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'postgresql',
-                      'oracle', 'mssql', 'mysql'}, optional
+        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',
+                      'Oracle', 'MSSQL', 'MySQL'}, optional
             Format of database, default is CSV.
 
         """
@@ -183,7 +183,7 @@ class IODataBase:
                     username=None, password=None, host=None, port=None):
         """ Append and save `new_data` in SQL database.
 
-        SQL database as `method={'postgresql', 'oracle', 'mssql', 'mysql'}`.
+        SQL database as `method={'PostgreSQL', 'Oracle', 'MSSQL', 'MySQL'}`.
         If `database` exists append to it `new_data`, else create a new
         database.
 
