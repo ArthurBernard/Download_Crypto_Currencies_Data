@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-30 17:18:17
+# @Last modified time: 2019-07-30 17:29:07
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -33,7 +33,8 @@ class IODataBase:
     ----------
     path : str
         Path of the database.
-    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'SQL'}
+    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'postgresql',
+                  'oracle', 'mssql', 'mysql'}
         Kind of database.
     parser : dict
         Values are function to corresponding to `method`.
@@ -43,7 +44,12 @@ class IODataBase:
     save_as_dataframe(new_data, name=None, ext='.dat')
         Append and save `new_data` in database as pd.DataFrame binary object.
     save_as_sql(new_data, table='main_table', name=None, ext='.db',
-                index=True, index_label=None)
+                index=True, index_label=None, driver=None,
+                username=None, password=None, host=None, port=None)
+        Append and save `new_data` in SQL database `method={'postgresql',
+        'oracle', 'mssql', 'mysql'}`.
+    save_as_sqlite(new_data, table='main_table', name=None, ext='.db',
+                   index=True, index_label=None)
         Append and save `new_data` in SQLite database.
     save_as_csv(new_data, name=None, ext='.csv', index=True, index_label=None)
         Append and save `new_data` in database as CSV format.
@@ -54,9 +60,9 @@ class IODataBase:
         Append and save `new_data` in database as `method` format.
 
     TODO:
-    - Add SQL method
     - Add InfluxDB method
     - Add output methods
+    - Add unitest/doctest
 
     """
 
@@ -67,7 +73,8 @@ class IODataBase:
         ----------
         path : str, optional
             Path of the database, default is `'./'` (current directory).
-        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel'}, optional
+        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'postgresql',
+                      'oracle', 'mssql', 'mysql'}, optional
             Format of database, default is CSV.
 
         """
@@ -136,7 +143,7 @@ class IODataBase:
 
     def save_as_sqlite(self, new_data, table='main_table', name=None,
                        ext='.db', index=True, index_label=None):
-        """ Append and save `new_data` in SQL(ite) database.
+        """ Append and save `new_data` in SQLite database.
 
         With sqlite, if `database` exists append to it `new_data`, else create
         a new data base.
@@ -174,10 +181,11 @@ class IODataBase:
     def save_as_sql(self, new_data, table='main_table', name=None,
                     ext='.db', index=True, index_label=None, driver=None,
                     username=None, password=None, host=None, port=None):
-        """ Append and save `new_data` in SQL(ite) database.
+        """ Append and save `new_data` in SQL database.
 
-        With sqlite, if `database` exists append to it `new_data`, else create
-        a new data base.
+        SQL database as `method={'postgresql', 'oracle', 'mssql', 'mysql'}`.
+        If `database` exists append to it `new_data`, else create a new
+        database.
 
         Parameters
         ----------
