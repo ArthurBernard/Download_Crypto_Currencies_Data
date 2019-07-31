@@ -11,6 +11,7 @@ This is the documentation of `dccd` package, a very simple package to download c
     gdax
     kraken
     poloniex
+    websockets
     time_tools
     io_tools
     
