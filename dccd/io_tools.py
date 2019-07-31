@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-30 18:07:57
+# @Last modified time: 2019-07-31 12:06:16
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -14,8 +14,8 @@ import os.path
 import time
 import sqlite3
 from pickle import Pickler, Unpickler
-from sqlalchemy import create_engine
-from sqlalchemy.engine.url import URL
+# from sqlalchemy import create_engine
+# from sqlalchemy.engine.url import URL
 
 # External packages
 import pandas as pd
@@ -189,6 +189,37 @@ class IODataBase:
         conn = sqlite3.connect(self.path + name + ext)
         # Append data
         new_data.to_sql(table, con=conn, if_exists='append', index=index,
+                        index_label=index_label)
+        # Close connection
+        conn.close()
+
+    def get_from_sqlite(self, name, table='main_table',
+                        ext='.db', index=True, index_label=None):
+        """ Get data from SQLite database.
+
+        Parameters
+        ----------
+        name : str, optional
+            Name of the database, default is the current year.
+        table : str, optional
+            Name of the table, default is `'main_table'`.
+        ext : str, optional
+            Extension of the database, default is `'.db'`.
+        index : bool, optional
+            Write pd.DataFrame index as a column. Uses index_label as the
+            column name in the table. Default is `True`.
+        index_label : string or sequence, optional
+            Column label for index column(s). If `None` is given (default) and
+            index is `True`, then the index names are used. A sequence should
+            be given if the pd.DataFrame uses pd.MultiIndex.
+
+        """
+        # TODO : to finish !
+        
+        # Open connection with database
+        conn = sqlite3.connect(self.path + name + ext)
+        # Append data
+        new_data.read_sql(table, con=conn, if_exists='append', index=index,
                         index_label=index_label)
         # Close connection
         conn.close()
