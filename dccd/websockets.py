@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-31 12:18:20
+# @Last modified time: 2019-07-31 15:36:03
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -157,3 +157,101 @@ class BasisWebSocket:
         while not self.__getattribute__(is_true):
             self.logger.debug('Please wait that "{}".'.format(is_true))
             await asyncio.sleep(1)
+
+
+class DownloadDataWebSocket(BasisWebSocket):
+    """ Basis object to download data from a channel websocket client API.
+
+    Attributes
+    ----------
+    host : str
+        Adress of host to connect.
+    conn_par : dict
+        Parameters of websocket connection.
+    ws : websockets.client.WebSocketClientProtocol
+        Connection with the websocket client.
+    is_connect : bool
+        `True` if connected else `False`.
+    ts : int
+        Number of second between two observations.
+    t : int
+        Current timestamp but rounded by `ts`.
+    until : int
+        Timestamp to stop to download data.
+
+    Methods
+    -------
+    on_open(channel, **kwargs)
+        Method to connect at a channel of websocket client API.
+
+    TODO :
+    - Asynchronous context manager methods (aenter and aexit)
+    - Clean private/public methods
+
+    """
+    _parse_host = {
+        'bitfinex': 'wss://api-pub.bitfinex.com/ws/2',
+    }
+
+    def __init__(self, host, log_level='DEBUG', time_step=60, ping_interval=5,
+                 ping_timeout=5, close_timeout=5):
+        """ Initialize object.
+
+        Parameters
+        ----------
+        host : str
+            Name of an allowed exchange or url of the host exchange.
+
+        """
+        if host.lower() in self._parse_host.keys():
+            host = self._parse_host[host]
+
+        # Init basis websocket connection
+        BasisWebSocket.__init__(
+            self, host, log_level=log_level, ping_interval=ping_interval,
+            ping_timeout=ping_timeout, close_timeout=close_timeout
+        )
+
+        # Set variables
+        self.ts = time_step
+        self.t = self._current_timestep()
+        self.until = time.time() + STOP if STOP > 0 else time.time() * 10
+
+        # Set data
+        self._data = {}
+
+    def __aiter__(self):
+        """ Set iterative method. """
+        self.logger.debug('Starting generator websocket')
+
+        return self
+
+    async def __anext__(self):
+        """ Iterate object. """
+        if time.time() > self.until:
+            self.logger.info('StopIteration')
+            self.on_close()
+
+            raise StopAsyncIteration
+
+        # Time to sleep
+        time_wait = self.t + self.ts - time.time()
+
+        if time_wait > 0:
+            await asyncio.sleep(time_wait)
+
+        t, self.t = self.t, self._current_timestep()
+
+        return self._data.pop(t)
+
+    async def on_message(self, data):
+        """ Set data to order book. """
+        try:
+            self._data[self.t] += [data]
+
+        except KeyError:
+            self._data[self.t] = [data]
+
+    def _current_timestep(self):
+        """ Current time rounded by `timestep`. """
+        return int(time.time() // self.ts * self.ts)
