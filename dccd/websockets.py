@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-31 12:00:16
+# @Last modified time: 2019-07-31 12:18:20
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -81,10 +81,10 @@ class BasisWebSocket:
         """ Connection to websocket. """
         # Connect to host websocket
         async with websockets.connect(self.host, **self.conn_par) as self.ws:
-            self.logger.info(f'Websocket connected to {self.host}.')
+            self.logger.info('Websocket connected to {}.'.format(self.host))
 
             # Connect to channel
-            await self.channel_connect(channel, **kwargs)
+            await self._channel_connect(channel, **kwargs)
             await self.wait_that('is_connect')
 
             # Loop on received message
@@ -101,11 +101,11 @@ class BasisWebSocket:
             except websockets.exceptions.ConnectionClosed:
                 await self.on_error(
                     'ConnectionClosed',
-                    f"Code is {self.ws.close_code}\n",
-                    f"Reason is '{self.ws.close_reason}'"
+                    "Code is {}\n".format(self.ws.close_code),
+                    "Reason is '{}'".format(self.ws.close_reason)
                 )
 
-    async def channel_connect(self, channel, **kwargs):
+    async def _channel_connect(self, channel, **kwargs):
         """ Connect to a channel. """
         data = {"event": "subscribe", "channel": channel, **kwargs}
         self.logger.info(data)
@@ -116,7 +116,7 @@ class BasisWebSocket:
         # Send data to channel connection
         await self.ws.send(json.dumps(data))
         self.is_connect = True
-        self.logger.info(f'Set {channel} connection')
+        self.logger.info('Set {} connection'.format(channel))
 
         return
 
@@ -149,11 +149,11 @@ class BasisWebSocket:
         ))
 
     async def on_message(self, message):
-        """ On websocket message. """
-        self.logger.info(f'Message: {message}')
+        """ On websocket display message. """
+        self.logger.info('Message: {}'.format(message))
 
     async def wait_that(self, is_true):
         """ Wait before running. """
         while not self.__getattribute__(is_true):
-            self.logger.debug(f'Please wait that "{is_true}".')
+            self.logger.debug('Please wait that "{}".'.format(is_true))
             await asyncio.sleep(1)
