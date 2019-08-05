@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-31 12:06:16
+# @Last modified time: 2019-08-05 20:38:56
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -14,8 +14,8 @@ import os.path
 import time
 import sqlite3
 from pickle import Pickler, Unpickler
-# from sqlalchemy import create_engine
-# from sqlalchemy.engine.url import URL
+from sqlalchemy import create_engine
+from sqlalchemy.engine.url import URL
 
 # External packages
 import pandas as pd
@@ -215,23 +215,26 @@ class IODataBase:
 
         """
         # TODO : to finish !
-        
+
         # Open connection with database
         conn = sqlite3.connect(self.path + name + ext)
         # Append data
-        new_data.read_sql(table, con=conn, if_exists='append', index=index,
-                        index_label=index_label)
+        df = pd.read_sql(table, con=conn, if_exists='append', index=index,
+                         index_label=index_label)
         # Close connection
         conn.close()
 
+        return df
+
     def save_as_sql(self, new_data, table='main_table', name=None,
-                    ext='.db', index=True, index_label=None, driver=None,
-                    username=None, password=None, host=None, port=None):
+                    ext='', index=True, index_label=None, driver=None,
+                    username=None, password=None, host=None, port=None,
+                    **kwargs):
         """ Append and save `new_data` in SQL database.
 
         SQL database as `method={'PostgreSQL', 'Oracle', 'MSSQL', 'MySQL'}`.
         If `database` exists append to it `new_data`, else create a new
-        database.
+        database. See SQLAlchemy documentation for more details [1]_.
 
         Parameters
         ----------
@@ -262,22 +265,29 @@ class IODataBase:
             Host to connect, default is `'localhost'`.
         port : str, optional
             The port number, default is `None`.
+        kwargs : dict, optional
+            A dictionary of options to be passed to the dialect and/or the
+            DBAPI upon connect.
 
+        References
+        ----------
+        .. [1] https://docs.sqlalchemy.org/en/13/core/engines.html
 
         """
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
 
         # Open connection with database
-        conn = create_engine(URL(
-            self.method, username=username, password=password, host=host,
-            port=port, database=self.path + name + ext,
-        ))
+        url = URL(
+            self.method + '+' + driver, username=username, password=password, host=host,
+            port=port, database=self.path + name + ext, query=kwargs,
+        )
+        conn = create_engine(url)
         # Append data
         new_data.to_sql(table, con=conn, if_exists='append', index=index,
                         index_label=index_label)
         # Close connection
-        conn.close()
+        # conn.close()
 
     def save_as_csv(self, new_data, name=None, ext='.csv', index=True,
                     index_label=None):
