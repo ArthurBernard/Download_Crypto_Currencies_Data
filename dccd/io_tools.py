@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-05 20:38:56
+# @Last modified time: 2019-08-05 22:28:54
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -277,9 +277,14 @@ class IODataBase:
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
 
+        if driver is None:
+            driver = self.method
+        else:
+            driver = self.method + '+' + driver
+
         # Open connection with database
         url = URL(
-            self.method + '+' + driver, username=username, password=password, host=host,
+            driver, username=username, password=password, host=host,
             port=port, database=self.path + name + ext, query=kwargs,
         )
         conn = create_engine(url)
