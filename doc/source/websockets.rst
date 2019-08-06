@@ -1,5 +1,5 @@
 WebSocket connectors
 ====================
 
-.. automodule:: dccd.websockets
+.. automodule:: dccd.websocket_tools
    :members:
