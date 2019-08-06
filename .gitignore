@@ -4,6 +4,7 @@ dccd.egg-info/
 dist/
 build/
 .ipynb_checkpoints/
+logs/
 
 # Ignore files
 Exemple_excel_dccd.png
