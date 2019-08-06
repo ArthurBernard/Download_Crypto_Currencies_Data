@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-31 15:36:03
+# @Last modified time: 2019-08-06 18:29:26
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -23,7 +23,6 @@ import asyncio
 import websockets
 
 # Local packages
-
 
 __all__ = ['BasisWebSocket']
 
@@ -49,8 +48,8 @@ class BasisWebSocket:
 
     """
 
-    def __init__(self, host, log_level='DEBUG', ping_interval=5,
-                 ping_timeout=5, close_timeout=5):
+    def __init__(self, host, log_level='DEBUG', ping_interval=30,
+                 ping_timeout=30, close_timeout=30):
         """ Initialize object.
 
         Parameters
@@ -185,26 +184,39 @@ class DownloadDataWebSocket(BasisWebSocket):
         Method to connect at a channel of websocket client API.
 
     TODO :
-    - Asynchronous context manager methods (aenter and aexit)
+    - None time_step send tick by tick data
     - Clean private/public methods
+    - Add optional setting parser
 
     """
     _parse_host = {
-        'bitfinex': 'wss://api-pub.bitfinex.com/ws/2',
+        'bitfinex': {
+            'host': 'wss://api-pub.bitfinex.com/ws/2',
+        },
+        'bitmex': {
+            'host': 'wss://www.bitmex.com/realtime',
+        },
     }
 
     def __init__(self, host, log_level='DEBUG', time_step=60, ping_interval=5,
-                 ping_timeout=5, close_timeout=5):
+                 ping_timeout=5, close_timeout=5, STOP=3600):
         """ Initialize object.
 
         Parameters
         ----------
         host : str
             Name of an allowed exchange or url of the host exchange.
+        time_step : int, optional
+            Number of seconds between two observations, default is 60 (one
+            minute).
+        pasrer : function, optional
+            Function to parse raw data.
+        STOP : int, optional
+            Number of seconds before stoping, default is 3600 (one hour).
 
         """
         if host.lower() in self._parse_host.keys():
-            host = self._parse_host[host]
+            host = self._parse_host[host]['host']
 
         # Init basis websocket connection
         BasisWebSocket.__init__(
@@ -242,10 +254,27 @@ class DownloadDataWebSocket(BasisWebSocket):
 
         t, self.t = self.t, self._current_timestep()
 
-        return self._data.pop(t)
+        if t in self._data.keys():
+
+            return self._data.pop(t)
+
+        else:
+
+            return None
+
+    # async def __aenter__(self):
+    #    """ Enter async context manager. """
+    #    return self
+
+    # async def __aexit__(self, exc_type, exc_value, traceback):
+    #    """ Exit async context manager. """
+    #    txt = f'{exc_type}: {exc_value}\n{traceback}'
+    #    self.logger.info(f'Exit context manager: {txt}')
+    #    self.on_close()
 
     async def on_message(self, data):
         """ Set data to order book. """
+        # TODO : if time_step is None
         try:
             self._data[self.t] += [data]
 
@@ -254,4 +283,12 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     def _current_timestep(self):
         """ Current time rounded by `timestep`. """
-        return int(time.time() // self.ts * self.ts)
+        return int((time.time() + 0.01) // self.ts * self.ts)
+
+    def set_process_data(self, func, **kwargs):
+        self.process_data = func
+        self.process_params = kwargs
+
+    def set_saver(self, func, **kwargs):
+        self.saver = func
+        self.io_params = kwargs
