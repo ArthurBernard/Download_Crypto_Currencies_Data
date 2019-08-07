@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-06 15:25:49
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-06 18:28:44
+# @Last modified time: 2019-08-07 17:05:56
 
 # Built-in packages
 import time
@@ -36,7 +36,9 @@ def set_marketdepth(book, t=None):
         t = int(time.time())
 
     # Set dataframe
-    df = pd.DataFrame(book, dtype=np.float64).T
+    # df = pd.DataFrame(book, dtype=np.float64)
+    df = pd.DataFrame([{'price': k, 'amount': a} for k, a in book.items()],
+                      dtype=np.float64)
     df = df.sort_index().reset_index(drop=True)
     bid_idx = df.amount > 0.
     ask_idx = df.amount < 0.
@@ -53,7 +55,7 @@ def set_marketdepth(book, t=None):
     df.loc[ask_idx, 'vwab'] = np.cumsum(ask.amount.values * ask.price.values)
     df.loc[ask_idx, 'vwab'] /= df.loc[ask_idx, 'cum_amount'].values
 
-    df = df.drop(columns=['count', 'amount'])
+    df = df.drop(columns=['amount'])
 
     asks, bids = df.loc[ask_idx], df.loc[bid_idx]
 
