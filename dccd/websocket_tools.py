@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-07 15:26:55
+# @Last modified time: 2019-08-07 19:11:26
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -111,7 +111,7 @@ class BasisWebSocket:
         # data = {"event": "subscribe", **kwargs}
         data = {**self.subs_data, **kwargs}
 
-        self.logger.info(f'Subscription data: {data}')
+        self.logger.info('Subscription data: {}'.format(data))
 
         # Wait the connection
         await self.wait_that('ws')
@@ -190,6 +190,7 @@ class DownloadDataWebSocket(BasisWebSocket):
     - Add optional setting parser
 
     """
+
     _parser_exchange = {
         'binance': {
             'host': 'wss://stream.binance.com:9443/ws',
@@ -302,7 +303,7 @@ class DownloadDataWebSocket(BasisWebSocket):
             self.saver(df, **self.io_params)
 
             self.logger.debug('Processed data:\n' + str(df))
-            self.logger.debug(f'Catch data of TS : {self.t}.')
+            self.logger.debug('Catch data of TS : {}'.format(self.t))
 
             if not self.is_connect:
                 self.logger.info('End to import data from Bitfinex.\n')
@@ -319,7 +320,7 @@ class DownloadDataWebSocket(BasisWebSocket):
             self._data[self.t] = [data]
 
     def _current_timestep(self):
-        """ Current time rounded by `timestep`. """
+        """ Set current time rounded by `timestep`. """
         return int((time.time() + 0.01) // self.ts * self.ts)
 
     def set_process_data(self, func, **kwargs):
@@ -343,10 +344,10 @@ class DownloadDataWebSocket(BasisWebSocket):
         elif isinstance(data, dict):
             self.logger.debug('Data is a dict')
             for k, a in data.items():
-                self.logger.debug(f'{k}: {a}')
+                self.logger.debug('{}: {}'.format(k, a))
 
         else:
-            self.logger.debug(f'Data is {type(data)}: {data}')
+            self.logger.debug('Data is {}: {}'.format(type(data), data))
 
     def get_parser(self, key):
         if key not in self._parser_data.keys():
