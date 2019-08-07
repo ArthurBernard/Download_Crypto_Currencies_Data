@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-06 18:29:26
+# @Last modified time: 2019-08-07 15:26:55
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -19,7 +19,7 @@ import logging
 import json
 import asyncio
 
-# External packages
+# Third party packages
 import websockets
 
 # Local packages
@@ -28,13 +28,13 @@ __all__ = ['BasisWebSocket']
 
 
 class BasisWebSocket:
-    """ Basis object to connect at a specified channel to websocket client API.
+    """ Basis object to connect at a specified stream to websocket client API.
 
     Attributes
     ----------
     host : str
         Adress of host to connect.
-    conn_par : dict
+    conn_para : dict
         Parameters of websocket connection.
     ws : websockets.client.WebSocketClientProtocol
         Connection with the websocket client.
@@ -43,13 +43,14 @@ class BasisWebSocket:
 
     Methods
     -------
-    on_open(channel, **kwargs)
-        Method to connect at a channel of websocket client API.
+    on_open(**kwargs)
+        Method to connect to a stream of websocket client API.
 
     """
+    ws = False
+    is_connect = False
 
-    def __init__(self, host, log_level='DEBUG', ping_interval=30,
-                 ping_timeout=30, close_timeout=30):
+    def __init__(self, host, log_level='DEBUG', conn={}, subs={}):
         """ Initialize object.
 
         Parameters
@@ -58,32 +59,33 @@ class BasisWebSocket:
             Adress of host to connect.
         log_level : str, optional
             Level of logging, default is 'INFO'.
+        conn : dict
+            Parameters to connection setting.
+        subs : dict
+            Data to subscribe to a stream.
 
         """
         # Set websocket variables
         self.host = host
-        self.conn_par = {
-            'ping_interval': ping_interval,
-            'ping_timeout': ping_timeout,
-            'close_timeout': close_timeout,
-        }
+        self.conn_para = conn  # {
+        self.subs_data = subs
 
         # Set websocket connection indicators
-        self.ws = False
-        self.is_connect = False
+        # self.ws = False
+        # self.is_connect = False
 
         # Set logger
         self.logger = logging.getLogger(__name__)
         self.logger.info('Init websocket object.')
 
-    async def _connect(self, channel, **kwargs):
+    async def _connect(self, **kwargs):
         """ Connection to websocket. """
         # Connect to host websocket
-        async with websockets.connect(self.host, **self.conn_par) as self.ws:
+        async with websockets.connect(self.host, **self.conn_para) as self.ws:
             self.logger.info('Websocket connected to {}.'.format(self.host))
 
-            # Connect to channel
-            await self._channel_connect(channel, **kwargs)
+            # Subscribe to a stream
+            await self._subscribe(**kwargs)
             await self.wait_that('is_connect')
 
             # Loop on received message
@@ -104,18 +106,19 @@ class BasisWebSocket:
                     "Reason is '{}'".format(self.ws.close_reason)
                 )
 
-    async def _channel_connect(self, channel, **kwargs):
-        """ Connect to a channel. """
-        data = {"event": "subscribe", "channel": channel, **kwargs}
-        self.logger.info(data)
+    async def _subscribe(self, **kwargs):
+        """ Connect to a stream. """
+        # data = {"event": "subscribe", **kwargs}
+        data = {**self.subs_data, **kwargs}
+
+        self.logger.info(f'Subscription data: {data}')
 
         # Wait the connection
         await self.wait_that('ws')
 
-        # Send data to channel connection
+        # Send data to subscribe
         await self.ws.send(json.dumps(data))
         self.is_connect = True
-        self.logger.info('Set {} connection'.format(channel))
 
         return
 
@@ -130,13 +133,11 @@ class BasisWebSocket:
         self.is_connect = False
         self.ws.close()
 
-    def on_open(self, channel, **kwargs):
+    def on_open(self, **kwargs):
         """ On websocket open.
 
         Parameters
         ----------
-        channel : str
-            Channel to connect.
         kwargs : dict
             Any relevant parameters to connection.
 
@@ -144,7 +145,7 @@ class BasisWebSocket:
         self.logger.info("Websocket open.")
         loop = asyncio.get_event_loop()
         loop.run_until_complete(asyncio.gather(
-            self._connect(channel, **kwargs),
+            self._connect(**kwargs),
         ))
 
     async def on_message(self, message):
@@ -159,7 +160,7 @@ class BasisWebSocket:
 
 
 class DownloadDataWebSocket(BasisWebSocket):
-    """ Basis object to download data from a channel websocket client API.
+    """ Basis object to download data from a stream websocket client API.
 
     Attributes
     ----------
@@ -180,8 +181,8 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     Methods
     -------
-    on_open(channel, **kwargs)
-        Method to connect at a channel of websocket client API.
+    on_open(**kwargs)
+        Method to connect to a stream of websocket client API.
 
     TODO :
     - None time_step send tick by tick data
@@ -189,17 +190,29 @@ class DownloadDataWebSocket(BasisWebSocket):
     - Add optional setting parser
 
     """
-    _parse_host = {
+    _parser_exchange = {
+        'binance': {
+            'host': 'wss://stream.binance.com:9443/ws',
+            'subs': {},  # {'stream': None},
+        },
         'bitfinex': {
             'host': 'wss://api-pub.bitfinex.com/ws/2',
+            'subs': {'event': 'subscribe'},  # , 'stream': None},
+            'conn': {
+                'ping_interval': 5,
+                'ping_timeout': 5,
+                'close_timeout': 5,
+            }
         },
         'bitmex': {
             'host': 'wss://www.bitmex.com/realtime',
+            'subs': {'op': 'subscribe'},  # , 'args': None},
         },
     }
+    _parser_data = {}
 
-    def __init__(self, host, log_level='DEBUG', time_step=60, ping_interval=5,
-                 ping_timeout=5, close_timeout=5, STOP=3600):
+    def __init__(self, host, log_level='DEBUG', time_step=60, STOP=3600,
+                 **kwargs):
         """ Initialize object.
 
         Parameters
@@ -215,14 +228,11 @@ class DownloadDataWebSocket(BasisWebSocket):
             Number of seconds before stoping, default is 3600 (one hour).
 
         """
-        if host.lower() in self._parse_host.keys():
-            host = self._parse_host[host]['host']
+        if host.lower() in DownloadDataWebSocket._parser_exchange.keys():
+            BasisWebSocket.__init__(self, **self._parser_exchange[host])
 
-        # Init basis websocket connection
-        BasisWebSocket.__init__(
-            self, host, log_level=log_level, ping_interval=ping_interval,
-            ping_timeout=ping_timeout, close_timeout=close_timeout
-        )
+        else:
+            BasisWebSocket.__init__(self, host, log_level=log_level, **kwargs)
 
         # Set variables
         self.ts = time_step
@@ -272,6 +282,33 @@ class DownloadDataWebSocket(BasisWebSocket):
     #    self.logger.info(f'Exit context manager: {txt}')
     #    self.on_close()
 
+    async def _loop(self):
+        """ Update database. """
+        await self.wait_that('_data')
+
+        async for data in self:
+            self.logger.debug('Get data.')
+
+            # Continue if no data received
+            if data is None:
+                self.logger.debug('No data')
+
+                continue
+
+            # Set DataFrame
+            df = self.process_data(data, **self.process_params)
+
+            # Update database
+            self.saver(df, **self.io_params)
+
+            self.logger.debug('Processed data:\n' + str(df))
+            self.logger.debug(f'Catch data of TS : {self.t}.')
+
+            if not self.is_connect:
+                self.logger.info('End to import data from Bitfinex.\n')
+
+                return
+
     async def on_message(self, data):
         """ Set data to order book. """
         # TODO : if time_step is None
@@ -292,3 +329,28 @@ class DownloadDataWebSocket(BasisWebSocket):
     def set_saver(self, func, **kwargs):
         self.saver = func
         self.io_params = kwargs
+
+    def _parser_debug(self, data, level=0):
+        # Function to debug and understand data structure
+        if level == 0:
+            self._data[self.t] = data
+
+        if isinstance(data, list):
+            self.logger.debug('Data is a list')
+            for d in data:
+                self._parser_debug(d, level=level + 1)
+
+        elif isinstance(data, dict):
+            self.logger.debug('Data is a dict')
+            for k, a in data.items():
+                self.logger.debug(f'{k}: {a}')
+
+        else:
+            self.logger.debug(f'Data is {type(data)}: {data}')
+
+    def get_parser(self, key):
+        if key not in self._parser_data.keys():
+            return self._parser_debug
+
+        else:
+            return self._parser_data[key]
