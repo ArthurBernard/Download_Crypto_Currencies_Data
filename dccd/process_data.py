@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-06 15:25:49
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-07 17:05:56
+# @Last modified time: 2019-08-07 18:17:56
 
 # Built-in packages
 import time
@@ -78,7 +78,7 @@ def set_marketdepth(book, t=None):
 
 
 def set_trades(trades):
-    """ Set a ohlc dataframe with list of order books.
+    """ Set a dataframe with list of trades.
 
     Parameters
     ----------
