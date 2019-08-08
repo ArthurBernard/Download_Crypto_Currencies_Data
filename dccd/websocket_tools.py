@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-07 19:11:26
+# @Last modified time: 2019-08-08 15:49:36
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -25,6 +25,10 @@ import websockets
 # Local packages
 
 __all__ = ['BasisWebSocket']
+
+# =========================================================================== #
+#                                Basis objects                                #
+# =========================================================================== #
 
 
 class BasisWebSocket:
@@ -67,12 +71,8 @@ class BasisWebSocket:
         """
         # Set websocket variables
         self.host = host
-        self.conn_para = conn  # {
+        self.conn_para = conn
         self.subs_data = subs
-
-        # Set websocket connection indicators
-        # self.ws = False
-        # self.is_connect = False
 
         # Set logger
         self.logger = logging.getLogger(__name__)
@@ -138,8 +138,8 @@ class BasisWebSocket:
 
         Parameters
         ----------
-        kwargs : dict
-            Any relevant parameters to connection.
+        **kwargs
+            Any relevant keyword arguments to set connection.
 
         """
         self.logger.info("Websocket open.")
@@ -171,9 +171,9 @@ class DownloadDataWebSocket(BasisWebSocket):
     ws : websockets.client.WebSocketClientProtocol
         Connection with the websocket client.
     is_connect : bool
-        `True` if connected else `False`.
+        True if is connected, False otherwise.
     ts : int
-        Number of second between two observations.
+        Number of second between two snapshots of data.
     t : int
         Current timestamp but rounded by `ts`.
     until : int
@@ -218,15 +218,21 @@ class DownloadDataWebSocket(BasisWebSocket):
 
         Parameters
         ----------
-        host : str
-            Name of an allowed exchange or url of the host exchange.
+        host : str {'binance', 'bitfinex', 'bitmex'}
+            Name of an allowed exchange or url of the host exchange. If url of
+            a host exchange is provided, keyword arguments for connection and
+            subscribe parameters must be also specified.
+        log_level : str {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
+            Level of logging, default is `'INFO'`.
         time_step : int, optional
-            Number of seconds between two observations, default is 60 (one
-            minute).
-        pasrer : function, optional
-            Function to parse raw data.
+            Number of seconds between two snapshots of data, minimum is 1,
+            default is 60 (one minute). Each `time_step` data will be
+            processed and updated to the database.
         STOP : int, optional
-            Number of seconds before stoping, default is 3600 (one hour).
+            Number of seconds before stoping, default is `3600` (one hour).
+        kwargs : dict, optional
+            Connection and subscribe parameters, relevant only if host is not
+            allowed in `_parser_exchange`.
 
         """
         if host.lower() in DownloadDataWebSocket._parser_exchange.keys():
@@ -236,7 +242,7 @@ class DownloadDataWebSocket(BasisWebSocket):
             BasisWebSocket.__init__(self, host, log_level=log_level, **kwargs)
 
         # Set variables
-        self.ts = time_step
+        self.ts = max(time_step, 1)
         self.t = self._current_timestep()
         self.until = time.time() + STOP if STOP > 0 else time.time() * 10
 
@@ -273,18 +279,8 @@ class DownloadDataWebSocket(BasisWebSocket):
 
             return None
 
-    # async def __aenter__(self):
-    #    """ Enter async context manager. """
-    #    return self
-
-    # async def __aexit__(self, exc_type, exc_value, traceback):
-    #    """ Exit async context manager. """
-    #    txt = f'{exc_type}: {exc_value}\n{traceback}'
-    #    self.logger.info(f'Exit context manager: {txt}')
-    #    self.on_close()
-
     async def _loop(self):
-        """ Update database. """
+        """ Loop to process and save data into database. """
         await self.wait_that('_data')
 
         async for data in self:
@@ -321,14 +317,42 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     def _current_timestep(self):
         """ Set current time rounded by `timestep`. """
-        return int((time.time() + 0.01) // self.ts * self.ts)
+        # if self.ts is None of self.ts == 0:
+        #
+        #    return time.time()
+
+        return int((time.time() + 0.001) // self.ts * self.ts)
 
     def set_process_data(self, func, **kwargs):
+        """ Set processing function.
+
+        Parameters
+        ----------
+        func : function
+            Function to process and clean data before to be saved. Must take
+            `data` in arguments and can take any optional keywords arguments,
+            cf exemples in `process_data.py`.
+        kwargs : dict, optional
+            Any keyword arguments to be passed to `func`.
+
+        """
         self.process_data = func
         self.process_params = kwargs
 
-    def set_saver(self, func, **kwargs):
-        self.saver = func
+    def set_saver(self, call, **kwargs):
+        """ Set saver object.
+
+        Parameters
+        ----------
+        call : callable
+            Callable object to save data or update a database. Must take `data`
+            in arguments and can take any optional keywords arguments, cf
+            exemples in `io_tools.py`.
+        kwargs : dict, optional
+            Any keyword arguments to be passed to `call`.
+
+        """
+        self.saver = call
         self.io_params = kwargs
 
     def _parser_debug(self, data, level=0):
@@ -350,8 +374,24 @@ class DownloadDataWebSocket(BasisWebSocket):
             self.logger.debug('Data is {}: {}'.format(type(data), data))
 
     def get_parser(self, key):
+        """ Get allowed data parser.
+
+        Parameters
+        ----------
+        key : str
+            Name code of data to parse. If `key` is not allowed then return a
+            debug_parser which will display data structure.
+
+        Returns
+        -------
+        function
+            The allowed function to parse this kind of data.
+
+        """
         if key not in self._parser_data.keys():
+
             return self._parser_debug
 
         else:
+
             return self._parser_data[key]
