@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-05 22:28:54
+# @Last modified time: 2019-08-09 11:14:10
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -132,7 +132,7 @@ class IODataBase:
 
         """
         if name is None:
-            name = time.strftime('%y-%m-%d', time.time())
+            name = time.strftime('%y-%m-%d', time.gmtime(time.time()))
 
         # Load data
         database = get_df(self.path, name, ext=ext)
