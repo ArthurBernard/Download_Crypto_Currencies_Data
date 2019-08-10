@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 16:54:02
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-07-26 16:54:54
+# @Last modified time: 2019-08-09 11:12:06
 
 """
 dccd
@@ -52,10 +52,30 @@ Method chaining is available.
 
 __version__ = "1.0.2"
 
+# ======= #
+#  Tools  #
+# ======= #
+
 from . import time_tools
 from .time_tools import *
 from . import io_tools
 from .io_tools import *
+from . import process_data
+from .process_data import *
+
+# ===== #
+#  New  #
+# ===== #
+
+from . import bitfinex
+from .bitfinex import *
+from . import bitmex
+from .bitmex import *
+
+# ===== #
+#  Old  #
+# ===== #
+
 from . import exchange
 from .exchange import ImportDataCryptoCurrencies
 from . import kraken
@@ -70,6 +90,11 @@ from .poloniex import FromPoloniex
 # __all__ = time_tools.__all__
 __all__ = ['time_tools']
 __all__ += ['io_tools']
+__all__ += ['process_data']
+
+__all__ += bitfinex.__all__
+__all__ += bitmex.__all__
+
 __all__ += exchange.__all__
 __all__ += kraken.__all__
 __all__ += binance.__all__
