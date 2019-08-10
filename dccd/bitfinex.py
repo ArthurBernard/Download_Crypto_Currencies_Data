@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-10 10:47:22
+# @Last modified time: 2019-08-10 10:55:47
 
 """ Objects to download data from Bitfinex exchange.
 
@@ -164,7 +164,7 @@ def get_data_bitfinex(channel, process_func, time_step=60, until=None,
     """ Download orderbook from Bitfinex exchange. """
     # Set database connector object
     if path is None:
-        path = f'database/orders/{pair}'
+        path = 'database/orders/{}'.format(pair)
 
     # Set saver object
     saver = IODataBase(path, method=save_method)

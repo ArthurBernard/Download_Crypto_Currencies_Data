@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-07 11:16:51
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-10 10:48:41
+# @Last modified time: 2019-08-10 10:56:39
 
 """ Objects to download data from Bitmex exchange.
 
@@ -159,7 +159,7 @@ def get_data_bitmex(process_func, *args, time_step=60, until=None,
     """ Download orderbook from Bitfinex exchange. """
     # Set database connector object
     if path is None:
-        path = f'database/orders/{pair}'
+        path = 'database/orders/{}'.format(pair)
 
     # Set saver object
     saver = IODataBase(path, method=save_method)
