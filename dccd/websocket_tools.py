@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-08 15:49:36
+# @Last modified time: 2019-08-09 11:18:36
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -24,7 +24,7 @@ import websockets
 
 # Local packages
 
-__all__ = ['BasisWebSocket']
+__all__ = ['BasisWebSocket', 'DownloadDataWebSocket']
 
 # =========================================================================== #
 #                                Basis objects                                #
@@ -54,7 +54,7 @@ class BasisWebSocket:
     ws = False
     is_connect = False
 
-    def __init__(self, host, log_level='DEBUG', conn={}, subs={}):
+    def __init__(self, host, log_level='INFO', conn={}, subs={}):
         """ Initialize object.
 
         Parameters
@@ -212,7 +212,7 @@ class DownloadDataWebSocket(BasisWebSocket):
     }
     _parser_data = {}
 
-    def __init__(self, host, log_level='DEBUG', time_step=60, STOP=3600,
+    def __init__(self, host, log_level='INFO', time_step=60, STOP=3600,
                  **kwargs):
         """ Initialize object.
 
@@ -308,7 +308,6 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     async def on_message(self, data):
         """ Set data to order book. """
-        # TODO : if time_step is None
         try:
             self._data[self.t] += [data]
 
@@ -317,10 +316,6 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     def _current_timestep(self):
         """ Set current time rounded by `timestep`. """
-        # if self.ts is None of self.ts == 0:
-        #
-        #    return time.time()
-
         return int((time.time() + 0.001) // self.ts * self.ts)
 
     def set_process_data(self, func, **kwargs):
