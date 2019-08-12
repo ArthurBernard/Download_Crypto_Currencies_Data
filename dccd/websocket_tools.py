@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-09 11:18:36
+# @Last modified time: 2019-08-12 13:18:14
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -181,8 +181,10 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     Methods
     -------
-    on_open(**kwargs)
-        Method to connect to a stream of websocket client API.
+    set_process_data(func, **kwargs)
+        Set a function and parameters to process/clean data before to be saved.
+    set_saver(call, **kwargs)
+        Set a callable object and parameters to save data or update a database.
 
     TODO :
     - None time_step send tick by tick data
@@ -307,11 +309,15 @@ class DownloadDataWebSocket(BasisWebSocket):
                 return
 
     async def on_message(self, data):
-        """ Set data to order book. """
-        try:
+        """ Parse any data received from the websocket. """
+        self._raw_parser(data)
+
+    def _raw_parser(data):
+        # Set all data to a list
+        if self.t in self._data.keys():
             self._data[self.t] += [data]
 
-        except KeyError:
+        else:
             self._data[self.t] = [data]
 
     def _current_timestep(self):
@@ -335,7 +341,7 @@ class DownloadDataWebSocket(BasisWebSocket):
         self.process_params = kwargs
 
     def set_saver(self, call, **kwargs):
-        """ Set saver object.
+        """ Set saver object to save data or update a database.
 
         Parameters
         ----------
@@ -384,9 +390,10 @@ class DownloadDataWebSocket(BasisWebSocket):
 
         """
         if key not in self._parser_data.keys():
+            self.logger.error('Unknown parser key {}, only {} allowed.'.format(
+                key, self._parser_data.keys()
+            ))
 
             return self._parser_debug
 
-        else:
-
-            return self._parser_data[key]
+        return self._parser_data[key]
