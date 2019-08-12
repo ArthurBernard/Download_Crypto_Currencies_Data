@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:25:19
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 16:49:46
+# @Last modified time: 2019-08-12 17:02:35
 
 """ GDax exchange class to download data.
 
@@ -54,8 +54,6 @@ class FromGDax(ImportDataCryptoCurrencies):
 
     """
 
-    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
-
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         if crypto is 'XBT':
             crypto = 'BTC'
@@ -97,4 +95,7 @@ class FromGDax(ImportDataCryptoCurrencies):
             'volume': float(e[5]),
             'quoteVolume': float(e[4]) * float(e[5])
         } for e in text]
+
         return data
+
+    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__

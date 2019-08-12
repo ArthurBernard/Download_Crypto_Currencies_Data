@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:26:20
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 16:45:44
+# @Last modified time: 2019-08-12 17:01:44
 
 """ Binance exchange class to download data.
 
@@ -55,8 +55,6 @@ class FromBinance(ImportDataCryptoCurrencies):
 
     """
 
-    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
-
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         if fiat in ['EUR', 'USD']:
             print("Binance don't allow fiat currencies.",
@@ -102,3 +100,6 @@ class FromBinance(ImportDataCryptoCurrencies):
         } for e in text]
 
         return data
+
+    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
+
