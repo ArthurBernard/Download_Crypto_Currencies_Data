@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-09 11:14:10
+# @Last modified time: 2019-08-12 12:07:01
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -193,8 +193,7 @@ class IODataBase:
         # Close connection
         conn.close()
 
-    def get_from_sqlite(self, name, table='main_table',
-                        ext='.db', index=True, index_label=None):
+    def get_from_sqlite(self, name, table='main_table', ext='.db'):
         """ Get data from SQLite database.
 
         Parameters
@@ -219,8 +218,7 @@ class IODataBase:
         # Open connection with database
         conn = sqlite3.connect(self.path + name + ext)
         # Append data
-        df = pd.read_sql(table, con=conn, if_exists='append', index=index,
-                         index_label=index_label)
+        df = pd.read_sql(table, con=conn)
         # Close connection
         conn.close()
 
@@ -361,10 +359,10 @@ class IODataBase:
         Slow method, not recommanded for large database.
 
         """
-        path = self.path + name + ext
-
         if name is None:
             name = time.strftime('%y-%m-%d', time.gmtime(time.time()))
+
+        path = self.path + name + ext
 
         # Append data to database if exist
         try:
