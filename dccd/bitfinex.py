@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 16:36:02
+# @Last modified time: 2019-08-12 16:53:54
 
 """ Objects to download data from Bitfinex exchange.
 
@@ -105,10 +105,10 @@ class DownloadBitfinexData(DownloadDataWebSocket):
     # TODO : add more parser methods
 
     _parser_data = {
-        'book': self.parser_book,
-        'book_raw': self.parser_raw_book,
-        'trades': self.parser_trades,
-        'trades_raw': self.parser_raw_trades,
+        'book': DownloadBitfinexData.parser_book,
+        'book_raw': DownloadBitfinexData.parser_raw_book,
+        'trades': DownloadBitfinexData.parser_trades,
+        'trades_raw': DownloadBitfinexData.parser_raw_trades,
         # 'candles': None,
     }
 
