@@ -1,18 +1,18 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# coding: utf-8
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-02-13 18:26:20
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-08-12 16:45:44
 
-
-""" 
-Binance exchange class to download data. 
+""" Binance exchange class to download data.
 
 """
 
 # Import built-in packages
-import os
-import pathlib
-import time
 
-# Import extern packages
+# Import third-party packages
 import requests
 import json
 
@@ -22,9 +22,10 @@ from dccd.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromBinance']
 
+
 class FromBinance(ImportDataCryptoCurrencies):
     """ Class to import crypto-currencies data from the Binance exchange.
-    
+
     Parameters
     ----------
     path : str
@@ -32,11 +33,10 @@ class FromBinance(ImportDataCryptoCurrencies):
     crypto : str
         The abreviation of the crypto-currency.
     span : {int, 'weekly', 'daily', 'hourly'}
-        If str, periodicity of observation. 
-        If int, number of the seconds between each observation. Minimal 
-        span is 60 seconds.
+        If str, periodicity of observation. If int, number of the seconds
+        between each observation. Minimal span is 60 seconds.
     fiat : str
-        A fiat currency or a crypto-currency. Binance don't allow fiat 
+        A fiat currency or a crypto-currency. Binance don't allow fiat
         currencies, but USD theter.
     form : {'xlsx', 'csv'}
         Your favorit format. Only 'xlsx' and 'csv' for the moment.
@@ -51,13 +51,16 @@ class FromBinance(ImportDataCryptoCurrencies):
 
     References
     ----------
-    .. [1] https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md
-    
+    .. [1] https://github.com/binance-exchange/binance-official-api-docs
+
     """
+
+    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
+
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         if fiat in ['EUR', 'USD']:
-            print("Binance don't allow fiat currencies.", 
-                "The equivalent of US dollar is Tether USD as USDT.")
+            print("Binance don't allow fiat currencies.",
+                  "The equivalent of US dollar is Tether USD as USDT.")
             self.fiat = fiat = 'USDT'
         if crypto is 'XBT':
             crypto = 'BTC'
@@ -65,32 +68,37 @@ class FromBinance(ImportDataCryptoCurrencies):
             self, path, crypto, span, 'GDAX', fiat, form
         )
         self.pair = crypto + fiat
-        self.full_path = self.path + '/Binance/Data/Clean_Data/' 
-        self.full_path += str(self.per) + '/' + str(self.crypto) + str(self.fiat)
-        
-    
+        self.full_path = self.path + '/Binance/Data/Clean_Data/'
+        self.full_path += self.per + '/' + self.crypto + self.fiat
+
     def _import_data(self, start='last', end='now'):
-        """ Download data from Binance for specific time interval
-        
+        """ Download data from Binance for specific time interval.
+
         Parameters
         ----------
         start : int
             Timestamp of the first observation of you want.
         end : int
             Timestamp of the last observation of you want.
-        
+
         """
         self.start, self.end = self._set_time(start, end)
         param = {
-            'symbol' : self.pair,
+            'symbol': self.pair,
             'startTime': self.start * 1000,
             'endTime': self.end * 1000,
             'interval': binance_interval(self.span),
         }
         r = requests.get('https://api.binance.com/api/v1/klines', param)
         text = json.loads(r.text)
-        data = [{'date': float(e[0] / 1000), 'open': float(e[1]), 
-                 'high': float(e[2]), 'low': float(e[3]), 'close': float(e[4]), 
-                 'volume': float(e[5]), 'quoteVolume': float(e[7])} for e in text]
-        return data #self._sort_data(data)
-    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
+        data = [{
+            'date': float(e[0] / 1000),
+            'open': float(e[1]),
+            'high': float(e[2]),
+            'low': float(e[3]),
+            'close': float(e[4]),
+            'volume': float(e[5]),
+            'quoteVolume': float(e[7])
+        } for e in text]
+
+        return data
