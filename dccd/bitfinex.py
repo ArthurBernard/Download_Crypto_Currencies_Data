@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 16:53:54
+# @Last modified time: 2019-08-12 16:57:17
 
 """ Objects to download data from Bitfinex exchange.
 
@@ -104,14 +104,6 @@ class DownloadBitfinexData(DownloadDataWebSocket):
     # TODO : docstring
     # TODO : add more parser methods
 
-    _parser_data = {
-        'book': DownloadBitfinexData.parser_book,
-        'book_raw': DownloadBitfinexData.parser_raw_book,
-        'trades': DownloadBitfinexData.parser_trades,
-        'trades_raw': DownloadBitfinexData.parser_raw_trades,
-        # 'candles': None,
-    }
-
     def __init__(self, time_step=60, until=3600):
         """ Initialize object.
 
@@ -132,6 +124,13 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 
         DownloadDataWebSocket.__init__(self, 'bitfinex', time_step=time_step,
                                        STOP=until)
+        self._parser_data = {
+            'book': self.parser_book,
+            'book_raw': self.parser_raw_book,
+            'trades': self.parser_trades,
+            'trades_raw': self.parser_raw_trades,
+            # 'candles': None,
+        }
         self.logger = logging.getLogger(__name__)
         self.d = {}
 
