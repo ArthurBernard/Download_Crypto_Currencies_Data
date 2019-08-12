@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-06 15:25:49
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 18:59:50
+# @Last modified time: 2019-08-12 20:14:03
 
 # Built-in packages
 import time
@@ -61,13 +61,17 @@ def set_marketdepth(book, t=None):
 
     # Set dataframe
     # df = pd.DataFrame(book, dtype=np.float64)
-    df = pd.DataFrame([{'price': k, 'amount': a} for k, a in book.items()],
+    # keys = sorted(book.keys(), reverse=True)
+    keys = sorted([i for i in book.keys() if book[i] > 0], reverse=True)
+    keys += sorted([i for i in book.keys() if book[i] < 0])
+    df = pd.DataFrame([{'price': k, 'amount': book[k]} for k in keys],
                       dtype=np.float64)
     df = df.sort_index().reset_index(drop=True)
+    # df.loc[df.amount > 0] = df.loc[df.amount > 0].iloc[::-1]
     bid_idx = df.amount > 0.
     ask_idx = df.amount < 0.
     bid = df.loc[bid_idx]
-    ask = df.loc[ask_idx]
+    ask = df.loc[ask_idx]  # .iloc[::-1]
 
     # Set bid cumulative amount
     df.loc[bid_idx, 'cum_amount'] = np.cumsum(bid.amount.values)
