@@ -4,25 +4,20 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-10 10:55:47
+# @Last modified time: 2019-08-12 16:36:02
 
 """ Objects to download data from Bitfinex exchange.
 
 """
 
 # Built-in packages
-import os
-import pathlib
 import time
 import asyncio
 import logging
 
 # Third party packages
-import requests
-import json
 
 # Local packages
-# from dccd.time_tools import *
 from dccd.exchange import ImportDataCryptoCurrencies
 from dccd.io_tools import IODataBase
 from dccd.websocket_tools import DownloadDataWebSocket
@@ -46,6 +41,9 @@ class FromBitfinex(ImportDataCryptoCurrencies):
 
 
 def _parser_trades(tData):
+    if tData[1] == 'te':
+            tData = tData[2]
+
     return {
         'tid': tData[0],
         'timestamp': tData[1],
@@ -56,6 +54,9 @@ def _parser_trades(tData):
 
 
 def _parser_book(tData):
+    if isinstance(tData[1], list):
+        tData = tData[1]
+
     return {'price': str(tData[0]), 'count': tData[1], 'amount': tData[2]}
 
 
@@ -65,9 +66,66 @@ def _parser_book(tData):
 
 
 class DownloadBitfinexData(DownloadDataWebSocket):
+    """ Basis object to download data from a stream websocket client API.
+
+    Attributes
+    ----------
+    host : str
+        Adress of host to connect.
+    conn_par : dict
+        Parameters of websocket connection.
+    ws : websockets.client.WebSocketClientProtocol
+        Connection with the websocket client.
+    is_connect : bool
+        True if is connected, False otherwise.
+    ts : int
+        Number of second between two snapshots of data.
+    t : int
+        Current timestamp but rounded by `ts`.
+    until : int
+        Timestamp to stop to download data.
+
+    Methods
+    -------
+    set_process_data(func, **kwargs)
+        Set a function and parameters to process/clean data before to be saved.
+    set_saver(call, **kwargs)
+        Set a callable object and parameters to save data or update a database.
+    __call__(channel, **kwargs)
+        Run asynchronously two loops to get data from bitfinex websocket and
+        save/update the database.
+
+    TODO :
+    - None time_step send tick by tick data
+    - Clean private/public methods
+    - Add optional setting parser
+
+    """
     # TODO : docstring
     # TODO : add more parser methods
+
+    _parser_data = {
+        'book': self.parser_book,
+        'book_raw': self.parser_raw_book,
+        'trades': self.parser_trades,
+        'trades_raw': self.parser_raw_trades,
+        # 'candles': None,
+    }
+
     def __init__(self, time_step=60, until=3600):
+        """ Initialize object.
+
+        Parameters
+        ----------
+        time_step : int, optional
+            Number of seconds between two snapshots of data, minimum is 1,
+            default is 60 (one minute). Each `time_step` data will be
+            processed and updated to the database.
+        until : int, optional
+            Number of seconds before stoping or timestamp of when stoping,
+            default is 3600 (one hour).
+
+        """
         # TODO : set until parser to convert date, time, etc
         if until > time.time():
             until -= int(time.time())
@@ -75,19 +133,31 @@ class DownloadBitfinexData(DownloadDataWebSocket):
         DownloadDataWebSocket.__init__(self, 'bitfinex', time_step=time_step,
                                        STOP=until)
         self.logger = logging.getLogger(__name__)
-        self._parser_data = {
-            'book': self.parser_book,
-            'trades': self.parser_trades,
-            # 'candles': None,
-        }
         self.d = {}
 
+    def parser_raw_book(self, data):
+        """ Parse raw order book, each timestep set in a list all orders.
+
+        Parameters
+        ----------
+        data : list
+            Order data.
+
+        """
+        data = _parser_book(data)
+
+        self._raw_parser(data)
+
     def parser_book(self, data):
-        """ Parse data of order book. """
-        if isinstance(data[1], list):
-            data = _parser_book(data[1])
-        else:
-            data = _parser_book(data)
+        """ Parse market depth of order book.
+
+        Parameters
+        ----------
+        data : list
+            Order data.
+
+        """
+        data = _parser_book(data)
 
         if data['count'] > 0:
             if data['price'] in self.d.keys():
@@ -101,23 +171,40 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 
         self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}
 
-    def parser_trades(self, data):
-        """ Parse data of trades. """
+    def parser_raw_trades(self, data):
+        """ Parse trade data.
+
+        Parameters
+        ----------
+        data : list
+            Trade data.
+
+        """
         if data[1] == 'tu':
 
             return
 
-        elif data[1] == 'te':
-            data = _parser_trades(data[2])
+        data = _parser_trades(data)
 
-        else:
-            data = _parser_trades(data)
+        self._raw_parser(data)
 
-        if self.t in self._data.keys():
-            self._data[self.t] += [data]
+    def parser_trades(self, data):
+        """ Parse OHLC data.
 
-        else:
-            self._data[self.t] = [data]
+        Parameters
+        ----------
+        data : list
+            Trade data.
+
+        """
+        # TODO : process ohlc
+        if data[1] == 'tu':
+
+            return
+
+        data = _parser_trades(data)
+
+        self._raw_parser(data)
 
     async def on_message(self, data):
         """ Set data to order book. """
@@ -137,8 +224,33 @@ class DownloadBitfinexData(DownloadDataWebSocket):
             self.logger.info('{}'.format(data))
 
     def __call__(self, channel, **kwargs):
-        """ Open a websocket connection. """
-        self.parser = self.get_parser(channel)  # self.parse_data[channel]
+        """ Open a websocket connection and save/update the database.
+
+        Run asynchronously two loops to get data from bitfinex websocket and
+        save/update the database.
+
+        Parameters
+        ----------
+        channel : str {'book', 'book_raw', 'trades', 'trades_raw'}
+            Channel to get data, by default data will be aggregated (OHLC for
+            'trades' and reconstructed orderbook for 'book'), add '_raw' to the
+            `channel` to get raw data (trade tick by tick or each orders).
+        **kwargs
+            Any revelevant keyword arguments will be passed to the websocket
+            connector, see API documentation [1]_ for more details.
+
+        Warnings
+        --------
+        'book_raw' and 'trades_raw' can be very memory expensive.
+
+        References
+        ----------
+        .. [1] https://docs.bitfinex.com/v2/docs/ws-public
+
+        """
+        self.parser = self.get_parser(channel)
+
+        channel = channel[:-4] if channel[:-4] == '_raw' else channel
 
         self.logger.info('Try connect WS and set {} stream.'.format(channel))
 
