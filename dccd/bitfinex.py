@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 16:57:17
+# @Last modified time: 2019-08-12 19:01:19
 
 """ Objects to download data from Bitfinex exchange.
 
@@ -21,7 +21,7 @@ import logging
 from dccd.exchange import ImportDataCryptoCurrencies
 from dccd.io_tools import IODataBase
 from dccd.websocket_tools import DownloadDataWebSocket
-from dccd.process_data import set_marketdepth, set_trades
+from dccd.process_data import set_marketdepth, set_orders, set_trades, set_ohlc
 
 __all__ = [
     'FromBitfinex', 'DownloadBitfinexData', 'get_data_bitfinex',
@@ -46,7 +46,7 @@ def _parser_trades(tData):
 
     return {
         'tid': tData[0],
-        'timestamp': tData[1],
+        'timestamp': tData[1] / 1000,
         'price': tData[3],
         'amount': abs(tData[2]),
         'type': 'buy' if tData[2] > 0. else 'sell',
@@ -249,7 +249,7 @@ class DownloadBitfinexData(DownloadDataWebSocket):
         """
         self.parser = self.get_parser(channel)
 
-        channel = channel[:-4] if channel[:-4] == '_raw' else channel
+        channel = channel[:-4] if channel[-4:] == '_raw' else channel
 
         self.logger.info('Try connect WS and set {} stream.'.format(channel))
 
@@ -271,7 +271,7 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 
 def get_data_bitfinex(channel, process_func, time_step=60, until=None,
                       path=None, save_method='dataframe', io_params={},
-                      **kwargs):
+                      process_params={}, **kwargs):
     """ Download orderbook from Bitfinex exchange. """
     # Set database connector object
     if path is None:
@@ -282,10 +282,24 @@ def get_data_bitfinex(channel, process_func, time_step=60, until=None,
 
     # Set websocket downloader object
     downloader = DownloadBitfinexData(time_step=time_step, until=until)
-    downloader.set_process_data(process_func)
+    downloader.set_process_data(process_func, **process_params)
     downloader.set_saver(saver, **io_params)
 
     downloader(channel, **kwargs)
+
+    # DEBUG
+    print('TO DEBUG, DATA LEFT:')
+    print(downloader._data)
+
+
+def get_orders_bitfinex(symbol, precision='P0', frequency='F0', lenght='25',
+                        time_step=60, until=None, path=None,
+                        save_method='dataframe', io_params={}):
+    """ Download orderbook from Bitfinex exchange. """
+    get_data_bitfinex('book_raw', set_orders, time_step=time_step, until=until,
+                      path=path, save_method=save_method, io_params=io_params,
+                      symbol=symbol, precision=precision, frequency=frequency,
+                      lenght=lenght)
 
 
 def get_orderbook_bitfinex(symbol, precision='P0', frequency='F0', lenght='25',
@@ -301,9 +315,17 @@ def get_orderbook_bitfinex(symbol, precision='P0', frequency='F0', lenght='25',
 def get_trades_bitfinex(symbol, time_step=60, until=None, path=None,
                         save_method='dataframe', io_params={}):
     """ Download trades tick by tick from Bitfinex exchange. """
-    get_data_bitfinex('trades', set_trades, time_step=time_step, until=until,
+    get_data_bitfinex('trades_raw', set_trades, time_step=time_step,
+                      until=until, path=path, save_method=save_method,
+                      io_params=io_params, symbol=symbol)
+
+
+def get_ohlc_bitfinex(symbol, time_step=60, until=None, path=None,
+                      save_method='dataframe', io_params={}):
+    """ Download trades tick by tick from Bitfinex exchange. """
+    get_data_bitfinex('trades', set_ohlc, time_step=time_step, until=until,
                       path=path, save_method=save_method, io_params=io_params,
-                      symbol=symbol)
+                      process_params={'ts': time_step}, symbol=symbol)
 
 
 # =========================================================================== #
@@ -325,9 +347,8 @@ if __name__ == '__main__':
 
     pair = 'tBTCUSD'
     time_step = 1
-    until = 10
-    path_ord = '/home/arthur/database/bitfinex/orders/tBTCUSD/'
-    path_tra = '/home/arthur/database/bitfinex/trades/tBTCUSD/'
+    until = 900
+    path = '/home/arthur/database/bitfinex/'
     save_method = 'dataframe'
     io_params = {'name': '2019'}
 
@@ -339,9 +360,17 @@ if __name__ == '__main__':
     #                  save_method=save_method, io_params=io_params)
 
     get_orderbook_bitfinex(pair, time_step=time_step, until=until,
-                           path=path_ord, save_method=save_method,
-                           io_params=io_params)
+                           path=path + '/orderbook/' + pair + '/',
+                           save_method=save_method, io_params=io_params)
 
     get_trades_bitfinex(pair, time_step=time_step, until=until,
-                        path=path_tra, save_method=save_method,
-                        io_params=io_params)
+                        path=path + '/trades/' + pair + '/',
+                        save_method=save_method, io_params=io_params)
+
+    get_orders_bitfinex(pair, time_step=time_step, until=until,
+                        path=path + '/orders/' + pair + '/',
+                        save_method=save_method, io_params=io_params)
+
+    get_ohlc_bitfinex(pair, time_step=time_step, until=until,
+                      path=path + '/ohlc/' + pair + '/',
+                      save_method=save_method, io_params=io_params)
