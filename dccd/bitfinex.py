@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 19:01:19
+# @Last modified time: 2019-08-13 12:15:20
 
 """ Objects to download data from Bitfinex exchange.
 
@@ -119,7 +119,9 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 
         """
         # TODO : set until parser to convert date, time, etc
-        if until > time.time():
+        if until is None:
+            until = 0
+        elif until > time.time():
             until -= int(time.time())
 
         DownloadDataWebSocket.__init__(self, 'bitfinex', time_step=time_step,
@@ -269,13 +271,65 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 # TODO : Finish docstring
 
 
-def get_data_bitfinex(channel, process_func, time_step=60, until=None,
-                      path=None, save_method='dataframe', io_params={},
-                      process_params={}, **kwargs):
-    """ Download orderbook from Bitfinex exchange. """
+def get_data_bitfinex(channel, process_func, process_params={},
+                      save_method='dataframe', io_params={}, time_step=60,
+                      until=None, path=None, **kwargs):
+    """ Download data from Bitfinex exchange and update the database.
+
+    Parameters
+    ----------
+    channel : str, {'book', 'book_raw', 'trades', 'trades_raw'}
+        Websocket channel to get data, by default data will be aggregated (OHLC
+        for 'trades' and reconstructed orderbook for 'book'), add '_raw' to the
+        `channel` to get raw data (trade tick by tick or each orders).
+    process_func : function
+        Function to process and clean data before to be saved. Must take `data`
+        in arguments and can take any optional keywords arguments, cf function
+        exemples in `dccd/process_data.py`.
+    process_params : dict, optional
+        Dictionary of the keyword arguments available to `process_func`, cf
+        documentation into `dccd.process_data`.
+    save_method : str, {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',
+                        'Oracle', 'MSSQL', 'MySQL'}, optional
+        It will create an IODataBase object to save/update the database in the
+        specified format `save_method`, default is 'DataFrame' it save as
+        binary pd.DataFrame object. More informations are available into
+        `io_tools.py`.
+    io_params : dict, optional
+        Dictionary of the keyword arguments available to the callable
+        io_tools.IODataBase method. Note: With SQL format some parameters are
+        compulsory, seed details into `io_tools`.
+    time_step : int, optional
+        Number of second between two snapshots of data, default 60 (1 minute).
+    until : int, optional
+        Number of seconds before stoping to download and update, default is
+        None. If `until` equal 0 or None it means it never stop.
+    path : str, optional
+        Path to save/update the database, default is None. If `path` is None,
+        database is saved at the relative path './database/bitfinex/`channel`'.
+    **kwargs
+        Any revelevant keyword arguments will be passed to the websocket
+        connector, see Bitfinex API documentation [1]_ for more details.
+
+    Warnings
+    --------
+    'book_raw' and 'trades_raw' can be very memory expensive.
+
+    See Also
+    --------
+    process_data : function to process/clean data (set_marketdepth, set_ohlc,
+        set_orders, set_marketdepth).
+    io_tools.IODataBase : object to save/update the database with respect to
+        specified format.
+
+    References
+    ----------
+    .. [1] https://docs.bitfinex.com/v2/docs/ws-public
+
+    """
     # Set database connector object
     if path is None:
-        path = 'database/orders/{}'.format(pair)
+        path = './database/bitfinex/{}'.format(channel)
 
     # Set saver object
     saver = IODataBase(path, method=save_method)
@@ -346,7 +400,7 @@ if __name__ == '__main__':
     logging.config.dictConfig(config)
 
     pair = 'tBTCUSD'
-    time_step = 1
+    time_step = 60
     until = 900
     path = '/home/arthur/database/bitfinex/'
     save_method = 'dataframe'
