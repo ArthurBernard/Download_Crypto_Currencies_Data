@@ -4,17 +4,37 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:55:21
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 12:40:43
+# @Last modified time: 2019-08-13 12:51:36
 
 """ Configuration file of documentation. """
 
 # Built-in packages
 import os
 import sys
+from unittest.mock import MagicMock
 
 # Third party packages
+from sphinx.ext.autosummary import _import_by_name
+from numpydoc.docscrape import NumpyDocString
+from numpydoc.docscrape_sphinx import SphinxDocString
+import sphinx
 
-# Local packages
+# Check Sphinx version
+if sphinx.__version__ < "1.6":
+    raise RuntimeError("Sphinx 1.6 or newer required")
+
+needs_sphinx = '1.6'
+
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+
+# --------------------------------------------------------------------------- #
+#                           General configuration                             #
+# --------------------------------------------------------------------------- #
 
 # sys.path.insert(0, os.path.abspath('../..'))
 sys.path.append(os.path.abspath('../..'))
