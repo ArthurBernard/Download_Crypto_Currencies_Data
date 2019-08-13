@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:55:21
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 15:11:53
+# @Last modified time: 2019-08-13 17:48:45
 
 """ Configuration file of documentation. """
 
@@ -75,14 +75,29 @@ master_doc = 'index'
 pygments_style = 'sphinx'  # Style of code source
 
 add_function_parentheses = False  # Parentheses are appended to function
-add_module_names = False  # Module names are prepended to all object name
+add_module_names = True  # Module names are prepended to all object name
 
-html_theme = 'scipy-sphinx-theme'  # 'sphinx_rtd_theme'  # Theme of docs
+themedir = os.path.join(os.pardir, 'scipy-sphinx-theme', '_theme')
+html_theme = 'scipy'
+html_theme_path = [themedir]
+
+# html_theme = 'scipy-sphinx-theme'  # 'sphinx_rtd_theme'  # Theme of docs
+# html_theme_path = ["./_theme/scipy/"]
 html_theme_option = {
     'edit_links': True,
-    'sidebar': 'left',
+    'sidebar': 'right',
     'scipy_org_logo': False,
-    'navigation_links': True,
+    'navigation_links': False,
+    'rootlinks': [
+        (
+            'https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
+            'Download_Crypto_Currencies_Data'
+        ),
+        (
+            'https://download-crypto-currencies-data.readthedocs.io',
+            'Docs'
+        ),
+    ]
     # 'display_version': True,
     # 'prev_next_buttons_location': 'both',
     # 'style_external_links': True,
@@ -97,6 +112,7 @@ html_theme_option = {
     # 'github_url': 'https://github.com/ArthurBernard/\
     # Download_Crypto_Currencies_Data',
 }
+html_sidebars = {'index': ['searchbox.html']}
 html_static_path = ['_static']
 html_context = {
     "display_github": True,  # Integrate GitHub
