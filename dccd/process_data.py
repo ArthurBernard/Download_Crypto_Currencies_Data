@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-06 15:25:49
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 20:14:03
+# @Last modified time: 2019-08-13 12:13:33
 
 # Built-in packages
 import time
@@ -15,7 +15,7 @@ import pandas as pd
 
 # Local packages
 
-__all__ = ['set_marketdepth', 'set_trades']
+__all__ = ['set_marketdepth', 'set_ohlc', 'set_orders', 'set_trades']
 
 
 def set_orders(orders, t=None):

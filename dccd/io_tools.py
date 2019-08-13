@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 12:07:01
+# @Last modified time: 2019-08-13 13:16:37
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -14,11 +14,11 @@ import os.path
 import time
 import sqlite3
 from pickle import Pickler, Unpickler
+
+# Third-party packages
+import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
-
-# External packages
-import pandas as pd
 
 # Local packages
 
@@ -27,7 +27,7 @@ __all__ = ['IODataBase', 'get_df', 'save_df']
 
 
 class IODataBase:
-    """ Object to save a pd.DataFrame into different kind of database.
+    """ Object to save a pd.DataFrame into different kind/format of database.
 
     Attributes
     ----------
@@ -59,12 +59,11 @@ class IODataBase:
     __call__(new_data, **kwargs)
         Append and save `new_data` in database as `method` format.
 
-    TODO:
-    - Add InfluxDB method
-    - Add output methods
-    - Add unitest/doctest
-
     """
+    # TODO:
+    # - Add InfluxDB method
+    # - Add output methods
+    # - Add unitest/doctest
 
     def __init__(self, path='./', method='csv'):
         """ Initialize saver object.
@@ -73,7 +72,7 @@ class IODataBase:
         ----------
         path : str, optional
             Path of the database, default is `'./'` (current directory).
-        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',
+        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
                       'Oracle', 'MSSQL', 'MySQL'}, optional
             Format of database, default is CSV.
 

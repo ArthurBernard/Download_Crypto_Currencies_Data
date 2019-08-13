@@ -5,7 +5,6 @@ High level API
 --------------
 
 .. autofunction:: dccd.get_data_bitfinex
-    :members:
 
 Low level API
 -------------
