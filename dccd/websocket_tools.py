@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 13:18:14
+# @Last modified time: 2019-08-12 18:15:24
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -54,15 +54,13 @@ class BasisWebSocket:
     ws = False
     is_connect = False
 
-    def __init__(self, host, log_level='INFO', conn={}, subs={}):
+    def __init__(self, host, conn={}, subs={}):
         """ Initialize object.
 
         Parameters
         ----------
         host : str
             Adress of host to connect.
-        log_level : str, optional
-            Level of logging, default is 'INFO'.
         conn : dict
             Parameters to connection setting.
         subs : dict
@@ -214,8 +212,7 @@ class DownloadDataWebSocket(BasisWebSocket):
     }
     _parser_data = {}
 
-    def __init__(self, host, log_level='INFO', time_step=60, STOP=3600,
-                 **kwargs):
+    def __init__(self, host, time_step=60, STOP=3600, **kwargs):
         """ Initialize object.
 
         Parameters
@@ -224,8 +221,6 @@ class DownloadDataWebSocket(BasisWebSocket):
             Name of an allowed exchange or url of the host exchange. If url of
             a host exchange is provided, keyword arguments for connection and
             subscribe parameters must be also specified.
-        log_level : str {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
-            Level of logging, default is `'INFO'`.
         time_step : int, optional
             Number of seconds between two snapshots of data, minimum is 1,
             default is 60 (one minute). Each `time_step` data will be
@@ -241,7 +236,7 @@ class DownloadDataWebSocket(BasisWebSocket):
             BasisWebSocket.__init__(self, **self._parser_exchange[host])
 
         else:
-            BasisWebSocket.__init__(self, host, log_level=log_level, **kwargs)
+            BasisWebSocket.__init__(self, host, **kwargs)
 
         # Set variables
         self.ts = max(time_step, 1)
@@ -312,7 +307,7 @@ class DownloadDataWebSocket(BasisWebSocket):
         """ Parse any data received from the websocket. """
         self._raw_parser(data)
 
-    def _raw_parser(data):
+    def _raw_parser(self, data):
         # Set all data to a list
         if self.t in self._data.keys():
             self._data[self.t] += [data]
