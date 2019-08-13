@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 13:16:37
+# @Last modified time: 2019-08-13 15:02:12
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -33,9 +33,9 @@ class IODataBase:
     ----------
     path : str
         Path of the database.
-    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',
+    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
                   'Oracle', 'MSSQL', 'MySQL'}
-        Kind of database.
+        Kind/format of the database.
     parser : dict
         Values are function to corresponding to `method`.
 
@@ -43,17 +43,17 @@ class IODataBase:
     -------
     save_as_dataframe(new_data, name=None, ext='.dat')
         Append and save `new_data` in database as pd.DataFrame binary object.
-    save_as_sql(new_data, table='main_table', name=None, ext='.db',
-                index=True, index_label=None, driver=None,
+    save_as_sql(new_data, table='main_table', name=None, ext='.db',\
+                index=True, index_label=None, driver=None,\
                 username=None, password=None, host=None, port=None)
         Append and save `new_data` in SQL database `method={'postgresql',
         'oracle', 'mssql', 'mysql'}`.
-    save_as_sqlite(new_data, table='main_table', name=None, ext='.db',
+    save_as_sqlite(new_data, table='main_table', name=None, ext='.db',\
                    index=True, index_label=None)
         Append and save `new_data` in SQLite database.
     save_as_csv(new_data, name=None, ext='.csv', index=True, index_label=None)
         Append and save `new_data` in database as CSV format.
-    save_as_excel(new_data, name=None, sheet_name='Sheet1', ext='.xlsx',
+    save_as_excel(new_data, name=None, sheet_name='Sheet1', ext='.xlsx',\
                   index=True, index_label=None)
         Append and save `new_data` in database as Excel format.
     __call__(new_data, **kwargs)
