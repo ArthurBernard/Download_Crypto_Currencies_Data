@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:55:21
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 12:51:36
+# @Last modified time: 2019-08-13 13:18:29
 
 """ Configuration file of documentation. """
 
@@ -14,9 +14,9 @@ import sys
 from unittest.mock import MagicMock
 
 # Third party packages
-from sphinx.ext.autosummary import _import_by_name
-from numpydoc.docscrape import NumpyDocString
-from numpydoc.docscrape_sphinx import SphinxDocString
+# from sphinx.ext.autosummary import _import_by_name
+# from numpydoc.docscrape import NumpyDocString
+# from numpydoc.docscrape_sphinx import SphinxDocString
 import sphinx
 
 # Check Sphinx version
@@ -89,7 +89,8 @@ html_theme_option = {
     'navigation_depth': 4,
     'includehidden': False,
     'titles_only': False,
-    'github_url': 'https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
+    'github_url': 'https://github.com/ArthurBernard/\
+    Download_Crypto_Currencies_Data',
 }
 html_static_path = ['_static']
 html_context = {
