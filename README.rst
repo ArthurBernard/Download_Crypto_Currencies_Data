@@ -15,6 +15,9 @@ Download_Crypto_Currencies_Data
 .. image:: https://readthedocs.org/projects/download-crypto-currencies-data/badge/?version=latest
     :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
+.. image:: https://img.shields.io/lgtm/grade/python/g/ArthurBernard/Download_Crypto_Currencies_Data.svg?logo=lgtm&logoWidth=18
+    :target: https://lgtm.com/projects/g/ArthurBernard/Download_Crypto_Currencies_Data/context:python)
+    :alt: Language grade: Python
 
 This is a beta version of a python package [*]_ to *download* and *upload* data about *crypto-currencies* (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, GDAX, Kraken and Poloniex for the moment).
 
