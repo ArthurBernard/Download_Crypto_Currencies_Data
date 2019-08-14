@@ -1,6 +1,15 @@
 Download data from Bitfinex
 ===========================
 
+.. currentmodule:: dccd.bitfinex
+
+.. automodule:: dccd.bitfinex
+
+.. autosummary::
+
+   dccd.get_data_bitfinex
+   dccd.DownloadBitfinexData
+
 High level API
 --------------
 
@@ -10,6 +19,6 @@ Low level API
 -------------
 
 .. autoclass:: dccd.DownloadBitfinexData
-    :members: set_process_data, set_saver
-    :special-members: __init__, __call__
-    :show-inheritance:
+   :members: set_process_data, set_saver
+   :special-members: __call__
+   :show-inheritance:

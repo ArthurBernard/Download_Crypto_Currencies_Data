@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:55:21
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 17:48:45
+# @Last modified time: 2019-08-14 18:38:23
 
 """ Configuration file of documentation. """
 
@@ -12,11 +12,13 @@
 import os
 import sys
 from unittest.mock import MagicMock
+# import glob
 
 # Third party packages
 # from sphinx.ext.autosummary import _import_by_name
 # from numpydoc.docscrape import NumpyDocString
 # from numpydoc.docscrape_sphinx import SphinxDocString
+# import numpydoc.docscrape as np_docscrape
 import sphinx
 
 # Check Sphinx version
@@ -36,17 +38,46 @@ class Mock(MagicMock):
 #                           General configuration                             #
 # --------------------------------------------------------------------------- #
 
+# np_docscrape.ClassDoc.extra_public_methods = [  # should match class.rst
+#    '__call__', '__mul__', '__getitem__', '__len__',
+# ]
+
+# autosummary_generate = glob.glob("reference/*.rst")
+
 # sys.path.insert(0, os.path.abspath('../..'))
 sys.path.append(os.path.abspath('../..'))
+sys.path.append(os.path.abspath('../sphinxext'))
 
 extensions = [
-    'sphinx.ext.autodoc',
-    # 'sphinx.ext.napoleon',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.coverage',
-    'sphinx.ext.autosummary',
+    # 'sphinx.ext.autodoc',
+    # 'numpydoc',
+    # 'sphinx.ext.intersphinx',
+    # 'sphinx.ext.coverage',
+    # 'sphinx.ext.doctest',
+    # 'sphinx.ext.autosummary',
+    # 'sphinx.ext.graphviz',
+    # 'sphinx.ext.ifconfig',
+    # 'matplotlib.sphinxext.plot_directive',
+    # 'IPython.sphinxext.ipython_console_highlighting',
+    # 'IPython.sphinxext.ipython_directive',
     #
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+    'sphinx.ext.coverage',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.intersphinx',
     'numpydoc',
+    # 'scipyoptdoc',
+    # 'doi_role',
+    'matplotlib.sphinxext.plot_directive',
+    #
+    # 'sphinx.ext.autodoc',
+    # 'sphinx.ext.napoleon',
+    # 'sphinx.ext.intersphinx',
+    # 'sphinx.ext.coverage',
+    # 'sphinx.ext.autosummary',
+    #
+    # 'numpydoc',
 ]
 
 # Napoleon settings
@@ -81,13 +112,19 @@ themedir = os.path.join(os.pardir, 'scipy-sphinx-theme', '_theme')
 html_theme = 'scipy'
 html_theme_path = [themedir]
 
+# USELESS ?
+# numpydoc_show_class_members = True
+# class_members_toctree = False
+# nitpicky = True
+# numpydoc_attributes_as_param_list = False
+
 # html_theme = 'scipy-sphinx-theme'  # 'sphinx_rtd_theme'  # Theme of docs
 # html_theme_path = ["./_theme/scipy/"]
 html_theme_option = {
     'edit_links': True,
     'sidebar': 'right',
     'scipy_org_logo': False,
-    'navigation_links': False,
+    'navigation_links': True,
     'rootlinks': [
         (
             'https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
@@ -122,4 +159,4 @@ html_context = {
     "conf_py_path": "/source/",  # Path in the checkout to the docs root
 }
 
-autosummary_generate = True
+autosummary_generate = False
