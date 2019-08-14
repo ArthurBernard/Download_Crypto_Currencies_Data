@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# coding: utf-8
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-01-26 19:00:55
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-08-14 19:06:15
+
 import time
 
 import pandas as pd
