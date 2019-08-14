@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 15:02:12
+# @Last modified time: 2019-08-14 09:43:38
 
 """ Tools and object to load, append and save differnet kind of database. """
 
@@ -33,31 +33,20 @@ class IODataBase:
     ----------
     path : str
         Path of the database.
-    method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
-                  'Oracle', 'MSSQL', 'MySQL'}
+    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL', 'Oracle',
+              'MSSQL', 'MySQL'}
         Kind/format of the database.
     parser : dict
         Values are function to corresponding to `method`.
 
     Methods
     -------
-    save_as_dataframe(new_data, name=None, ext='.dat')
-        Append and save `new_data` in database as pd.DataFrame binary object.
-    save_as_sql(new_data, table='main_table', name=None, ext='.db',\
-                index=True, index_label=None, driver=None,\
-                username=None, password=None, host=None, port=None)
-        Append and save `new_data` in SQL database `method={'postgresql',
-        'oracle', 'mssql', 'mysql'}`.
-    save_as_sqlite(new_data, table='main_table', name=None, ext='.db',\
-                   index=True, index_label=None)
-        Append and save `new_data` in SQLite database.
-    save_as_csv(new_data, name=None, ext='.csv', index=True, index_label=None)
-        Append and save `new_data` in database as CSV format.
-    save_as_excel(new_data, name=None, sheet_name='Sheet1', ext='.xlsx',\
-                  index=True, index_label=None)
-        Append and save `new_data` in database as Excel format.
-    __call__(new_data, **kwargs)
-        Append and save `new_data` in database as `method` format.
+    save_as_dataframe
+    save_as_sql
+    save_as_sqlite
+    save_as_csv
+    save_as_excel
+    __call__
 
     """
     # TODO:
@@ -117,8 +106,9 @@ class IODataBase:
     def save_as_dataframe(self, new_data, name=None, ext='.dat'):
         """ Append and save `new_data` as pd.DataFrame binary object.
 
-        With pickle save as binary pd.DataFrame object, if `file_name` exists
-        append to it `new_data` and save it, else save `new_data`.
+        With pickle save as binary pd.DataFrame object, if `name` database
+        already exists, load it, append `new_data` and save it, else create a
+        new database.
 
         Parameters
         ----------
@@ -127,7 +117,7 @@ class IODataBase:
         name : str, optional
             Name of the database, default is the current date.
         ext : str, optional
-            Extension of the database, default is `'.dat'`.
+            Extension of the database, default is '.dat'.
 
         """
         if name is None:
@@ -150,7 +140,7 @@ class IODataBase:
         name : str
             Name of the database.
         ext : str, optional
-            Extension of the database, default is `'.dat'`.
+            Extension of the database, default is '.dat'.
 
         """
         return get_df(self.path, name, ext=ext)
@@ -159,25 +149,25 @@ class IODataBase:
                        ext='.db', index=True, index_label=None):
         """ Append and save `new_data` in SQLite database.
 
-        With sqlite, if `database` exists append to it `new_data`, else create
-        a new data base.
+        With sqlite, if `name` database already exists append `new_data`, else
+        create a new data base.
 
         Parameters
         ----------
         new_data : pd.DataFrame
             Data to append to the database.
         table : str, optional
-            Name of the table, default is `'main_table'`.
+            Name of the table, default is 'main_table'.
         name : str, optional
             Name of the database, default is the current year.
         ext : str, optional
-            Extension of the database, default is `'.db'`.
+            Extension of the database, default is '.db'.
         index : bool, optional
             Write pd.DataFrame index as a column. Uses index_label as the
-            column name in the table. Default is `True`.
+            column name in the table. Default is True.
         index_label : string or sequence, optional
-            Column label for index column(s). If `None` is given (default) and
-            index is `True`, then the index names are used. A sequence should
+            Column label for index column(s). If None is given (default) and
+            index is True, then the index names are used. A sequence should
             be given if the pd.DataFrame uses pd.MultiIndex.
 
         """
@@ -200,16 +190,16 @@ class IODataBase:
         name : str, optional
             Name of the database, default is the current year.
         table : str, optional
-            Name of the table, default is `'main_table'`.
+            Name of the table, default is 'main_table'.
         ext : str, optional
-            Extension of the database, default is `'.db'`.
+            Extension of the database, default is '.db'.
         index : bool, optional
             Write pd.DataFrame index as a column. Uses index_label as the
-            column name in the table. Default is `True`.
+            column name in the table. Default is True.
         index_label : string or sequence, optional
-            Column label for index column(s). If `None` is given (default) and
-            index is `True`, then the index names are used. A sequence should
-            be given if the pd.DataFrame uses pd.MultiIndex.
+            Column label for index column(s). If None is given (default) and
+            index is True, then the index names are used. A sequence should be
+            given if the pd.DataFrame uses pd.MultiIndex.
 
         """
         # TODO : to finish !
@@ -230,7 +220,7 @@ class IODataBase:
         """ Append and save `new_data` in SQL database.
 
         SQL database as `method={'PostgreSQL', 'Oracle', 'MSSQL', 'MySQL'}`.
-        If `database` exists append to it `new_data`, else create a new
+        If `name` already exists append `new_data`, else create a new
         database. See SQLAlchemy documentation for more details [1]_.
 
         Parameters
@@ -238,20 +228,20 @@ class IODataBase:
         new_data : pd.DataFrame
             Data to append to the database.
         table : str, optional
-            Name of the table, default is `'main_table'`.
+            Name of the table, default is 'main_table'.
         name : str, optional
             Name of the database, default is the current year.
         ext : str, optional
-            Extension of the database, default is `'.db'`.
+            Extension of the database, default is '.db'.
         index : bool, optional
             Write pd.DataFrame index as a column. Uses index_label as the
-            column name in the table. Default is `True`.
+            column name in the table. Default is True.
         index_label : string or sequence, optional
-            Column label for index column(s). If `None` is given (default) and
-            index is `True`, then the index names are used. A sequence should
-            be given if the pd.DataFrame uses pd.MultiIndex.
-        driver : str {'psycopg2', 'pg8000', 'mysqlclient', pymysql',
-                      'cx_oracle', 'pyodbc', 'pymssql'}, optional
+            Column label for index column(s). If None is given (default) and
+            index is True, then the index names are used. A sequence should be
+            given if the pd.DataFrame uses pd.MultiIndex.
+        driver : {'psycopg2', 'pg8000', 'mysqlclient', pymysql', 'cx_oracle',
+                  'pyodbc', 'pymssql'}
             The name of the DBAPI to be used to connect to the database using
             all lowercase letters. If not specified, a default DBAPI will be
             imported if available - this default is typically the most widely
@@ -259,9 +249,9 @@ class IODataBase:
         username, password : str
             Username and password to connect to the SQL database.
         host : str, optional
-            Host to connect, default is `'localhost'`.
+            Host to connect, default is 'localhost'.
         port : str, optional
-            The port number, default is `None`.
+            The port number, default is None.
         kwargs : dict, optional
             A dictionary of options to be passed to the dialect and/or the
             DBAPI upon connect.
@@ -295,8 +285,8 @@ class IODataBase:
                     index_label=None):
         """ Append and save `new_data` in database as CSV format.
 
-        With pickle save as binary pd.DataFrame object, if `file_name` exists
-        append to it `new_data` and save it, else save `new_data`.
+        With pickle save as binary pd.DataFrame object, if `name` database
+        already exists append `new_data`, otherwise create a new file.
 
         Parameters
         ----------
@@ -305,12 +295,12 @@ class IODataBase:
         name : str, optional
             Name of the database, default is the current year.
         ext : str, optional
-            Extension of the database, default is `'.csv`'.
+            Extension of the database, default is '.csv'.
         index : bool, optional
-            Write row names (index), default is `True`.
+            Write row names (index), default is True.
         index_label : str or sequence, optional
             Column label for index column(s) if desired. If not specified
-            (default is `None`), and index are True, then the index names are
+            (default is None), and index are True, then the index names are
             used. A sequence should be given if the DataFrame uses MultiIndex.
             If False do not print fields for index names. Use
             `index_label=False` for easier importing in R.
@@ -333,8 +323,8 @@ class IODataBase:
                       ext='.xlsx', index=True, index_label=None):
         """ Append and save `new_data` in database as Excel format.
 
-        With pickle save as binary pd.DataFrame object, if `file_name` exists
-        append to it `new_data` and save it, else save `new_data`.
+        With pickle save as binary pd.DataFrame object, if `name` database
+        already exists append `new_data`, else create a new file.
 
         Parameters
         ----------
@@ -343,18 +333,18 @@ class IODataBase:
         name : str, optional
             Name of the database, default is the current date.
         sheet_name : str, optional
-            Name of sheet which will contain `new_data`, default is `'Sheet1'`.
+            Name of sheet which will contain `new_data`, default is 'Sheet1'.
         ext : str, optional
-            Extension of the database, default is `'.xlsx'`.
+            Extension of the database, default is '.xlsx'.
         index : bool, optional
-            Write row names (index), default is `True`.
+            Write row names (index), default is True.
         index_label : str or sequence, optional
             Column label for index column(s) if desired. If not specified
-            (default is `None`), and index are `True`, then the index names are
+            (default is None), and index are True, then the index names are
             used. A sequence should be given if the DataFrame uses MultiIndex.
 
-        Warning
-        -------
+        Warnings
+        --------
         Slow method, not recommanded for large database.
 
         """

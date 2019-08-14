@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 12:15:20
+# @Last modified time: 2019-08-13 18:16:51
 
 """ Objects to download data from Bitfinex exchange.
 
@@ -87,20 +87,15 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 
     Methods
     -------
-    set_process_data(func, **kwargs)
-        Set a function and parameters to process/clean data before to be saved.
-    set_saver(call, **kwargs)
-        Set a callable object and parameters to save data or update a database.
-    __call__(channel, **kwargs)
-        Run asynchronously two loops to get data from bitfinex websocket and
-        save/update the database.
-
-    TODO :
-    - None time_step send tick by tick data
-    - Clean private/public methods
-    - Add optional setting parser
+    set_process_data
+    set_saver
+    __call__
 
     """
+    # TODO :
+    # - None time_step send tick by tick data
+    # - Clean private/public methods
+    # - Add optional setting parser
     # TODO : docstring
     # TODO : add more parser methods
 
@@ -289,8 +284,8 @@ def get_data_bitfinex(channel, process_func, process_params={},
     process_params : dict, optional
         Dictionary of the keyword arguments available to `process_func`, cf
         documentation into `dccd.process_data`.
-    save_method : str, {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',
-                        'Oracle', 'MSSQL', 'MySQL'}, optional
+    save_method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
+                   'Oracle', 'MSSQL', 'MySQL'},
         It will create an IODataBase object to save/update the database in the
         specified format `save_method`, default is 'DataFrame' it save as
         binary pd.DataFrame object. More informations are available into
