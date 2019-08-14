@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 # coding: utf-8
-
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-03-26 10:42:57
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-08-14 09:34:18
 
 """ Poloniex exchange class to download data.
 
 """
 
 # Import built-in packages
-import os
-import pathlib
-import time
 
-# Import extern packages
+# Import third-party packages
 import requests
 import json
 
 # Import local packages
-from dccd.time_tools import *
 from dccd.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromPoloniex']
@@ -54,16 +54,20 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     .. [1] https://docs.poloniex.com/#introduction
 
     """
+
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         if fiat in ['EUR', 'USD']:
             print("Poloniex don't allow fiat currencies.",
                   "The equivalent of US dollar is Tether USD as USDT.")
             self.fiat = fiat = 'USDT'
+
         if crypto == 'XBT':
             crypto = 'BTC'
+
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Poloniex', fiat, form
         )
+
         self.pair = self.fiat + '_' + crypto
         self.full_path = self.path + '/Poloniex/Data/Clean_Data/'
         self.full_path += str(self.per) + '/'
@@ -83,6 +87,7 @@ class FromPoloniex(ImportDataCryptoCurrencies):
 
         """
         self.start, self.end = self._set_time(start, end)
+
         param = {
             'command': 'returnChartData',
             'currencyPair': self.pair,
@@ -90,7 +95,9 @@ class FromPoloniex(ImportDataCryptoCurrencies):
             'end': self.end,
             'period': self.span
         }
+
         r = requests.get('https://poloniex.com/public', param)
-        return json.loads(r.text)  # self._sort_data(json.loads(r.text))
+
+        return json.loads(r.text)
 
     ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
