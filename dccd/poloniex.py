@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-26 10:42:57
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 09:34:18
+# @Last modified time: 2019-08-14 16:46:20
 
 """ Poloniex exchange class to download data.
 
@@ -32,9 +32,9 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     crypto : str
         The abreviation of the crypto-currency.
     span : {int, 'weekly', 'daily', 'hourly'}
-        If str, periodicity of observation.
-        If int, number of the seconds between each observation. Minimal
-        span is 300 seconds.
+        - If str, periodicity of observation.
+        - If int, number of the seconds between each observation, minimal span\
+            is 300 seconds.
     fiat : str
         A fiat currency or a crypto-currency. Poloniex don't allow fiat
         currencies, but USD theter.
@@ -52,6 +52,25 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     References
     ----------
     .. [1] https://docs.poloniex.com/#introduction
+
+    Attributes
+    ----------
+    pair : str
+        Pair symbol, `crypto + fiat`.
+    start, end : int
+        Timestamp to starting and ending download data.
+    span : int
+        Number of seconds between observations.
+    full_path : str
+        Path to save data.
+    form : str
+        Format to save data.
+
+    Methods
+    -------
+    import_data
+    save
+    get_data
 
     """
 
@@ -73,7 +92,7 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         self.full_path += str(self.per) + '/'
         self.full_path += str(self.crypto) + str(self.fiat)
 
-    def _import_data(self, start='last', end='now'):
+    def import_data(self, start='last', end='now'):
         """ Download data from Poloniex for specific time interval.
 
         Parameters
@@ -84,6 +103,11 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         end : int or str
             Timestamp of the last observation of you want as int or date
             format 'yyyy-mm-dd hh:mm:ss' as string.
+
+        Returns
+        -------
+        data : pd.DataFrame
+            Data sorted and cleaned in a data frame.
 
         """
         self.start, self.end = self._set_time(start, end)
@@ -97,7 +121,6 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         }
 
         r = requests.get('https://poloniex.com/public', param)
+        data = json.loads(r.text)
 
-        return json.loads(r.text)
-
-    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
+        return self._sort_data(data)

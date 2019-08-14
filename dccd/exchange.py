@@ -22,9 +22,7 @@ __all__ = ['ImportDataCryptoCurrencies']
 
 
 class ImportDataCryptoCurrencies:
-    """ Base class to import data about crypto-currencies from some
-    exchanges platform. Don't use directly this class, use the respective
-    class for each exchange.
+    """ Base class to import data about crypto-currencies from some exchanges.
 
     Parameters
     ----------
@@ -33,9 +31,9 @@ class ImportDataCryptoCurrencies:
     crypto : str
         The abreviation of the crypto-currencie.
     span : {int, 'weekly', 'daily', 'hourly'}
-        If str, periodicity of observation.
-        If int, number of the seconds between each observation. Minimal
-        span is 60 seconds.
+        - If str, periodicity of observation.
+        - If int, number of the seconds between each observation, minimal span\
+            is 60 seconds.
     platform : str
         The platform of your choice: 'Kraken', 'Poloniex'.
     fiat : str
@@ -43,11 +41,35 @@ class ImportDataCryptoCurrencies:
     form : {'xlsx', 'csv'}
         Your favorit format. Only 'xlsx' and 'csv' at the moment.
 
+    Notes
+    -----
+    Don't use directly this class, use the respective class for each exchange.
+
     See Also
     --------
     FromBinance, FromKraken, FromGDax, FromPoloniex
 
+    Attributes
+    ----------
+    pair : str
+        Pair symbol, `crypto + fiat`.
+    start, end : int
+        Timestamp to starting and ending download data.
+    span : int
+        Number of seconds between observations.
+    full_path : str
+        Path to save data.
+    form : str
+        Format to save data.
+
+    Methods
+    -------
+    import_data
+    save
+    get_data
+
     """
+
     def __init__(self, path, crypto, span, platform, fiat='EUR', form='xlsx'):
         self.path = path
         self.crypto = crypto
@@ -64,18 +86,24 @@ class ImportDataCryptoCurrencies:
         TODO : to finish
         """
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
+
         if not os.listdir(self.full_path):
+
             return 1325376000
+
         else:
             last_file = sorted(os.listdir(self.full_path), reverse=True)[0]
             if last_file.split('.')[-1] == 'xlsx':
                 self.last_df = pd.read_excel(
                     self.full_path + '/' + str(last_file)
                 )
+
                 return self.last_df.TS.iloc[-1]
+
             else:
                 print('Last saved file is in format not allowing.',
                       'Start at 1st January 2012.')
+
                 return 1325376000
 
     def _set_time(self, start, end):
@@ -91,16 +119,22 @@ class ImportDataCryptoCurrencies:
         """
         if start is 'last':
             start = self._get_last_date()
+
         elif isinstance(start, str):
             start = date_to_TS(start)
+
         else:
             pass
+
         if end is 'now':
             end = time.time()
+
         elif isinstance(end, str):
             end = date_to_TS(end)
+
         else:
             pass
+
         return int((start // self.span) * self.span), \
             int((end // self.span) * self.span)
 
@@ -111,8 +145,8 @@ class ImportDataCryptoCurrencies:
         return self.per + '_of_' + self.crypto + self.fiat + '_in_' + date
 
     def save(self, form='xlsx', by_period='Y'):
-        """ Save data by period (default is year) in the corresponding
-        format and file.
+        """ Save data by period (default is year) in the corresponding format
+        and file.
         TODO : to finish
 
         Parameters
@@ -120,8 +154,9 @@ class ImportDataCryptoCurrencies:
         form : {'xlsx', 'csv'}
             Format to save data.
         by_period : {'Y', 'M', 'D'}
-            Period to group data in a same file. If 'Y' by year, if 'M' by
-            month, if 'D' by day.
+            - If 'Y' group data by year.
+            - If 'M' group data by month.
+            - If 'D' group data by day.
 
         """
         df = (self.last_df.append(self.df, sort=True)
@@ -201,11 +236,10 @@ class ImportDataCryptoCurrencies:
         return self
 
     def import_data(self, start='last', end='now'):
-        """ Download data from Poloniex for specific time interval.
+        """ Download data for specific time interval.
 
         Parameters
         ----------
-
         start : int or str
             Timestamp of the first observation of you want as int or date
             format 'yyyy-mm-dd hh:mm:ss' as string.
@@ -220,6 +254,7 @@ class ImportDataCryptoCurrencies:
 
         """
         data = self._import_data(start=start, end=end)
+
         return self._sort_data(data)
 
     def get_data(self):

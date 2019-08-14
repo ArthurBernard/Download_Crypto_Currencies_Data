@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:25:01
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 09:31:42
+# @Last modified time: 2019-08-14 16:46:13
 
 """ Kraken exchange class to download data.
 
@@ -34,8 +34,8 @@ class FromKraken(ImportDataCryptoCurrencies):
         The abreviation of the crypto-currency.
     span : {int, 'weekly', 'daily', 'hourly'}
         - If str, periodicity of observation.
-        - If int, number of the seconds between each observation. Minimal
-        span is 60 seconds.
+        - If int, number of the seconds between each observation, minimal span\
+            is 60 seconds.
     fiat : str
         A fiat currency or a crypto-currency.
     form : {'xlsx', 'csv'}
@@ -52,6 +52,25 @@ class FromKraken(ImportDataCryptoCurrencies):
     References
     ----------
     .. [1] https://www.kraken.com/features/api
+
+    Attributes
+    ----------
+    pair : str
+        Pair symbol, `crypto + fiat`.
+    start, end : int
+        Timestamp to starting and ending download data.
+    span : int
+        Number of seconds between observations.
+    full_path : str
+        Path to save data.
+    form : str
+        Format to save data.
+
+    Methods
+    -------
+    import_data
+    save
+    get_data
 
     """
 
@@ -71,7 +90,7 @@ class FromKraken(ImportDataCryptoCurrencies):
         else:
             self.pair = 'X' + crypto + 'Z' + fiat
 
-    def _import_data(self, start='last', end=None):
+    def import_data(self, start='last', end=None):
         """ Download data from Kraken since a specific time until now.
 
         Parameters
@@ -79,6 +98,11 @@ class FromKraken(ImportDataCryptoCurrencies):
         start : int or str
             Timestamp of the first observation of you want as int or date
             format 'yyyy-mm-dd hh:mm:ss' as string.
+
+        Returns
+        -------
+        data : pd.DataFrame
+            Data sorted and cleaned in a data frame.
 
         """
         self.start, self.end = self._set_time(start, time.time())
@@ -103,6 +127,4 @@ class FromKraken(ImportDataCryptoCurrencies):
             'quoteVolume': float(e[6]) * float(e[5])
         } for e in text]
 
-        return data
-
-    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
+        return self._sort_data(data)

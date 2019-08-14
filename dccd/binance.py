@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:26:20
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 17:01:44
+# @Last modified time: 2019-08-14 16:57:06
 
 """ Binance exchange class to download data.
 
@@ -17,7 +17,7 @@ import requests
 import json
 
 # Import local packages
-from dccd.time_tools import *
+from dccd.time_tools import binance_interval
 from dccd.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromBinance']
@@ -33,8 +33,9 @@ class FromBinance(ImportDataCryptoCurrencies):
     crypto : str
         The abreviation of the crypto-currency.
     span : {int, 'weekly', 'daily', 'hourly'}
-        If str, periodicity of observation. If int, number of the seconds
-        between each observation. Minimal span is 60 seconds.
+        - If str, periodicity of observation.
+        - If int, number of the seconds between each observation, minimal span\
+            is 60 seconds.
     fiat : str
         A fiat currency or a crypto-currency. Binance don't allow fiat
         currencies, but USD theter.
@@ -53,6 +54,25 @@ class FromBinance(ImportDataCryptoCurrencies):
     ----------
     .. [1] https://github.com/binance-exchange/binance-official-api-docs
 
+    Attributes
+    ----------
+    pair : str
+        Pair symbol, `crypto + fiat`.
+    start, end : int
+        Timestamp to starting and ending download data.
+    span : int
+        Number of seconds between observations.
+    full_path : str
+        Path to save data.
+    form : str
+        Format to save data.
+
+    Methods
+    -------
+    import_data
+    save
+    get_data
+
     """
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
@@ -60,35 +80,48 @@ class FromBinance(ImportDataCryptoCurrencies):
             print("Binance don't allow fiat currencies.",
                   "The equivalent of US dollar is Tether USD as USDT.")
             self.fiat = fiat = 'USDT'
+
         if crypto is 'XBT':
             crypto = 'BTC'
+
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'GDAX', fiat, form
+            self, path, crypto, span, 'Binance', fiat, form
         )
+
         self.pair = crypto + fiat
         self.full_path = self.path + '/Binance/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
-    def _import_data(self, start='last', end='now'):
+    def import_data(self, start='last', end='now'):
         """ Download data from Binance for specific time interval.
 
         Parameters
         ----------
-        start : int
-            Timestamp of the first observation of you want.
-        end : int
-            Timestamp of the last observation of you want.
+        start : int or str
+            Timestamp of the first observation of you want as int or date
+            format 'yyyy-mm-dd hh:mm:ss' as string.
+        end : int or str
+            Timestamp of the last observation of you want as int or date
+            format 'yyyy-mm-dd hh:mm:ss' as string.
+
+        Returns
+        -------
+        data : pd.DataFrame
+            Data sorted and cleaned in a data frame.
 
         """
         self.start, self.end = self._set_time(start, end)
+
         param = {
             'symbol': self.pair,
             'startTime': self.start * 1000,
             'endTime': self.end * 1000,
             'interval': binance_interval(self.span),
         }
+
         r = requests.get('https://api.binance.com/api/v1/klines', param)
         text = json.loads(r.text)
+
         data = [{
             'date': float(e[0] / 1000),
             'open': float(e[1]),
@@ -99,7 +132,4 @@ class FromBinance(ImportDataCryptoCurrencies):
             'quoteVolume': float(e[7])
         } for e in text]
 
-        return data
-
-    ImportDataCryptoCurrencies.import_data.__doc__ = _import_data.__doc__
-
+        return self._sort_data(data)

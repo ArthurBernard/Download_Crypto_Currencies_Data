@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-12 18:15:24
+# @Last modified time: 2019-08-14 17:46:27
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -34,6 +34,15 @@ __all__ = ['BasisWebSocket', 'DownloadDataWebSocket']
 class BasisWebSocket:
     """ Basis object to connect at a specified stream to websocket client API.
 
+    Parameters
+    ----------
+    host : str
+        Adress of host to connect.
+    conn : dict
+        Parameters to connection setting.
+    subs : dict
+        Data to subscribe to a stream.
+
     Attributes
     ----------
     host : str
@@ -43,30 +52,19 @@ class BasisWebSocket:
     ws : websockets.client.WebSocketClientProtocol
         Connection with the websocket client.
     is_connect : bool
-        `True` if connected else `False`.
+        - True if connected.
+        - False`otherwise.
 
     Methods
     -------
-    on_open(**kwargs)
-        Method to connect to a stream of websocket client API.
+    on_open
 
     """
     ws = False
     is_connect = False
 
     def __init__(self, host, conn={}, subs={}):
-        """ Initialize object.
-
-        Parameters
-        ----------
-        host : str
-            Adress of host to connect.
-        conn : dict
-            Parameters to connection setting.
-        subs : dict
-            Data to subscribe to a stream.
-
-        """
+        """ Initialize object. """
         # Set websocket variables
         self.host = host
         self.conn_para = conn
@@ -160,6 +158,22 @@ class BasisWebSocket:
 class DownloadDataWebSocket(BasisWebSocket):
     """ Basis object to download data from a stream websocket client API.
 
+    Parameters
+    ----------
+    host : {url, 'binance', 'bitfinex', 'bitmex'}
+        Name of an allowed exchange or url of the host exchange. If url of
+        a host exchange is provided, keyword arguments for connection and
+        subscribe parameters must be also specified.
+    time_step : int, optional
+        Number of seconds between two snapshots of data, minimum is 1,
+        default is 60 (one minute). Each `time_step` data will be
+        processed and updated to the database.
+    STOP : int, optional
+        Number of seconds before stoping, default is `3600` (one hour).
+    kwargs : dict, optional
+        Connection and subscribe parameters, relevant only if host is not
+        allowed in `_parser_exchange`.
+
     Attributes
     ----------
     host : str
@@ -179,10 +193,8 @@ class DownloadDataWebSocket(BasisWebSocket):
 
     Methods
     -------
-    set_process_data(func, **kwargs)
-        Set a function and parameters to process/clean data before to be saved.
-    set_saver(call, **kwargs)
-        Set a callable object and parameters to save data or update a database.
+    set_process_data
+    set_saver
 
     TODO :
     - None time_step send tick by tick data
@@ -213,25 +225,7 @@ class DownloadDataWebSocket(BasisWebSocket):
     _parser_data = {}
 
     def __init__(self, host, time_step=60, STOP=3600, **kwargs):
-        """ Initialize object.
-
-        Parameters
-        ----------
-        host : str {'binance', 'bitfinex', 'bitmex'}
-            Name of an allowed exchange or url of the host exchange. If url of
-            a host exchange is provided, keyword arguments for connection and
-            subscribe parameters must be also specified.
-        time_step : int, optional
-            Number of seconds between two snapshots of data, minimum is 1,
-            default is 60 (one minute). Each `time_step` data will be
-            processed and updated to the database.
-        STOP : int, optional
-            Number of seconds before stoping, default is `3600` (one hour).
-        kwargs : dict, optional
-            Connection and subscribe parameters, relevant only if host is not
-            allowed in `_parser_exchange`.
-
-        """
+        """ Initialize object. """
         if host.lower() in DownloadDataWebSocket._parser_exchange.keys():
             BasisWebSocket.__init__(self, **self._parser_exchange[host])
 
@@ -324,11 +318,11 @@ class DownloadDataWebSocket(BasisWebSocket):
 
         Parameters
         ----------
-        func : function
+        func : callable
             Function to process and clean data before to be saved. Must take
             `data` in arguments and can take any optional keywords arguments,
-            cf exemples in `process_data.py`.
-        kwargs : dict, optional
+            cf exemples in :mod:`dccd.process_data`.
+        **kwargs
             Any keyword arguments to be passed to `func`.
 
         """
@@ -343,8 +337,8 @@ class DownloadDataWebSocket(BasisWebSocket):
         call : callable
             Callable object to save data or update a database. Must take `data`
             in arguments and can take any optional keywords arguments, cf
-            exemples in `io_tools.py`.
-        kwargs : dict, optional
+            exemples in :mod:`dccd.io_tools`.
+        **kwargs
             Any keyword arguments to be passed to `call`.
 
         """

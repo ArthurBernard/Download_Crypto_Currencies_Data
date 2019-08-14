@@ -4,9 +4,11 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 09:43:38
+# @Last modified time: 2019-08-14 18:57:21
 
-""" Tools and object to load, append and save differnet kind of database. """
+""" Tools and object to load, append and save differnet kind of database.
+
+"""
 
 # Built-in packages
 from os import makedirs
@@ -29,11 +31,19 @@ __all__ = ['IODataBase', 'get_df', 'save_df']
 class IODataBase:
     """ Object to save a pd.DataFrame into different kind/format of database.
 
+    Parameters
+    ----------
+    path : str, optional
+        Path of the database, default is './' (current directory).
+    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL', 'Oracle',\
+              'MSSQL', 'MySQL'}
+        Format of database, default is CSV.
+
     Attributes
     ----------
     path : str
         Path of the database.
-    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL', 'Oracle',
+    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL', 'Oracle',\
               'MSSQL', 'MySQL'}
         Kind/format of the database.
     parser : dict
@@ -55,17 +65,6 @@ class IODataBase:
     # - Add unitest/doctest
 
     def __init__(self, path='./', method='csv'):
-        """ Initialize saver object.
-
-        Parameters
-        ----------
-        path : str, optional
-            Path of the database, default is `'./'` (current directory).
-        method : str {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
-                      'Oracle', 'MSSQL', 'MySQL'}, optional
-            Format of database, default is CSV.
-
-        """
         # Verify path exist
         makedirs(path, exist_ok=True)
 
@@ -240,7 +239,7 @@ class IODataBase:
             Column label for index column(s). If None is given (default) and
             index is True, then the index names are used. A sequence should be
             given if the pd.DataFrame uses pd.MultiIndex.
-        driver : {'psycopg2', 'pg8000', 'mysqlclient', pymysql', 'cx_oracle',
+        driver : {'psycopg2', 'pg8000', 'mysqlclient', pymysql', 'cx_oracle',\
                   'pyodbc', 'pymssql'}
             The name of the DBAPI to be used to connect to the database using
             all lowercase letters. If not specified, a default DBAPI will be

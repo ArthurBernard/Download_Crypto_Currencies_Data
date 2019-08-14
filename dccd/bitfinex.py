@@ -4,9 +4,9 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 18:16:51
+# @Last modified time: 2019-08-14 17:42:41
 
-""" Objects to download data from Bitfinex exchange.
+""" Objects and functions to download data from Bitfinex exchange.
 
 """
 
@@ -68,6 +68,16 @@ def _parser_book(tData):
 class DownloadBitfinexData(DownloadDataWebSocket):
     """ Basis object to download data from a stream websocket client API.
 
+    Parameters
+    ----------
+    time_step : int, optional
+        Number of seconds between two snapshots of data, minimum is 1, default
+        is 60 (one minute). Each `time_step` data will be processed and updated
+        to the database.
+    until : int, optional
+        Number of seconds before stoping or timestamp of when stoping, default
+        is 3600 (one hour).
+
     Attributes
     ----------
     host : str
@@ -100,27 +110,16 @@ class DownloadBitfinexData(DownloadDataWebSocket):
     # TODO : add more parser methods
 
     def __init__(self, time_step=60, until=3600):
-        """ Initialize object.
-
-        Parameters
-        ----------
-        time_step : int, optional
-            Number of seconds between two snapshots of data, minimum is 1,
-            default is 60 (one minute). Each `time_step` data will be
-            processed and updated to the database.
-        until : int, optional
-            Number of seconds before stoping or timestamp of when stoping,
-            default is 3600 (one hour).
-
-        """
         # TODO : set until parser to convert date, time, etc
         if until is None:
             until = 0
+
         elif until > time.time():
             until -= int(time.time())
 
         DownloadDataWebSocket.__init__(self, 'bitfinex', time_step=time_step,
                                        STOP=until)
+
         self._parser_data = {
             'book': self.parser_book,
             'book_raw': self.parser_raw_book,
@@ -277,23 +276,23 @@ def get_data_bitfinex(channel, process_func, process_params={},
         Websocket channel to get data, by default data will be aggregated (OHLC
         for 'trades' and reconstructed orderbook for 'book'), add '_raw' to the
         `channel` to get raw data (trade tick by tick or each orders).
-    process_func : function
+    process_func : callable
         Function to process and clean data before to be saved. Must take `data`
         in arguments and can take any optional keywords arguments, cf function
-        exemples in `dccd/process_data.py`.
+        exemples in :mod:`dccd.process_data`.
     process_params : dict, optional
         Dictionary of the keyword arguments available to `process_func`, cf
-        documentation into `dccd.process_data`.
+        documentation into :mod:`dccd.process_data`.
     save_method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
                    'Oracle', 'MSSQL', 'MySQL'},
         It will create an IODataBase object to save/update the database in the
         specified format `save_method`, default is 'DataFrame' it save as
         binary pd.DataFrame object. More informations are available into
-        `io_tools.py`.
+        :mod:`dccd.io_tools`.
     io_params : dict, optional
         Dictionary of the keyword arguments available to the callable
         io_tools.IODataBase method. Note: With SQL format some parameters are
-        compulsory, seed details into `io_tools`.
+        compulsory, seed details into :mod:`dccd.io_tools`.
     time_step : int, optional
         Number of second between two snapshots of data, default 60 (1 minute).
     until : int, optional
@@ -304,7 +303,7 @@ def get_data_bitfinex(channel, process_func, process_params={},
         database is saved at the relative path './database/bitfinex/`channel`'.
     **kwargs
         Any revelevant keyword arguments will be passed to the websocket
-        connector, see Bitfinex API documentation [1]_ for more details.
+        connector, see Bitfinex API documentation [2]_ for more details.
 
     Warnings
     --------
@@ -319,7 +318,7 @@ def get_data_bitfinex(channel, process_func, process_params={},
 
     References
     ----------
-    .. [1] https://docs.bitfinex.com/v2/docs/ws-public
+    .. [2] https://docs.bitfinex.com/v2/docs/ws-public
 
     """
     # Set database connector object
