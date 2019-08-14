@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:25:19
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 16:46:26
+# @Last modified time: 2019-08-14 19:09:19
 
 """ GDax exchange class to download data.
 
@@ -84,24 +84,7 @@ class FromGDax(ImportDataCryptoCurrencies):
         self.full_path = self.path + '/GDAX/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
-    def import_data(self, start='last', end='now'):
-        """ Download data from GDax for specific time interval.
-
-        Parameters
-        ----------
-        start : int or str
-            Timestamp of the first observation of you want as int or date
-            format 'yyyy-mm-dd hh:mm:ss' as string.
-        end : int or str
-            Timestamp of the last observation of you want as int or date
-            format 'yyyy-mm-dd hh:mm:ss' as string.
-
-        Returns
-        -------
-        data : pd.DataFrame
-            Data sorted and cleaned in a data frame.
-
-        """
+    def _import_data(self, start='last', end='now'):
         self.start, self.end = self._set_time(start, end)
         param = {
             'start': TS_to_date(self.start - self.span),
@@ -122,5 +105,27 @@ class FromGDax(ImportDataCryptoCurrencies):
             'volume': float(e[5]),
             'quoteVolume': float(e[4]) * float(e[5])
         } for e in text]
+
+        return data
+
+    def import_data(self, start='last', end='now'):
+        """ Download data from GDax for specific time interval.
+
+        Parameters
+        ----------
+        start : int or str
+            Timestamp of the first observation of you want as int or date
+            format 'yyyy-mm-dd hh:mm:ss' as string.
+        end : int or str
+            Timestamp of the last observation of you want as int or date
+            format 'yyyy-mm-dd hh:mm:ss' as string.
+
+        Returns
+        -------
+        data : pd.DataFrame
+            Data sorted and cleaned in a data frame.
+
+        """
+        data = self._import_data(start=start, end=end)
 
         return self._sort_data(data)

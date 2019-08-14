@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-26 10:42:57
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 16:46:20
+# @Last modified time: 2019-08-14 19:10:15
 
 """ Poloniex exchange class to download data.
 
@@ -92,6 +92,21 @@ class FromPoloniex(ImportDataCryptoCurrencies):
         self.full_path += str(self.per) + '/'
         self.full_path += str(self.crypto) + str(self.fiat)
 
+    def _import_data(self, start='last', end='now'):
+        self.start, self.end = self._set_time(start, end)
+
+        param = {
+            'command': 'returnChartData',
+            'currencyPair': self.pair,
+            'start': self.start,
+            'end': self.end,
+            'period': self.span
+        }
+
+        r = requests.get('https://poloniex.com/public', param)
+
+        return json.loads(r.text)
+
     def import_data(self, start='last', end='now'):
         """ Download data from Poloniex for specific time interval.
 
@@ -110,17 +125,6 @@ class FromPoloniex(ImportDataCryptoCurrencies):
             Data sorted and cleaned in a data frame.
 
         """
-        self.start, self.end = self._set_time(start, end)
-
-        param = {
-            'command': 'returnChartData',
-            'currencyPair': self.pair,
-            'start': self.start,
-            'end': self.end,
-            'period': self.span
-        }
-
-        r = requests.get('https://poloniex.com/public', param)
-        data = json.loads(r.text)
+        data = self._import_data(start=start, end=end)
 
         return self._sort_data(data)

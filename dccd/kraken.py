@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:25:01
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 16:46:13
+# @Last modified time: 2019-08-14 19:08:26
 
 """ Kraken exchange class to download data.
 
@@ -90,21 +90,7 @@ class FromKraken(ImportDataCryptoCurrencies):
         else:
             self.pair = 'X' + crypto + 'Z' + fiat
 
-    def import_data(self, start='last', end=None):
-        """ Download data from Kraken since a specific time until now.
-
-        Parameters
-        ----------
-        start : int or str
-            Timestamp of the first observation of you want as int or date
-            format 'yyyy-mm-dd hh:mm:ss' as string.
-
-        Returns
-        -------
-        data : pd.DataFrame
-            Data sorted and cleaned in a data frame.
-
-        """
+    def _import_data(self, start='last', end=None):
         self.start, self.end = self._set_time(start, time.time())
 
         param = {
@@ -126,5 +112,24 @@ class FromKraken(ImportDataCryptoCurrencies):
             'volume': float(e[6]),
             'quoteVolume': float(e[6]) * float(e[5])
         } for e in text]
+
+        return data
+
+    def import_data(self, start='last', end=None):
+        """ Download data from Kraken since a specific time until now.
+
+        Parameters
+        ----------
+        start : int or str
+            Timestamp of the first observation of you want as int or date
+            format 'yyyy-mm-dd hh:mm:ss' as string.
+
+        Returns
+        -------
+        data : pd.DataFrame
+            Data sorted and cleaned in a data frame.
+
+        """
+        data = self._import_data(start=start)
 
         return self._sort_data(data)
