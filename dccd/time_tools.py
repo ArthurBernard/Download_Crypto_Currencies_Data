@@ -1,19 +1,27 @@
-#!/usr/bin/env python 
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# coding: utf-8
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-02-13 16:53:04
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-08-14 18:49:11
 
-
-import time
-
-
-""" ``time_tools`` is a module to manage some time functions with respect 
-to each specific API exchanges. 
+""" Tools to manage some time functions with respect to specific API exchanges.
 
 """
 
+# Built-in packages
+import time
+
+# Third party packages
+
+# Local packages
+
 __all__ = [
-    'TS_to_date', 'date_to_TS', 'str_to_span', 'span_to_str', 
+    'TS_to_date', 'date_to_TS', 'str_to_span', 'span_to_str',
     'binance_interval',
 ]
+
 
 def TS_to_date(TS, form='%Y-%m-%d %H:%M:%S', local=True):
     """ Convert timestamp to date in specified format.
@@ -26,7 +34,7 @@ def TS_to_date(TS, form='%Y-%m-%d %H:%M:%S', local=True):
         Time format.
     local : bool (default is True)
         Local time is used if true else return UTC time.
-    
+
     Returns
     -------
     date : str
@@ -39,14 +47,14 @@ def TS_to_date(TS, form='%Y-%m-%d %H:%M:%S', local=True):
 
     """
     if local:
-    	date = time.localtime(TS)
+        date = time.localtime(TS)
     else:
-    	date = time.gmtime(TS)
+        date = time.gmtime(TS)
     return time.strftime(form, date)
-    
+
 
 def date_to_TS(date, form='%Y-%m-%d %H:%M:%S'):
-    """ Use your local time-zone to convert date in specific format to 
+    """ Use your local time-zone to convert date in specific format to
     timestamp.
 
     Parameters
@@ -68,16 +76,16 @@ def date_to_TS(date, form='%Y-%m-%d %H:%M:%S'):
 
     """
     return int(time.mktime(time.strptime(date, form)))
-    
 
-#def TS_to_YMD(TS):
+
+# def TS_to_YMD(TS):
 #    a = time.strftime('%Y %m %d', time.localtime(int(TS))).split(' ')
 #    return dt.datetime(int(a[0]), int(a[1]), int(a[2]))
-    
+
 
 def str_to_span(string):
     """ Return the equivalent interval time in seconds.
-    
+
     Parameters
     ----------
     string : str
@@ -104,17 +112,19 @@ def str_to_span(string):
         return 3600
     elif string.lower() in ['half-hourly', 'half-hour', '30min']:
         return 1800
-    elif string.lower() in ['5-minute', 'five-minute', '5 minute', 'five minute', '5min']:
+    elif string.lower() in ['5-minute', 'five-minute', '5 minute',
+                            'five minute', '5min']:
         return 300
     elif string.lower() in ['minutely', 'minute', '1min', 'min']:
         return 60
     else:
-        print('Error, string not understood.\nString must be "minutely", "5 minute", "hourly", "daily" or "weekly".')
-    
+        print('Error, string not understood.\nString must be "minutely",',
+              '"5 minute", "hourly", "daily" or "weekly".')
+
 
 def span_to_str(span):
     """ Return the time periodicity.
-    
+
     Parameters
     ----------
     span : int
@@ -122,7 +132,7 @@ def span_to_str(span):
 
     Returns
     -------
-    date : str 
+    date : str
         Time periodicity.
 
     Examples
@@ -147,16 +157,17 @@ def span_to_str(span):
         return 'Weekly'
     else:
         print('Error, no string correspond to this time in seconds.')
-    
+
+
 def binance_interval(interval):
     """ Return the time interval in the specific format allowed by Binance.
-    
+
     Parameters
     ----------
     interval : int
-        Must be in seconds as 60, 180, 300, 900, 1800, 3600, 7200, 14400, 
+        Must be in seconds as 60, 180, 300, 900, 1800, 3600, 7200, 14400,
         21600, 28800, 43200, 86400, 259200, 604800, 2592000.
-    
+
     Returns
     -------
     form : str
@@ -181,6 +192,9 @@ def binance_interval(interval):
     else:
         print('No format allowed.')
 
+
 if __name__ == '__main__':
-	import doctest
-	doctest.testmod()
+
+    import doctest
+
+    doctest.testmod()
