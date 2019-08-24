@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:55:21
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 18:38:23
+# @Last modified time: 2019-08-21 07:42:54
 
 """ Configuration file of documentation. """
 
@@ -122,7 +122,7 @@ html_theme_path = [themedir]
 # html_theme_path = ["./_theme/scipy/"]
 html_theme_option = {
     'edit_links': True,
-    'sidebar': 'right',
+    'sidebar': 'left',
     'scipy_org_logo': False,
     'navigation_links': True,
     'rootlinks': [
@@ -149,7 +149,7 @@ html_theme_option = {
     # 'github_url': 'https://github.com/ArthurBernard/\
     # Download_Crypto_Currencies_Data',
 }
-html_sidebars = {'index': ['searchbox.html']}
+html_sidebars = {'index': ['searchbox.html', 'indexsidebar.html']}
 html_static_path = ['_static']
 html_context = {
     "display_github": True,  # Integrate GitHub
@@ -159,4 +159,10 @@ html_context = {
     "conf_py_path": "/source/",  # Path in the checkout to the docs root
 }
 
-autosummary_generate = False
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/dev', None),
+    'fynance': ('https://fynance.readthedocs.io/en/latest/', None),
+}
+
+
+autosummary_generate = True
