@@ -1,8 +1,17 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# coding: utf-8
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-01-30 11:20:11
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-08-24 07:37:14
 
+""" Setup file. """
+
+# Built-in packages
 from setuptools import setup, find_packages
 
+# Local packages
 import dccd
 
 with open('README.rst') as f:
@@ -18,11 +27,14 @@ setup(
     license='MIT',
     long_description=str(long_description),
     install_requires=[
-        'numpy>=1.14.1', 
-        'pandas>=0.22.0', 
-        'requests>=2.18.4', 
-        'xlrd>=1.1.0', 
-        'xlsxwriter>=1.0.2'
+        'numpy>=1.14.1',
+        'pandas>=0.22.0',
+        'requests>=2.18.4',
+        'xlrd>=1.1.0',
+        'xlsxwriter>=1.0.2',
+        'websockets>=7.0.0',
+        'scipy>=1.2.0',
+        'SQLAlchemy>=1.3.0',
     ],
     url='https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
     classifiers=[
