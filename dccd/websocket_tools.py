@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-31 10:38:29
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 17:46:27
+# @Last modified time: 2019-08-24 07:23:35
 
 """ Connector objects to WebSockets API client to download data.
 
@@ -60,6 +60,7 @@ class BasisWebSocket:
     on_open
 
     """
+
     ws = False
     is_connect = False
 
@@ -75,7 +76,7 @@ class BasisWebSocket:
         self.logger.info('Init websocket object.')
 
     async def _connect(self, **kwargs):
-        """ Connection to websocket. """
+        """ Connect to websocket. """
         # Connect to host websocket
         async with websockets.connect(self.host, **self.conn_para) as self.ws:
             self.logger.info('Websocket connected to {}.'.format(self.host))
