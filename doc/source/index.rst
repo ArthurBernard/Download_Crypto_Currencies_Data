@@ -1,21 +1,14 @@
-==================================================
-Welcome to Download_Crypto_Currencies_Data project
-==================================================
+====================================================
+ Welcome to Download Crypto Currencies Data project 
+====================================================
 
 This is the documentation of `dccd` package, a very simple package to download crypto-currencies data from Binance, Bitfinex, GDax (Coinbase), Kraken and Poloniex.
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :caption: Contents:
 
-   exchange
-   binance
-   bitfinex
-   gdax
-   kraken
-   poloniex
-   websocket_tools
-   time_tools
-   io_tools
+   continuous_dl
+   histo_dl
    process_data
-    
+   tools
