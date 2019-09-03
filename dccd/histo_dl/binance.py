@@ -4,9 +4,15 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-02-13 18:26:20
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 19:07:19
+# @Last modified time: 2019-09-03 22:04:22
 
-""" Binance exchange class to download data.
+""" Objects to download historical data from Binance exchange.
+
+.. currentmodule:: dccd.histo_dl.binance
+
+.. autoclass:: FromBinance
+   :members: import_data, save, get_data
+   :show-inheritance:
 
 """
 
@@ -17,8 +23,8 @@ import requests
 import json
 
 # Import local packages
-from dccd.time_tools import binance_interval
-from dccd.exchange import ImportDataCryptoCurrencies
+from dccd.tools.date_time import binance_interval
+from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromBinance']
 
@@ -76,6 +82,7 @@ class FromBinance(ImportDataCryptoCurrencies):
     """
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+        """ Initialize object. """
         if fiat in ['EUR', 'USD']:
             print("Binance don't allow fiat currencies.",
                   "The equivalent of US dollar is Tether USD as USDT.")

@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
 # coding: utf-8
+# @Author: ArthurBernard
+# @Email: arthur.bernard.92@gmail.com
+# @Date: 2019-08-30 09:25:01
+# @Last modified by: ArthurBernard
+# @Last modified time: 2019-09-03 21:56:51
 
+""" Base object to download historical data from REST API.
 
-""" Base exchange class to download data.
+Notes
+-----
+The following object is shapped to download data from crypto-currency exchanges
+(currently only Binance, GDax, Kraken and Poloniex).
 
 """
 
@@ -15,8 +24,8 @@ import time
 import pandas as pd
 
 # Import local packages
-from dccd.time_tools import *
-
+from dccd.tools.date_time import date_to_TS, TS_to_date
+from dccd.tools.date_time import str_to_span, span_to_str
 
 __all__ = ['ImportDataCryptoCurrencies']
 
@@ -71,6 +80,7 @@ class ImportDataCryptoCurrencies:
     """
 
     def __init__(self, path, crypto, span, platform, fiat='EUR', form='xlsx'):
+        """ Initialize object. """
         self.path = path
         self.crypto = crypto
         self.span, self.per = self._period(span)
@@ -83,6 +93,7 @@ class ImportDataCryptoCurrencies:
 
     def _get_last_date(self):
         """ Find the last observation imported.
+
         TODO : to finish
         """
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
@@ -147,6 +158,7 @@ class ImportDataCryptoCurrencies:
     def save(self, form='xlsx', by_period='Y'):
         """ Save data by period (default is year) in the corresponding format
         and file.
+
         TODO : to finish
 
         Parameters
@@ -183,9 +195,7 @@ class ImportDataCryptoCurrencies:
         return self
 
     def _excel_format(self, name, form, group):
-        """ Save as excel format
-
-        """
+        """ Save as excel format. """
         writer = pd.ExcelWriter(
             self.full_path + '/' + self._name_file(name) + '.' + form,
             engine='xlsxwriter'
@@ -216,6 +226,7 @@ class ImportDataCryptoCurrencies:
 
     def _sort_data(self, data):
         """ Clean and sort the data.
+
         TODO : to finish
         """
         df = pd.DataFrame(
@@ -258,7 +269,7 @@ class ImportDataCryptoCurrencies:
         return self._sort_data(data)
 
     def get_data(self):
-        """ Print the dataframe
+        """ Print the dataframe.
 
         Returns
         -------
@@ -280,8 +291,8 @@ class ImportDataCryptoCurrencies:
             )
 
     def set_hierarchy(self, liste):
-        """ You can determine the specific hierarchy of the files where will
-        save your data.
+        """ Set the specific hierarchy of the files where will save your data.
+
         TODO : to finish
         """
         self.full_path = self.path

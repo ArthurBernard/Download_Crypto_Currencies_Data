@@ -4,9 +4,15 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-26 10:42:57
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 19:10:15
+# @Last modified time: 2019-09-03 22:05:18
 
-""" Poloniex exchange class to download data.
+""" Objects to download historical data from Poloniex exchange.
+
+.. currentmodule:: dccd.histo_dl.poloniex
+
+.. autoclass:: FromPoloniex
+   :members: import_data, save, get_data
+   :show-inheritance:
 
 """
 
@@ -17,7 +23,7 @@ import requests
 import json
 
 # Import local packages
-from dccd.exchange import ImportDataCryptoCurrencies
+from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromPoloniex']
 
@@ -75,6 +81,7 @@ class FromPoloniex(ImportDataCryptoCurrencies):
     """
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+        """ Initialize object. """
         if fiat in ['EUR', 'USD']:
             print("Poloniex don't allow fiat currencies.",
                   "The equivalent of US dollar is Tether USD as USDT.")
