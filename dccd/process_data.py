@@ -4,7 +4,9 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-06 15:25:49
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-13 12:13:33
+# @Last modified time: 2019-08-30 09:42:40
+
+""" Functions to clean, sort and other process data. """
 
 # Built-in packages
 import time
