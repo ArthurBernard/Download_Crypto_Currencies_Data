@@ -4,9 +4,29 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-03-25 19:31:56
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 17:42:41
+# @Last modified time: 2019-09-03 21:45:23
 
 """ Objects and functions to download data from Bitfinex exchange.
+
+.. currentmodule:: dccd.continuous_dl.bitfinex
+
+These functions and objects allow you to continuously download data and update
+your database.
+
+High level API
+--------------
+
+.. autofunction:: get_data_bitfinex
+.. autofunction:: get_orderbook_bitfinex
+.. autofunction:: get_trades_bitfinex
+
+Low level API
+-------------
+
+.. autoclass:: dccd.continuous_dl.bitfinex.DownloadBitfinexData
+   :members: set_process_data, set_saver
+   :special-members: __call__
+   :show-inheritance:
 
 """
 
@@ -18,22 +38,16 @@ import logging
 # Third party packages
 
 # Local packages
-from dccd.exchange import ImportDataCryptoCurrencies
-from dccd.io_tools import IODataBase
-from dccd.websocket_tools import DownloadDataWebSocket
+from dccd.tools.io import IODataBase
+from dccd.continuous_dl.exchange import ContinuousDownloader
 from dccd.process_data import set_marketdepth, set_orders, set_trades, set_ohlc
 
 __all__ = [
-    'FromBitfinex', 'DownloadBitfinexData', 'get_data_bitfinex',
-    'get_orderbook_bitfinex', 'get_trades_bitfinex',
+    'DownloadBitfinexData', 'get_data_bitfinex', 'get_orderbook_bitfinex',
+    'get_trades_bitfinex',
 ]
 
 # TODO : - get_raw_orderbook; get_ohlc;
-
-
-class FromBitfinex(ImportDataCryptoCurrencies):
-    pass
-
 
 # =========================================================================== #
 #                              Parser functions                               #
@@ -65,7 +79,7 @@ def _parser_book(tData):
 # =========================================================================== #
 
 
-class DownloadBitfinexData(DownloadDataWebSocket):
+class DownloadBitfinexData(ContinuousDownloader):
     """ Basis object to download data from a stream websocket client API.
 
     Parameters
@@ -102,6 +116,7 @@ class DownloadBitfinexData(DownloadDataWebSocket):
     __call__
 
     """
+
     # TODO :
     # - None time_step send tick by tick data
     # - Clean private/public methods
@@ -110,6 +125,7 @@ class DownloadBitfinexData(DownloadDataWebSocket):
     # TODO : add more parser methods
 
     def __init__(self, time_step=60, until=3600):
+        """ Initialize object. """
         # TODO : set until parser to convert date, time, etc
         if until is None:
             until = 0
@@ -117,8 +133,8 @@ class DownloadBitfinexData(DownloadDataWebSocket):
         elif until > time.time():
             until -= int(time.time())
 
-        DownloadDataWebSocket.__init__(self, 'bitfinex', time_step=time_step,
-                                       STOP=until)
+        ContinuousDownloader.__init__(self, 'bitfinex', time_step=time_step,
+                                      STOP=until)
 
         self._parser_data = {
             'book': self.parser_book,
@@ -226,7 +242,7 @@ class DownloadBitfinexData(DownloadDataWebSocket):
 
         Parameters
         ----------
-        channel : str {'book', 'book_raw', 'trades', 'trades_raw'}
+        channel : {'book', 'book_raw', 'trades', 'trades_raw'}
             Channel to get data, by default data will be aggregated (OHLC for
             'trades' and reconstructed orderbook for 'book'), add '_raw' to the
             `channel` to get raw data (trade tick by tick or each orders).
