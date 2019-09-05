@@ -1,6 +1,6 @@
-===============================
-Download_Crypto_Currencies_Data
-===============================
+=============================
+Download Crypto-Currency Data
+=============================
 
 .. image:: https://img.shields.io/pypi/v/dccd.svg
     :target: https://pypi.org/project/dccd/
@@ -19,14 +19,25 @@ Download_Crypto_Currencies_Data
     :target: https://lgtm.com/projects/g/ArthurBernard/Download_Crypto_Currencies_Data/context:python)
     :alt: Language grade: Python
 
-This is a beta version of a python package [*]_ to *download* and *upload* data about *crypto-currencies* (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, GDAX, Kraken and Poloniex for the moment).
+This is the starting point of a python package [*]_ to automatically *download* data and *update* database with *crypto-currency* data (bitcoin, ether, litecoin, etc.) from different API exchanges (allow only Binance, Bitmex, Bitfinex, GDAX, Kraken and Poloniex for the moment).
 
 Presentation:
 =============
 
-The **'dccd'** package contains a main class and four classes to download and update data for each exchange, and a module **'time_tools'** to manage specific time functions needed for each API.
+The ``dccd`` package allow you two main methods to download data. The first one is recommended to download data at high frequency (**minutely** or **tick by tick**), and the second one is recommended to download data at a lower frequency (**hourly** or **daily**):
 
-The four classes to download data are **FromBinance**, **FromGDax**, **FromKraken** and **FromPoloniex**. All have the same methods and almost the same parameters:    
+- **Continuous Downloader `dccd.continuous_dl`**:   
+   Download and update continuously data (orderbook, trades tick by tick, ohlc, etc) and save it in a database. *Currently only support Bitfinex and Bitmex exchanges*.
+
+- **Historical Downloader `dccd.histo_dl`**:   
+   Download historical data (ohlc, trades, etc.) and save it. *Currently only support Binance, GDax, Kraken and Poloniex exchanges*.
+
+Historical Downloader:
+----------------------
+
+The **'dccd.histo_dl'** module contains a main class and four classes to download and update data for each exchange, and a module **'date_time'** to manage specific time format needed for each API.
+
+The four classes to download historical data are **FromBinance**, **FromGDax**, **FromKraken** and **FromPoloniex**. All have the same methods and almost the same parameters:    
 
 - **__init__(path, crypto, span, fiat(optional), form(optional))** initialisation with **path** is the path where save the data (string), **crypto** is a crypto currency (string) and **span** is the interval time between each observation in seconds (integer) or can be a string as 'hourly', 'daily', etc. (see details on the doc string). The optional parameters are **fiat** the second currency (default is 'USD' and 'USDT' for poloniex and binance) and **form** the format to save the data (default is 'xlsx').   
 
@@ -38,10 +49,41 @@ The four classes to download data are **FromBinance**, **FromGDax**, **FromKrake
 
 Method chaining is available.
 
+Installation:
+=============
+
+Install the library from pip:
+-----------------------------
+
+    $ pip install dccd
+
+Install the library from source:
+--------------------------------
+
+    $ git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data   
+    $ cd Download_Crypto_Currencies_Data   
+    $ python setup.py install --user
+
+Requirements:
+=============
+
+- numpy>=1.14.1   
+- pandas>=0.22.0   
+- requests>=2.18.4   
+- xlrd>=1.1.0   
+- xlsxwriter>=1.0.2   
+- websockets>=7.0.0   
+- scipy>=1.2.0   
+- SQLAlchemy>=1.3.0   
+
 Supported exchanges:
 ====================
 
 - **Binance.**
+
+- **Bitfinex.**
+
+- **Bitmex.**
 
 - **GDAX.**
 
@@ -49,11 +91,5 @@ Supported exchanges:
 
 - **Poloniex.**
 
-Installation:
-=============
-
-Install the library from pip:
-
-    $ pip install dccd
 
 .. [*] Package not achieved, always in progress. This is my first one package, all advice is welcome.
