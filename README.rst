@@ -26,10 +26,10 @@ Presentation:
 
 The ``dccd`` package allow you two main methods to download data. The first one is recommended to download data at high frequency (**minutely** or **tick by tick**), and the second one is recommended to download data at a lower frequency (**hourly** or **daily**):
 
-- **Continuous Downloader `dccd.continuous_dl`**:   
+- **Continuous Downloader** ``dccd.continuous_dl``:   
    Download and update continuously data (orderbook, trades tick by tick, ohlc, etc) and save it in a database. *Currently only support Bitfinex and Bitmex exchanges*.
 
-- **Historical Downloader `dccd.histo_dl`**:   
+- **Historical Downloader** ``dccd.histo_dl``:   
    Download historical data (ohlc, trades, etc.) and save it. *Currently only support Binance, GDax, Kraken and Poloniex exchanges*.
 
 Historical Downloader:
@@ -61,7 +61,9 @@ Install the library from source:
 --------------------------------
 
     $ git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data   
+
     $ cd Download_Crypto_Currencies_Data   
+    
     $ python setup.py install --user
 
 Requirements:
