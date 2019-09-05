@@ -5,13 +5,11 @@ dist/
 build/
 .ipynb_checkpoints/
 logs/
+old_scripts/
 
 # Ignore files
 Exemple_excel_dccd.png
 setup.cfg
-
-# Ignore old scripts
-dccd/dl_cc_data.py
 
 # Ignore extensions
 *.pyc
