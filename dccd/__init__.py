@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 16:54:02
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-05 08:21:48
+# @Last modified time: 2019-09-06 09:01:33
 
 """ This is `dccd` package.
 
@@ -14,7 +14,7 @@ Kraken and Poloniex).
 
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 # ======= #
 #  Tools  #
