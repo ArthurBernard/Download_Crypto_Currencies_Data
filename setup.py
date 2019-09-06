@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-01-30 11:20:11
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-24 07:37:14
+# @Last modified time: 2019-09-05 08:48:08
 
 """ Setup file. """
 
@@ -38,7 +38,7 @@ setup(
     ],
     url='https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Financial and Insurance Industry',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
