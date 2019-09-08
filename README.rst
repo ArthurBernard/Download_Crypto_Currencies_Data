@@ -2,6 +2,8 @@
 Download Crypto-Currency Data
 =============================
 
+.. image:: https://img.shields.io/pypi/pyversions/dccd
+    :alt: PyPI - Python Version
 .. image:: https://img.shields.io/pypi/v/dccd.svg
     :target: https://pypi.org/project/dccd/
 .. image:: https://img.shields.io/pypi/status/dccd.svg?colorB=blue

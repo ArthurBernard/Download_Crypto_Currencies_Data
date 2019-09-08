@@ -1,5 +1,6 @@
 # Download Crypto-Currency Data
 
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/dccd)
 [![PyPI](https://img.shields.io/pypi/v/dccd.svg)](https://pypi.org/project/dccd/)
 [![Status](https://img.shields.io/pypi/status/dccd.svg?colorB=blue)](https://pypi.org/project/dccd/)
 [![Build Status](https://travis-ci.org/ArthurBernard/Download_Crypto_Currencies_Data.svg?branch=master)](https://travis-ci.org/ArthurBernard/Download_Crypto_Currencies_Data)
