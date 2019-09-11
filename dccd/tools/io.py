@@ -4,11 +4,9 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-08-14 18:57:21
+# @Last modified time: 2019-09-11 08:42:29
 
-""" Tools and object to load, append and save differnet kind of database.
-
-"""
+""" Tools and object to load, append and save differnet kind of database. """
 
 # Built-in packages
 from os import makedirs
@@ -59,12 +57,14 @@ class IODataBase:
     __call__
 
     """
+
     # TODO:
     # - Add InfluxDB method
     # - Add output methods
     # - Add unitest/doctest
 
     def __init__(self, path='./', method='csv'):
+        """ Initialize object. """
         # Verify path exist
         makedirs(path, exist_ok=True)
 

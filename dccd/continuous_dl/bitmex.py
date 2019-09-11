@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-07 11:16:51
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-03 21:48:45
+# @Last modified time: 2019-09-11 08:46:12
 
 """ Objects and functions to download data from Bitmex exchange.
 
@@ -281,11 +281,11 @@ def get_data_bitmex(process_func, *args, time_step=60, until=None,
         It will create an IODataBase object to save/update the database in the
         specified format `save_method`, default is 'DataFrame' it save as
         binary pd.DataFrame object. More informations are available into
-        :mod:`dccd.io_tools`.
+        :mod:`dccd.tools.io`.
     io_params : dict, optional
-        Dictionary of the keyword arguments available to the callable
-        io_tools.IODataBase method. Note: With SQL format some parameters are
-        compulsory, seed details into :mod:`dccd.io_tools`.
+        Dictionary of the keyword arguments available to the
+        ``dccd.tools.io.IODataBase`` callable method. Note: With SQL format
+        some parameters are compulsory, seed details into :mod:`dccd.tools.io`.
     time_step : int, optional
         Number of second between two snapshots of data, default 60 (1 minute).
     until : int, optional
@@ -306,7 +306,7 @@ def get_data_bitmex(process_func, *args, time_step=60, until=None,
     --------
     process_data : function to process/clean data (set_marketdepth, set_ohlc,
         set_orders, set_marketdepth).
-    io_tools.IODataBase : object to save/update the database with respect to
+    tools.io.IODataBase : object to save/update the database with respect to
         specified format.
 
     References
