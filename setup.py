@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-01-30 11:20:11
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-05 08:48:08
+# @Last modified time: 2019-11-07 16:58:33
 
 """ Setup file. """
 
@@ -12,14 +12,56 @@
 from setuptools import setup, find_packages
 
 # Local packages
-import dccd
+
+
+MAJOR = 1
+MINOR = 1
+PATCH = 1
+ISRELEASED = True
+VERSION = '{}.{}.{}'.format(MAJOR, MINOR, PATCH)
+
+
+def get_version_info():
+    FULLVERSION = VERSION
+    GIT_REVISION = ""
+
+    if not ISRELEASED:
+        FULLVERSION += '.dev' + GIT_REVISION[:7]
+
+    return FULLVERSION, GIT_REVISION
+
+
+def write_version_py(filename='dccd/version.py'):
+    cnt = """
+# THIS FILE IS GENERATED FROM FYNANCE SETUP.PY
+short_version = '%(version)s'
+version = '%(version)s'
+full_version = '%(full_version)s'
+git_revision = '%(git_revision)s'
+release = %(isrelease)s
+if not release:
+    version = full_version
+"""
+    FULLVERSION, GIT_REVISION = get_version_info()
+
+    a = open(filename, 'w')
+    try:
+        a.write(cnt % {'version': VERSION,
+                       'full_version': FULLVERSION,
+                       'git_revision': GIT_REVISION,
+                       'isrelease': str(ISRELEASED)})
+    finally:
+        a.close()
+
+
+write_version_py()
 
 with open('README.rst') as f:
     long_description = f.read()
 
 setup(
     name='dccd',
-    version=dccd.__version__,
+    version=VERSION,
     packages=find_packages(),
     author='Arthur Bernard',
     author_email='arthur.bernard.92@gmail.com',

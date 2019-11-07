@@ -4,7 +4,7 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 16:54:02
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-06 09:01:33
+# @Last modified time: 2019-11-07 16:57:46
 
 """ This is `dccd` package.
 
@@ -14,7 +14,9 @@ Kraken and Poloniex).
 
 """
 
-__version__ = "1.1.1"
+from .version import version as __version__
+
+__all__ = ['__version__']
 
 # ======= #
 #  Tools  #
@@ -60,7 +62,7 @@ from .histo_dl import *
 # from .poloniex import FromPoloniex
 
 # __all__ = time_tools.__all__
-__all__ = ['date_time']
+__all__ += ['date_time']
 __all__ += ['io']
 __all__ += ['process_data']
 # __all__ += tools.__all__
