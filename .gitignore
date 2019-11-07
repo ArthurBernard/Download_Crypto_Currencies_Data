@@ -10,6 +10,7 @@ old_scripts/
 # Ignore files
 Exemple_excel_dccd.png
 setup.cfg
+dccd/version.py
 
 # Ignore extensions
 *.pyc
