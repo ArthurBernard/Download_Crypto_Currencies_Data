@@ -134,10 +134,7 @@ class BasisWebSocket:
 
         """
         self.logger.info("Websocket open.")
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(asyncio.gather(
-            self._connect(**kwargs),
-        ))
+        asyncio.run(self._connect(**kwargs))
 
     async def on_message(self, message):
         """ On websocket display message. """

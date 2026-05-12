@@ -8,7 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `.pre-commit-config.yaml` — hooks `ruff` (lint + fix) et `ruff-format` (#XX)
+
 ### Changed
+
+- `dccd/tools/websocket.py`: `asyncio.get_event_loop().run_until_complete()` → `asyncio.run()` (#XX)
+- `dccd/tests/conftest.py`: fixtures `tmp_data_path` + mocks HTTP par exchange (Binance, Coinbase, Kraken) — les tests ne font plus d'appels réseau (#XX)
+- `pyproject.toml`: `--cov=dccd --cov-report=term-missing` ajouté dans `addopts` (#XX)
 
 ### Fixed
 
