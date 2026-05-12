@@ -17,11 +17,11 @@
 """
 
 # Import built-in packages
+import json
 import time
 
 # Import third party packages
 import requests
-import json
 
 # Import local packages
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies

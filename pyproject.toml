@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dccd"
+version = "2.0.0"
+description = "Download Crypto Currency Data from different exchanges."
+readme = "README.rst"
+license = { text = "MIT" }
+authors = [{ name = "Arthur Bernard", email = "arthur.bernard.92@gmail.com" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "requests>=2.28",
+    "openpyxl>=3.1",
+    "websockets>=12.0",
+    "scipy>=1.10",
+    "SQLAlchemy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4", "interrogate>=1.5"]
+doc = ["sphinx>=7.0", "furo", "numpydoc", "sphinx-design", "sphinx-copybutton"]
+
+[project.urls]
+Homepage = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data"
+
+[tool.setuptools.packages.find]
+include = ["dccd*"]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules --exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env"
+testpaths = ["dccd"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"dccd/**/__init__.py" = ["F401", "F403", "F405"]
+"dccd/__init__.py" = ["F401", "F403", "F405"]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-magic = true
+ignore-semiprivate = true
+ignore-private = true
+fail-under = 80
+exclude = ["dccd/tests"]

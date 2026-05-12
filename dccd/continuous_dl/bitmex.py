@@ -31,16 +31,16 @@ Low level API
 """
 
 # Built-in packages
-import time
 import asyncio
+import time
 from datetime import datetime as dt
 
-# Third party packages
-
-# Local packages
-from dccd.tools.io import IODataBase
 from dccd.continuous_dl.exchange import ContinuousDownloader
 from dccd.process_data import set_marketdepth, set_trades
+
+# Third party packages
+# Local packages
+from dccd.tools.io import IODataBase
 
 __all__ = [
     'DownloadBitmexData', 'get_data_bitmex', 'get_orderbook_bitmex',
@@ -352,8 +352,9 @@ def get_trades_bitmex(*args, time_step=60, until=None, path=None,
 
 if __name__ == '__main__':
 
-    import yaml
     import logging.config
+
+    import yaml
 
     logging_path = '/home/arthur/Data/bitfinex_data_bot/scripts/logging.ini'
     with open(logging_path, 'rb') as f:

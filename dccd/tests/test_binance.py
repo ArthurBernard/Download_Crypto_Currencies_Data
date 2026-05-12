@@ -8,11 +8,10 @@
 
 import time
 
-import pandas as pd
-
 import pytest
 
 from dccd import FromBinance as fb
+
 
 @pytest.fixture
 def init_loader():

@@ -1,10 +1,9 @@
 import time
 
-import pandas as pd
-
 import pytest
 
 from dccd import FromKraken as fk
+
 
 @pytest.fixture
 def init_loader():
