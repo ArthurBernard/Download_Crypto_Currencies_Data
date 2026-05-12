@@ -19,12 +19,14 @@
 # Import built-in packages
 
 # Import third-party packages
-import requests
 import json
+
+import requests
+
+from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 # Import local packages
 from dccd.tools.date_time import binance_interval
-from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['FromBinance']
 
@@ -88,7 +90,7 @@ class FromBinance(ImportDataCryptoCurrencies):
                   "The equivalent of US dollar is Tether USD as USDT.")
             self.fiat = fiat = 'USDT'
 
-        if crypto is 'XBT':
+        if crypto == 'XBT':
             crypto = 'BTC'
 
         ImportDataCryptoCurrencies.__init__(

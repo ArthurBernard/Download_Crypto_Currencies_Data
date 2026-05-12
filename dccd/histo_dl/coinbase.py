@@ -2,15 +2,15 @@
 # coding: utf-8
 # @Author: ArthurBernard
 # @Email: arthur.bernard.92@gmail.com
-# @Date: 2019-02-13 18:25:19
+# @Date: 2026-05-12
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-03 22:04:48
+# @Last modified time: 2026-05-12
 
-""" Objects to download historical data from GDax exchange.
+""" Objects to download historical data from Coinbase exchange.
 
-.. currentmodule:: dccd.histo_dl.gdax
+.. currentmodule:: dccd.histo_dl.coinbase
 
-.. autoclass:: FromGDax
+.. autoclass:: FromCoinbase
    :members: import_data, save, get_data
    :show-inheritance:
 
@@ -19,18 +19,20 @@
 # Import built-in packages
 
 # Import third party packages
-import requests
 import json
+
+import requests
+
+from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 # Import local packages
 from dccd.tools.date_time import TS_to_date
-from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
-__all__ = ['FromGDax']
+__all__ = ['FromCoinbase']
 
 
-class FromGDax(ImportDataCryptoCurrencies):
-    """ Class to import crypto-currencies data from the GDax exchange.
+class FromCoinbase(ImportDataCryptoCurrencies):
+    """ Class to import crypto-currencies data from the Coinbase exchange.
 
     Parameters
     ----------
@@ -49,20 +51,22 @@ class FromGDax(ImportDataCryptoCurrencies):
 
     See Also
     --------
-    FromBinance, FromKraken, FromPoloniex
+    FromBinance, FromKraken
 
     Notes
     -----
-    See GDax API documentation [1]_ for more details on parameters.
+    See Coinbase Exchange API documentation [1]_ for more details on
+    parameters. This class uses the public market data endpoint which does not
+    require authentication.
 
     References
     ----------
-    .. [1] https://docs.pro.coinbase.com/
+    .. [1] https://docs.cdp.coinbase.com/exchange/reference/exchangerestapi_getproductcandles
 
     Attributes
     ----------
     pair : str
-        Pair symbol, `crypto + fiat`.
+        Pair symbol, `crypto-fiat` (e.g. 'BTC-USD').
     start, end : int
         Timestamp to starting and ending download data.
     span : int
@@ -82,13 +86,13 @@ class FromGDax(ImportDataCryptoCurrencies):
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         """ Initialize object. """
-        if crypto is 'XBT':
+        if crypto == 'XBT':
             crypto = 'BTC'
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'GDAX', fiat, form
+            self, path, crypto, span, 'Coinbase', fiat, form
         )
         self.pair = crypto + '-' + fiat
-        self.full_path = self.path + '/GDAX/Data/Clean_Data/'
+        self.full_path = self.path + '/Coinbase/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
     def _import_data(self, start='last', end='now'):
@@ -96,11 +100,13 @@ class FromGDax(ImportDataCryptoCurrencies):
         param = {
             'start': TS_to_date(self.start - self.span),
             'end': TS_to_date(self.end),
-            'granularity': self.span
+            'granularity': self.span,
         }
         r = requests.get(
-            'https://api.gdax.com/products/{}/candles'.format(self.pair),
-            param
+            'https://api.exchange.coinbase.com/products/{}/candles'.format(
+                self.pair
+            ),
+            params=param,
         )
         text = json.loads(r.text)
         data = [{
@@ -110,13 +116,13 @@ class FromGDax(ImportDataCryptoCurrencies):
             'low': float(e[1]),
             'close': float(e[4]),
             'volume': float(e[5]),
-            'quoteVolume': float(e[4]) * float(e[5])
+            'quoteVolume': float(e[4]) * float(e[5]),
         } for e in text]
 
         return data
 
     def import_data(self, start='last', end='now'):
-        """ Download data from GDax for specific time interval.
+        """ Download data from Coinbase for specific time interval.
 
         Parameters
         ----------

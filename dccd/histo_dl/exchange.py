@@ -4,14 +4,14 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-08-30 09:25:01
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-03 21:56:51
+# @Last modified time: 2026-05-12
 
 """ Base object to download historical data from REST API.
 
 Notes
 -----
 The following object is shapped to download data from crypto-currency exchanges
-(currently only Binance, GDax, Kraken and Poloniex).
+(currently only Binance, Coinbase, Kraken).
 
 """
 
@@ -24,8 +24,7 @@ import time
 import pandas as pd
 
 # Import local packages
-from dccd.tools.date_time import date_to_TS, TS_to_date
-from dccd.tools.date_time import str_to_span, span_to_str
+from dccd.tools.date_time import TS_to_date, date_to_TS, span_to_str, str_to_span
 
 __all__ = ['ImportDataCryptoCurrencies']
 
@@ -44,7 +43,7 @@ class ImportDataCryptoCurrencies:
         - If int, number of the seconds between each observation, minimal span\
             is 60 seconds.
     platform : str
-        The platform of your choice: 'Kraken', 'Poloniex'.
+        The platform of your choice: 'Kraken', 'Coinbase'.
     fiat : str
         A fiat currency or a crypto-currency.
     form : {'xlsx', 'csv'}
@@ -56,7 +55,7 @@ class ImportDataCryptoCurrencies:
 
     See Also
     --------
-    FromBinance, FromKraken, FromGDax, FromPoloniex
+    FromBinance, FromKraken, FromCoinbase
 
     Attributes
     ----------
@@ -128,7 +127,7 @@ class ImportDataCryptoCurrencies:
             Timestamp of the last observation of you want.
 
         """
-        if start is 'last':
+        if start == 'last':
             start = self._get_last_date()
 
         elif isinstance(start, str):
@@ -137,7 +136,7 @@ class ImportDataCryptoCurrencies:
         else:
             pass
 
-        if end is 'now':
+        if end == 'now':
             end = time.time()
 
         elif isinstance(end, str):
@@ -171,7 +170,7 @@ class ImportDataCryptoCurrencies:
             - If 'D' group data by day.
 
         """
-        df = (self.last_df.append(self.df, sort=True)
+        df = (pd.concat([self.last_df, self.df], sort=True)
               .drop_duplicates(subset='TS', keep='last')
               .reset_index(drop=True)
               .drop('Date', axis=1)
@@ -181,12 +180,11 @@ class ImportDataCryptoCurrencies:
               ]))
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
         self.by_period = by_period
-        grouped = (df.set_index('TS', drop=False)
-                   .groupby(self._set_by_period, axis=0))  # .reset_index()
+        grouped = df.set_index('TS', drop=False).groupby(self._set_by_period)
         for name, group in grouped:
-            if form is 'xlsx':
+            if form == 'xlsx':
                 self._excel_format(name, form, group)
-            elif form is 'csv':
+            elif form == 'csv':
                 group.to_csv(
                     self.full_path + '/' + self._name_file(name) + '.' + form
                 )
@@ -196,32 +194,12 @@ class ImportDataCryptoCurrencies:
 
     def _excel_format(self, name, form, group):
         """ Save as excel format. """
-        writer = pd.ExcelWriter(
-            self.full_path + '/' + self._name_file(name) + '.' + form,
-            engine='xlsxwriter'
-        )
+        path = self.full_path + '/' + self._name_file(name) + '.' + form
         df_group = group.reset_index(drop=True)
-        df_group.to_excel(
-            writer, header=True, index=False, sheet_name='Sheet1'
-        )
-        work_book = writer.book
-        work_sheet = writer.sheets['Sheet1']
-        fmt = work_book.add_format(
-            {'align': 'center', 'num_format': '#,##0.00'}
-        )
-        fmt_time = work_book.add_format(
-            {'align': 'center', 'num_format': 'hh:mm:ss'}
-        )
-        fmt_date = work_book.add_format(
-            {'align': 'center', 'num_format': 'yyyy/mm/dd'}
-        )
-        fmt_TS = work_book.add_format({'align': 'center'})
-        work_sheet.set_column('A:A', 11, fmt_TS)
-        work_sheet.set_column('B:B', 10, fmt_date)
-        work_sheet.set_column('C:C', 10, fmt_time)
-        work_sheet.set_column('J:J', 17, fmt)
-        work_sheet.set_column('D:I', 13, fmt)
-        writer.save()
+        with pd.ExcelWriter(path, engine='openpyxl') as writer:
+            df_group.to_excel(
+                writer, header=True, index=False, sheet_name='Sheet1'
+            )
         return self
 
     def _sort_data(self, data):
@@ -232,7 +210,6 @@ class ImportDataCryptoCurrencies:
         df = pd.DataFrame(
             data,
             index=range((self.end - self.start) // self.span + 1),
-            # index=range(self.start, self.end, self.span)
         ).rename(columns={'date': 'TS'})
         TS = pd.DataFrame(
             list(range(self.start, self.end, self.span)),
@@ -241,7 +218,7 @@ class ImportDataCryptoCurrencies:
         df = (df.merge(TS, on='TS', how='outer', sort=False)
               .sort_values('TS')
               .reset_index(drop=True)
-              .fillna(method='pad'))
+              .ffill())
         df = df.assign(Date=pd.to_datetime(df.TS, unit='s'))
         self.df = df.assign(date=df.Date.dt.date, time=df.Date.dt.time)
         return self

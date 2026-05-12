@@ -1,8 +1,8 @@
 ====================================================
- Welcome to Download Crypto Currencies Data project 
+ Welcome to Download Crypto Currencies Data project
 ====================================================
 
-This is the documentation of ``dccd`` package, package to download crypto-currencies data from Binance, Bitfinex, Bitmex, GDax (Coinbase), Kraken and Poloniex.
+This is the documentation of ``dccd`` package, a package to download crypto-currencies data from Binance, Bitfinex, Bitmex, Coinbase, and Kraken.
 
 Installation
 ------------
@@ -15,7 +15,7 @@ From source:
 
    $ cd Download_Crypto_Currencies_Data
 
-   $ python setup.py install --user
+   $ pip install -e .
 
 Presentation
 ------------
@@ -25,7 +25,7 @@ The ``dccd`` package allow you two main methods to download data. The first one 
 - Continuous Downloader :mod:`dccd.continuous_dl`:
    Download and update continuously data (orderbook, trades tick by tick, ohlc, etc) and save it in a database. *Currently only support Bitfinex and Bitmex exchanges*.
 - Historical Downloader :mod:`dccd.histo_dl`:
-   Download historical data (ohlc, trades, etc.) and save it. *Currently only support Binance, GDax, Kraken and Poloniex exchanges*.
+   Download historical data (ohlc, trades, etc.) and save it. *Currently only support Binance, Coinbase, and Kraken exchanges*.
 
 Contents
 --------

@@ -16,11 +16,10 @@ exchanges (currently only bitfinex and bitmex).
 """
 
 # Built-in packages
-import time
 import asyncio
+import time
 
 # Third party packages
-
 # Local packages
 from dccd.tools.websocket import BasisWebSocket
 

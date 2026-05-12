@@ -9,9 +9,9 @@
 """ Connector objects to WebSockets API client to download data. """
 
 # Built-in packages
-import logging
-import json
 import asyncio
+import json
+import logging
 
 # Third party packages
 import websockets

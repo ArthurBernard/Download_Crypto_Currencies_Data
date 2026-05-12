@@ -9,16 +9,15 @@
 """ Tools and object to load, append and save differnet kind of database. """
 
 # Built-in packages
-from os import makedirs
 import os.path
-import time
 import sqlite3
+import time
+from os import makedirs
 from pickle import Pickler, Unpickler
 
 # Third-party packages
 import pandas as pd
-from sqlalchemy import create_engine
-from sqlalchemy.engine.url import URL
+from sqlalchemy import URL, create_engine
 
 # Local packages
 
@@ -125,7 +124,7 @@ class IODataBase:
         # Load data
         database = get_df(self.path, name, ext=ext)
         # Append new data
-        database = database.append(new_data, sort=False)
+        database = pd.concat([database, new_data], sort=False)
         # Save new data
         save_df(database, self.path, name, ext=ext)
 
@@ -269,7 +268,7 @@ class IODataBase:
             driver = self.method + '+' + driver
 
         # Open connection with database
-        url = URL(
+        url = URL.create(
             driver, username=username, password=password, host=host,
             port=port, database=self.path + name + ext, query=kwargs,
         )
