@@ -68,7 +68,7 @@ class IODataBase:
         makedirs(path, exist_ok=True)
 
         # Set init attribute
-        self.path = path
+        self.path = path if path.endswith('/') else path + '/'
         self.method = method.lower()
         self.parser = {
             'dataframe': self.save_as_dataframe,
@@ -307,14 +307,14 @@ class IODataBase:
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
 
-        # Create database and write the header
+        # Append data to database without header
         if os.path.exists(self.path + name + ext):
-            new_data.to_csv(self.path + name + ext, mode='w', header=True,
+            new_data.to_csv(self.path + name + ext, mode='a', header=False,
                             index=index, index_label=index_label)
 
-        # Append data to database without header
+        # Create database and write the header
         else:
-            new_data.to_csv(self.path + name + ext, mode='a', header=False,
+            new_data.to_csv(self.path + name + ext, mode='w', header=True,
                             index=index, index_label=index_label)
 
     def save_as_excel(self, new_data, name=None, sheet_name='Sheet1',

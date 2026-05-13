@@ -9,14 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `.pre-commit-config.yaml` — hooks `ruff` (lint + fix) et `ruff-format` (#7)
+- `dccd/tests/test_date_time.py`, `test_io.py`, `test_process_data.py` — couverture ≥ 80 % (#8)
+- `.github/workflows/badges.yml` — badge couverture docstrings via `interrogate` (#8)
 
 ### Changed
 
 - `dccd/tools/websocket.py`: `asyncio.get_event_loop().run_until_complete()` → `asyncio.run()` (#7)
 - `dccd/tests/conftest.py`: fixtures `tmp_data_path` + mocks HTTP par exchange (Binance, Coinbase, Kraken) — les tests ne font plus d'appels réseau (#7)
 - `pyproject.toml`: `--cov=dccd --cov-report=term-missing` ajouté dans `addopts` (#7)
+- `doc/source/conf.py` : thème scipy → furo, extensions modernisées (viewcode, sphinx_design, sphinx_copybutton) (#8)
 
 ### Fixed
+
+- `dccd/tools/io.py` : logique CSV inversée dans `save_as_csv` — le fichier existant était écrasé au lieu d'être appendé (#8)
 
 ### Removed
 
