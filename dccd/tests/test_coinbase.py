@@ -1,19 +1,25 @@
+#!/usr/bin/env python3
+# coding: utf-8
+
 import time
 
 import pytest
 
 from dccd import FromCoinbase as fc
 
+OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
 
 @pytest.fixture
-def init_loader():
-    return fc('/home/arthur/Data/Crypto_Currencies/', 'XBT', 86400, 'USD')
+def loader(tmp_data_path):
+    return fc(tmp_data_path, 'XBT', 86400, 'USD')
 
-def test_import_data(init_loader):
-    start = time.time() // 86400 * 86400 - 86400
-    data = init_loader._import_data(start=start)
-    list_keys = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+def test_import_data(loader, mock_coinbase):
+    start = int(time.time() // 86400 * 86400 - 86400)
+    data = loader._import_data(start=start)
     assert isinstance(data, list)
+    assert len(data) > 0
     assert isinstance(data[0], dict)
-    for key in list_keys:
-        assert key in data[0].keys()
+    for key in OHLC_KEYS:
+        assert key in data[0]

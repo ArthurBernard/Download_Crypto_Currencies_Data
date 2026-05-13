@@ -44,7 +44,7 @@ Homepage = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data"
 include = ["dccd*"]
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules --exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env"
+addopts = "--doctest-modules --exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing"
 testpaths = ["dccd"]
 
 [tool.ruff]
