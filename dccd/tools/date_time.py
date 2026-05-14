@@ -11,11 +11,14 @@
 """
 
 # Built-in packages
+import logging
 import time
 
 # Third party packages
 
 # Local packages
+
+_logger = logging.getLogger(__name__)
 
 __all__ = [
     'TS_to_date', 'date_to_TS', 'str_to_span', 'span_to_str',
@@ -118,8 +121,10 @@ def str_to_span(string):
     elif string.lower() in ['minutely', 'minute', '1min', 'min']:
         return 60
     else:
-        print('Error, string not understood.\nString must be "minutely",',
-              '"5 minute", "hourly", "daily" or "weekly".')
+        _logger.warning(
+            'Error, string not understood. String must be "minutely", '
+            '"5 minute", "hourly", "daily" or "weekly".'
+        )
 
 
 def span_to_str(span):
@@ -156,7 +161,7 @@ def span_to_str(span):
     elif span == 604800:
         return 'Weekly'
     else:
-        print('Error, no string correspond to this time in seconds.')
+        _logger.warning('Error, no string correspond to this time in seconds.')
 
 
 def binance_interval(interval):
@@ -190,7 +195,7 @@ def binance_interval(interval):
     elif interval == 2592000:
         return '1M'
     else:
-        print('No format allowed.')
+        _logger.warning('No format allowed.')
 
 
 if __name__ == '__main__':

@@ -109,3 +109,34 @@ def test_call_dispatches_csv(tmp_data_path):
     db(_DF, name='dispatch_test')
     import os
     assert os.path.exists(tmp_data_path + '/dispatch_test.csv')
+
+
+# --- Parquet ---
+
+def test_save_as_parquet_create(tmp_data_path):
+    pytest.importorskip('pyarrow')
+    db = IODataBase(tmp_data_path, 'parquet')
+    db.save_as_parquet(_DF, name='test')
+    result = pd.read_parquet(tmp_data_path + '/test.parquet')
+    assert list(result.columns) == ['a', 'b']
+    assert len(result) == 2
+
+
+def test_save_as_parquet_append(tmp_data_path):
+    pytest.importorskip('pyarrow')
+    db = IODataBase(tmp_data_path, 'parquet')
+    db.save_as_parquet(_DF, name='test')
+    db.save_as_parquet(_DF, name='test')
+    result = pd.read_parquet(tmp_data_path + '/test.parquet')
+    assert len(result) == 4
+
+
+# --- Polars ---
+
+def test_save_as_polars(tmp_data_path):
+    pl = pytest.importorskip('polars')
+    db = IODataBase(tmp_data_path, 'polars')
+    db.save_as_polars(_DF, name='test')
+    result = pl.read_parquet(tmp_data_path + '/test.parquet')
+    assert 'a' in result.columns
+    assert len(result) == 2

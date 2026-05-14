@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.pre-commit-config.yaml` — hooks `ruff` (lint + fix) et `ruff-format` (#7)
 - `dccd/tests/test_date_time.py`, `test_io.py`, `test_process_data.py` — couverture ≥ 80 % (#8)
 - `.github/workflows/badges.yml` — badge couverture docstrings via `interrogate` (#8)
+- `dccd/histo_dl/bybit.py` — `FromBybit` : téléchargement historique Bybit v5 REST (#9)
+- `dccd/continuous_dl/bybit.py` — `DownloadBybitData` : stream WebSocket Bybit v5 (#9)
+- `dccd/histo_dl/okx.py` — `FromOKX` : téléchargement historique OKX v5 REST (#9)
+- `dccd/models.py` — `OHLCBar`, `Trade`, `OrderBookEntry` : validation pydantic des réponses API (#9)
+- `IODataBase.save_as_parquet` — format Parquet via pyarrow (optionnel `dccd[io]`) (#9)
+- `IODataBase.save_as_polars` — format Polars, Parquet sous le capot (optionnel `dccd[io]`) (#9)
+- `ImportDataCryptoCurrencies.get_data(format='polars')` — retourne un `pl.DataFrame` (#9)
 
 ### Changed
 
@@ -18,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dccd/tests/conftest.py`: fixtures `tmp_data_path` + mocks HTTP par exchange (Binance, Coinbase, Kraken) — les tests ne font plus d'appels réseau (#7)
 - `pyproject.toml`: `--cov=dccd --cov-report=term-missing` ajouté dans `addopts` (#7)
 - `doc/source/conf.py` : thème scipy → furo, extensions modernisées (viewcode, sphinx_design, sphinx_copybutton) (#8)
+- `dccd/histo_dl/binance.py` : API v1 → v3 (#9)
+- `dccd/histo_dl/exchange.py` : `_fetch()` avec retry tenacity sur HTTP 429 (#9)
+- `dccd/tools/websocket.py` : reconnexion automatique avec `max_retries` et `retry_delay` (#9)
+- `print()` remplacés par `logging` dans `exchange.py`, `binance.py`, `date_time.py` (#9)
 
 ### Fixed
 

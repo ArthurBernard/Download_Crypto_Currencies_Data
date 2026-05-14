@@ -12,6 +12,7 @@
 import asyncio
 import json
 import logging
+import time
 
 # Third party packages
 import websockets
@@ -58,12 +59,14 @@ class BasisWebSocket:
     ws = False
     is_connect = False
 
-    def __init__(self, host, conn={}, subs={}):
+    def __init__(self, host, conn={}, subs={}, max_retries=5, retry_delay=5):
         """ Initialize object. """
         # Set websocket variables
         self.host = host
         self.conn_para = conn
         self.subs_data = subs
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
         # Set logger
         self.logger = logging.getLogger(__name__)
@@ -134,7 +137,19 @@ class BasisWebSocket:
 
         """
         self.logger.info("Websocket open.")
-        asyncio.run(self._connect(**kwargs))
+        for attempt in range(self.max_retries):
+            try:
+                asyncio.run(self._connect(**kwargs))
+                break
+            except Exception as exc:
+                self.logger.warning(
+                    f"Reconnect attempt {attempt + 1}/{self.max_retries}: {exc}"
+                )
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+                else:
+                    self.logger.error("Max retries reached, giving up.")
+                    raise
 
     async def on_message(self, message):
         """ On websocket display message. """

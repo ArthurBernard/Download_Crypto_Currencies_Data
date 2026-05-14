@@ -16,17 +16,26 @@ The following object is shapped to download data from crypto-currency exchanges
 """
 
 # Import built-in packages
+import logging
 import os
 import pathlib
 import time
 
 # Import extern packages
 import pandas as pd
+import requests
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 # Import local packages
+from dccd.models import OHLCBar
 from dccd.tools.date_time import TS_to_date, date_to_TS, span_to_str, str_to_span
 
 __all__ = ['ImportDataCryptoCurrencies']
+
+
+def _should_retry(exc):
+    return (isinstance(exc, requests.HTTPError)
+            and exc.response.status_code == 429)
 
 
 class ImportDataCryptoCurrencies:
@@ -80,6 +89,7 @@ class ImportDataCryptoCurrencies:
 
     def __init__(self, path, crypto, span, platform, fiat='EUR', form='xlsx'):
         """ Initialize object. """
+        self.logger = logging.getLogger(__name__)
         self.path = path
         self.crypto = crypto
         self.span, self.per = self._period(span)
@@ -89,6 +99,16 @@ class ImportDataCryptoCurrencies:
         self.full_path += str(self.per) + '/' + self.pair
         self.last_df = pd.DataFrame()
         self.form = form
+
+    @retry(retry=retry_if_exception(_should_retry),
+           wait=wait_exponential(multiplier=1, min=1, max=60),
+           stop=stop_after_attempt(5))
+    def _fetch(self, url, params):
+        """ Fetch URL with automatic retry on HTTP 429. """
+        r = requests.get(url, params)
+        if r.status_code == 429:
+            r.raise_for_status()
+        return r
 
     def _get_last_date(self):
         """ Find the last observation imported.
@@ -111,8 +131,10 @@ class ImportDataCryptoCurrencies:
                 return self.last_df.TS.iloc[-1]
 
             else:
-                print('Last saved file is in format not allowing.',
-                      'Start at 1st January 2012.')
+                self.logger.warning(
+                    'Last saved file is in format not allowing. '
+                    'Start at 1st January 2012.'
+                )
 
                 return 1325376000
 
@@ -189,7 +211,7 @@ class ImportDataCryptoCurrencies:
                     self.full_path + '/' + self._name_file(name) + '.' + form
                 )
             else:
-                print('Not allowing fomat')
+                self.logger.warning('Not allowing format')
         return self
 
     def _excel_format(self, name, form, group):
@@ -207,6 +229,7 @@ class ImportDataCryptoCurrencies:
 
         TODO : to finish
         """
+        data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
         df = pd.DataFrame(
             data,
             index=range((self.end - self.start) // self.span + 1),
@@ -245,15 +268,23 @@ class ImportDataCryptoCurrencies:
 
         return self._sort_data(data)
 
-    def get_data(self):
-        """ Print the dataframe.
+    def get_data(self, format='pandas'):
+        """ Return the downloaded data.
+
+        Parameters
+        ----------
+        format : {'pandas', 'polars'}, optional
+            Output format. Default is 'pandas'.
 
         Returns
         -------
-        Data : pd.DataFrame
-            Current data.
+        pandas.DataFrame or polars.DataFrame
+            Current data in the requested format.
 
         """
+        if format == 'polars':
+            import polars as pl
+            return pl.from_pandas(self.df)
         return self.df
 
     def _period(self, span):
@@ -262,8 +293,8 @@ class ImportDataCryptoCurrencies:
         elif type(span) is int:
             return span, span_to_str(span)
         else:
-            print(
-                "Error, span don't have the appropiate format",
+            self.logger.warning(
+                "Error, span don't have the appropriate format "
                 "as string or integer (seconds)"
             )
 

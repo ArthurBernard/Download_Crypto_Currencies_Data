@@ -33,6 +33,7 @@ __all__ = ['__version__']
 from . import continuous_dl, histo_dl
 from .continuous_dl import *
 from .histo_dl import *
+from .models import OHLCBar, OrderBookEntry, Trade
 from .tools import date_time, io
 
 __all__ += ['date_time']
