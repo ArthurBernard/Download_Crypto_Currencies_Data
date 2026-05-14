@@ -11,11 +11,14 @@
 """
 
 # Built-in packages
+import logging
 import time
 
 # Third party packages
 
 # Local packages
+
+_logger = logging.getLogger(__name__)
 
 __all__ = [
     'TS_to_date', 'date_to_TS', 'str_to_span', 'span_to_str',
@@ -23,7 +26,7 @@ __all__ = [
 ]
 
 
-def TS_to_date(TS, form='%Y-%m-%d %H:%M:%S', local=True):
+def TS_to_date(TS: int, form: str = '%Y-%m-%d %H:%M:%S', local: bool = True) -> str:
     """ Convert timestamp to date in specified format.
 
     Parameters
@@ -53,7 +56,7 @@ def TS_to_date(TS, form='%Y-%m-%d %H:%M:%S', local=True):
     return time.strftime(form, date)
 
 
-def date_to_TS(date, form='%Y-%m-%d %H:%M:%S'):
+def date_to_TS(date: str, form: str = '%Y-%m-%d %H:%M:%S') -> int:
     """ Use your local time-zone to convert date in specific format to
     timestamp.
 
@@ -83,7 +86,7 @@ def date_to_TS(date, form='%Y-%m-%d %H:%M:%S'):
 #    return dt.datetime(int(a[0]), int(a[1]), int(a[2]))
 
 
-def str_to_span(string):
+def str_to_span(string: str) -> int | None:
     """ Return the equivalent interval time in seconds.
 
     Parameters
@@ -118,11 +121,14 @@ def str_to_span(string):
     elif string.lower() in ['minutely', 'minute', '1min', 'min']:
         return 60
     else:
-        print('Error, string not understood.\nString must be "minutely",',
-              '"5 minute", "hourly", "daily" or "weekly".')
+        _logger.warning(
+            'Error, string not understood. String must be "minutely", '
+            '"5 minute", "hourly", "daily" or "weekly".'
+        )
+        return None
 
 
-def span_to_str(span):
+def span_to_str(span: int) -> str | None:
     """ Return the time periodicity.
 
     Parameters
@@ -156,10 +162,11 @@ def span_to_str(span):
     elif span == 604800:
         return 'Weekly'
     else:
-        print('Error, no string correspond to this time in seconds.')
+        _logger.warning('Error, no string correspond to this time in seconds.')
+        return None
 
 
-def binance_interval(interval):
+def binance_interval(interval: int) -> str | None:
     """ Return the time interval in the specific format allowed by Binance.
 
     Parameters
@@ -190,7 +197,8 @@ def binance_interval(interval):
     elif interval == 2592000:
         return '1M'
     else:
-        print('No format allowed.')
+        _logger.warning('No format allowed.')
+        return None
 
 
 if __name__ == '__main__':

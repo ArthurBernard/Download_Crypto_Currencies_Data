@@ -19,3 +19,18 @@ dccd/version.py
 __pycache__/
 .cache/
 .pytest_cache/
+
+# Local only (not committed)
+CLAUDE.md
+TODO.md
+todo/
+done/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Sphinx generated files
+doc/source/generated/
+doc/build/

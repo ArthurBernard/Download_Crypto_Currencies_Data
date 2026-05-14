@@ -16,11 +16,12 @@ exchanges (currently only bitfinex and bitmex).
 """
 
 # Built-in packages
-import time
 import asyncio
+import time
+from collections.abc import Callable
+from typing import Any, AsyncIterator
 
 # Third party packages
-
 # Local packages
 from dccd.tools.websocket import BasisWebSocket
 
@@ -75,7 +76,7 @@ class ContinuousDownloader(BasisWebSocket):
 
     """
 
-    _parser_exchange = {
+    _parser_exchange: dict[str, Any] = {
         'binance': {
             'host': 'wss://stream.binance.com:9443/ws',
             'subs': {},  # {'stream': None},
@@ -94,9 +95,9 @@ class ContinuousDownloader(BasisWebSocket):
             'subs': {'op': 'subscribe'},  # , 'args': None},
         },
     }
-    _parser_data = {}
+    _parser_data: dict[str, Callable[..., Any]] = {}
 
-    def __init__(self, host, time_step=60, STOP=3600, **kwargs):
+    def __init__(self, host: str, time_step: int = 60, STOP: int = 3600, **kwargs: Any) -> None:
         """ Initialize object. """
         if host.lower() in ContinuousDownloader._parser_exchange.keys():
             BasisWebSocket.__init__(self, **self._parser_exchange[host])
@@ -110,15 +111,15 @@ class ContinuousDownloader(BasisWebSocket):
         self.until = time.time() + STOP if STOP > 0 else time.time() * 10
 
         # Set data
-        self._data = {}
+        self._data: dict[int, list[Any]] = {}
 
-    def __aiter__(self):
+    def __aiter__(self) -> AsyncIterator[list[Any] | None]:
         """ Set iterative method. """
         self.logger.debug('Starting generator websocket')
 
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> list[Any] | None:
         """ Iterate object. """
         if time.time() > self.until:
             self.logger.info('StopIteration')
@@ -142,7 +143,7 @@ class ContinuousDownloader(BasisWebSocket):
 
             return None
 
-    async def _loop(self):
+    async def _loop(self) -> None:
         """ Loop to process and save data into database. """
         await self.wait_that('_data')
 
@@ -169,11 +170,11 @@ class ContinuousDownloader(BasisWebSocket):
 
                 return
 
-    async def on_message(self, data):
+    async def on_message(self, data: dict[str, Any] | list[Any]) -> None:
         """ Parse any data received from the websocket. """
         self._raw_parser(data)
 
-    def _raw_parser(self, data):
+    def _raw_parser(self, data: Any) -> None:
         # Set all data to a list
         if self.t in self._data.keys():
             self._data[self.t] += [data]
@@ -181,11 +182,11 @@ class ContinuousDownloader(BasisWebSocket):
         else:
             self._data[self.t] = [data]
 
-    def _current_timestep(self):
+    def _current_timestep(self) -> int:
         """ Set current time rounded by `timestep`. """
         return int((time.time() + 0.001) // self.ts * self.ts)
 
-    def set_process_data(self, func, **kwargs):
+    def set_process_data(self, func: Callable[..., Any], **kwargs: Any) -> None:
         """ Set processing function.
 
         Parameters
@@ -201,7 +202,7 @@ class ContinuousDownloader(BasisWebSocket):
         self.process_data = func
         self.process_params = kwargs
 
-    def set_saver(self, call, **kwargs):
+    def set_saver(self, call: Callable[..., Any], **kwargs: Any) -> None:
         """ Set saver object to save data or update a database.
 
         Parameters
@@ -217,7 +218,7 @@ class ContinuousDownloader(BasisWebSocket):
         self.saver = call
         self.io_params = kwargs
 
-    def _parser_debug(self, data, level=0):
+    def _parser_debug(self, data: Any, level: int = 0) -> None:
         # Function to debug and understand data structure
         if level == 0:
             self._data[self.t] = data
@@ -235,7 +236,7 @@ class ContinuousDownloader(BasisWebSocket):
         else:
             self.logger.debug('Data is {}: {}'.format(type(data), data))
 
-    def get_parser(self, key):
+    def get_parser(self, key: str) -> Callable[..., Any]:
         """ Get allowed data parser.
 
         Parameters

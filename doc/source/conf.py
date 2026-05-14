@@ -16,18 +16,7 @@ from datetime import date
 import re
 # import glob
 
-# Third party packages
-# from sphinx.ext.autosummary import _import_by_name
-# from numpydoc.docscrape import NumpyDocString
-# from numpydoc.docscrape_sphinx import SphinxDocString
-# import numpydoc.docscrape as np_docscrape
-import sphinx
-
-# Check Sphinx version
-if sphinx.__version__ < "1.6":
-    raise RuntimeError("Sphinx 1.6 or newer required")
-
-needs_sphinx = '1.6'
+needs_sphinx = '7.0'
 
 
 class Mock(MagicMock):
@@ -51,11 +40,17 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.coverage',
+    'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
     'sphinx.ext.intersphinx',
     'numpydoc',
-    'matplotlib.sphinxext.plot_directive',
+    'sphinx_design',
+    'sphinx_copybutton',
 ]
+
+# sphinx-copybutton: strip prompts when copying code blocks
+copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_is_regexp = True
 
 project = 'Download Crypto Currencies Data'
 copyright = '2017-{}, Arthur Bernard'.format(date.today().year)
@@ -72,36 +67,30 @@ source_suffix = '.rst'
 master_doc = 'index'
 pygments_style = 'sphinx'  # Style of code source
 
-add_function_parentheses = False  # Parentheses are appended to function
-add_module_names = True  # Module names are prepended to all object name
+add_function_parentheses = False
+add_module_names = False
 
 # --------------------------------------------------------------------------- #
 #                                HTML config                                  #
 # --------------------------------------------------------------------------- #
 
-themedir = os.path.join(os.pardir, 'scipy-sphinx-theme', '_theme')
-html_theme = 'scipy'
-html_theme_path = [themedir]
-
+html_theme = 'furo'
 html_theme_options = {
-    'edit_link': True,
-    'sidebar': 'left',
-    'scipy_org_logo': False,
-    'navigation_links': True,
-    'rootlinks': [
-        (
-            'https://github.com/ArthurBernard/Download_Crypto_Currencies_Data',
-            'Download_Crypto_Currencies_Data'
-        ),
-        (
-            'https://download-crypto-currencies-data.readthedocs.io',
-            'Docs'
-        ),
-    ]
+    "source_repository": "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/",
+    "source_branch": "master",
+    "source_directory": "doc/source/",
 }
-html_sidebars = {'index': ['searchbox.html', 'indexsidebar.html']}
 html_title = '{} v{} Reference Guide'.format(project, version)
 html_static_path = ['_static']
+html_css_files = ['custom.css']
+
+html_context = {
+    "display_github": True,
+    "github_user": "ArthurBernard",
+    "github_repo": "Download_Crypto_Currencies_Data",
+    "github_version": "master",
+    "conf_py_path": "/doc/source/",
+}
 
 html_domain_indices = True
 html_copy_source = False
@@ -127,6 +116,17 @@ autosummary_generate = True
 #                               Autodoc config                                #
 # --------------------------------------------------------------------------- #
 
-autodoc_default_options = {
-    'inherited-members': None,
-}
+autodoc_default_options = {}
+autodoc_inherit_docstrings = False
+autodoc_typehints = 'none'
+
+# --------------------------------------------------------------------------- #
+#                              Numpydoc config                                #
+# --------------------------------------------------------------------------- #
+
+# Disable numpydoc's auto-generated method tables to avoid stub-file warnings.
+numpydoc_show_class_members = False
+numpydoc_class_members_toctree = False
+
+# Suppress citation duplicate warnings from autosummary
+suppress_warnings = ['ref.citation']

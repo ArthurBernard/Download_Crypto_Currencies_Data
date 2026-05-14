@@ -31,16 +31,16 @@ Low level API
 """
 
 # Built-in packages
-import time
 import asyncio
 import logging
+import time
+
+from dccd.continuous_dl.exchange import ContinuousDownloader
+from dccd.process_data import set_marketdepth, set_ohlc, set_orders, set_trades
 
 # Third party packages
-
 # Local packages
 from dccd.tools.io import IODataBase
-from dccd.continuous_dl.exchange import ContinuousDownloader
-from dccd.process_data import set_marketdepth, set_orders, set_trades, set_ohlc
 
 __all__ = [
     'DownloadBitfinexData', 'get_data_bitfinex', 'get_orderbook_bitfinex',
@@ -400,8 +400,9 @@ def get_ohlc_bitfinex(symbol, time_step=60, until=None, path=None,
 
 if __name__ == '__main__':
 
-    import yaml
     import logging.config
+
+    import yaml
 
     logging_path = '/home/arthur/Data/bitfinex_data_bot/scripts/logging.ini'
     with open(logging_path, 'rb') as f:

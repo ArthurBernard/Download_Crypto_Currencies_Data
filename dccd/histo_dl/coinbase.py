@@ -2,36 +2,35 @@
 # coding: utf-8
 # @Author: ArthurBernard
 # @Email: arthur.bernard.92@gmail.com
-# @Date: 2019-02-13 18:26:20
+# @Date: 2026-05-12
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-03 22:04:22
+# @Last modified time: 2026-05-12
 
-""" Objects to download historical data from Binance exchange.
+""" Objects to download historical data from Coinbase exchange.
 
-.. currentmodule:: dccd.histo_dl.binance
+.. currentmodule:: dccd.histo_dl.coinbase
 
-.. autoclass:: FromBinance
+.. autoclass:: FromCoinbase
    :members: import_data, save, get_data
    :show-inheritance:
 
 """
 
 # Import built-in packages
-import logging
 
-# Import third-party packages
+# Import third party packages
+
+
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 # Import local packages
-from dccd.tools.date_time import binance_interval
+from dccd.tools.date_time import TS_to_date
 
-__all__ = ['FromBinance']
-
-_logger = logging.getLogger(__name__)
+__all__ = ['FromCoinbase']
 
 
-class FromBinance(ImportDataCryptoCurrencies):
-    """ Class to import crypto-currencies data from the Binance exchange.
+class FromCoinbase(ImportDataCryptoCurrencies):
+    """ Class to import crypto-currencies data from the Coinbase exchange.
 
     Parameters
     ----------
@@ -44,27 +43,28 @@ class FromBinance(ImportDataCryptoCurrencies):
         - If int, number of the seconds between each observation, minimal span\
             is 60 seconds.
     fiat : str
-        A fiat currency or a crypto-currency. Binance don't allow fiat
-        currencies, but USD theter.
+        A fiat currency or a crypto-currency.
     form : {'xlsx', 'csv'}
         Your favorit format. Only 'xlsx' and 'csv' for the moment.
 
     See Also
     --------
-    FromGDax, FromKraken, FromPoloniex
+    FromBinance, FromKraken
 
     Notes
     -----
-    See Binance API documentation [1]_ for more details on parameters.
+    See Coinbase Exchange API documentation [1]_ for more details on
+    parameters. This class uses the public market data endpoint which does not
+    require authentication.
 
     References
     ----------
-    .. [1] https://github.com/binance-exchange/binance-official-api-docs
+    .. [1] https://docs.cdp.coinbase.com/exchange/reference/exchangerestapi_getproductcandles
 
     Attributes
     ----------
     pair : str
-        Pair symbol, `crypto + fiat`.
+        Pair symbol, `crypto-fiat` (e.g. 'BTC-USD').
     start, end : int
         Timestamp to starting and ending download data.
     span : int
@@ -84,51 +84,43 @@ class FromBinance(ImportDataCryptoCurrencies):
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         """ Initialize object. """
-        if fiat in ['EUR', 'USD']:
-            _logger.warning(
-                "Binance don't allow fiat currencies. "
-                "The equivalent of US dollar is Tether USD as USDT."
-            )
-            self.fiat = fiat = 'USDT'
-
         if crypto == 'XBT':
             crypto = 'BTC'
-
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Binance', fiat, form
+            self, path, crypto, span, 'Coinbase', fiat, form
         )
-
-        self.pair = crypto + fiat
-        self.full_path = self.path + '/Binance/Data/Clean_Data/'
+        self.pair = crypto + '-' + fiat
+        self.full_path = self.path + '/Coinbase/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
     def _import_data(self, start='last', end='now'):
         self.start, self.end = self._set_time(start, end)
-
         param = {
-            'symbol': self.pair,
-            'startTime': self.start * 1000,
-            'endTime': self.end * 1000,
-            'interval': binance_interval(self.span),
+            'start': TS_to_date(self.start - self.span),
+            'end': TS_to_date(self.end),
+            'granularity': self.span,
         }
-
-        r = self._fetch('https://api.binance.com/api/v3/klines', param)
+        r = self._fetch(
+            'https://api.exchange.coinbase.com/products/{}/candles'.format(
+                self.pair
+            ),
+            param,
+        )
         text = r.json()
-
         data = [{
-            'date': float(e[0] / 1000),
-            'open': float(e[1]),
+            'date': float(e[0]),
+            'open': float(e[3]),
             'high': float(e[2]),
-            'low': float(e[3]),
+            'low': float(e[1]),
             'close': float(e[4]),
             'volume': float(e[5]),
-            'quoteVolume': float(e[7])
+            'quoteVolume': float(e[4]) * float(e[5]),
         } for e in text]
 
         return data
 
     def import_data(self, start='last', end='now'):
-        """ Download data from Binance for specific time interval.
+        """ Download data from Coinbase for specific time interval.
 
         Parameters
         ----------

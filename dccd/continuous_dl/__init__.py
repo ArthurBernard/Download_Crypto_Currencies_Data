@@ -28,12 +28,12 @@ exchanges.*
 # Third party packages
 
 # Local packages
-from . import exchange
-from . import bitfinex
+from . import bitfinex, bitmex, bybit, exchange
 from .bitfinex import *
-from . import bitmex
 from .bitmex import *
+from .bybit import *
 
 __all__ = ['exchange']
 __all__ += bitfinex.__all__
 __all__ += bitmex.__all__
+__all__ += bybit.__all__

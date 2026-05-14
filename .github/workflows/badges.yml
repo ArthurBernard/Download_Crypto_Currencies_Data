@@ -1,0 +1,31 @@
+name: Badges
+
+on:
+  push:
+    branches: [develop, master]
+  workflow_dispatch:
+
+jobs:
+  docstring-coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install interrogate
+      - run: >
+          interrogate dccd/
+          --generate-badge .
+          --ignore-init-method
+          --ignore-magic
+          --ignore-semiprivate
+          --ignore-private
+          --exclude dccd/tests
+          --fail-under 0
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update docstring coverage badge"
+          file_pattern: "interrogate_badge_output.svg"

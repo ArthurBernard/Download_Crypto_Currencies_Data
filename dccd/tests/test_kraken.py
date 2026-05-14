@@ -1,22 +1,25 @@
-import time
+#!/usr/bin/env python3
+# coding: utf-8
 
-import pandas as pd
+import time
 
 import pytest
 
 from dccd import FromKraken as fk
 
-@pytest.fixture
-def init_loader():
-    return fk('/home/arthur/Data/Crypto_Currencies/', 'XBT', 86400, 'USD')
+OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
 
-def test_import_data(init_loader):
-    start = time.time() // 86400 * 86400 - 86400
-    data = init_loader._import_data(start=start)
-    list_keys = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+@pytest.fixture
+def loader(tmp_data_path):
+    return fk(tmp_data_path, 'XBT', 86400, 'USD')
+
+
+def test_import_data(loader, mock_kraken):
+    start = int(time.time() // 86400 * 86400 - 86400)
+    data = loader._import_data(start=start)
     assert isinstance(data, list)
+    assert len(data) > 0
     assert isinstance(data[0], dict)
-    for key in list_keys:
-        assert key in data[0].keys()
-    # assert isinstance(data[0]['date'], int) # /! date is float
-    # assert data[0]['date'] == start # /! date is float
+    for key in OHLC_KEYS:
+        assert key in data[0]

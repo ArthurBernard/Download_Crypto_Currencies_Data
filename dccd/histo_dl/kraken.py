@@ -20,9 +20,6 @@
 import time
 
 # Import third party packages
-import requests
-import json
-
 # Import local packages
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
@@ -106,8 +103,8 @@ class FromKraken(ImportDataCryptoCurrencies):
             'since': self.start - self.span
         }
 
-        r = requests.get('https://api.kraken.com/0/public/OHLC', param)
-        text = json.loads(r.text)['result'][self.pair]
+        r = self._fetch('https://api.kraken.com/0/public/OHLC', param)
+        text = r.json()['result'][self.pair]
 
         data = [{
             'date': float(e[0]),
