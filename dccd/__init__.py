@@ -9,8 +9,8 @@
 """ This is `dccd` package.
 
 It allows you to download data (prices, volumes, trades, orderbooks, etc.)
-from crypto-currency exchanges (currently Binance, Bitfinex, Bitmex, Coinbase,
-and Kraken).
+from crypto-currency exchanges (Binance, Coinbase, Kraken, Bybit, OKX for
+historical data; Bitfinex, Bitmex, Bybit for real-time streaming).
 
 """
 

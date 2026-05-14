@@ -46,7 +46,7 @@ class FromKraken(ImportDataCryptoCurrencies):
 
     See Also
     --------
-    FromBinance, FromGDax, FromPoloniex
+    FromBinance, FromCoinbase, FromBybit, FromOKX
 
     Notes
     -----

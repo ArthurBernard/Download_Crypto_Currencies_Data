@@ -1,48 +1,29 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" Simple exemple how to use the 'download crypto currencies data'
-package.
+""" Simple example showing how to use the historical downloader.
 
-The class 'FromKraken' download data from the kraken exchange,
-similarly FromExchange download data from exchange. For each exchange
-the same methods are allow but sometime different parameters.
+Exchange classes (FromBinance, FromKraken, FromCoinbase, FromBybit, FromOKX)
+share the same interface: initialise with a path, crypto symbol, and time
+span in seconds, then call import_data() → save() → get_data().
 
-Initialization with some parameters are a 'path' where to save data,
-a 'crypto-currencies' of your choice, and an 'intervall time' (refer
-to docstring of each classes to know which intervall is allow to each
-echange). Optional parameters are a 'fiat currency' (default is 'USD')
-but can also be a crypto-currency, and a 'format' how to save the data
-(only xlsx is allow for the moment).
-
-The method 'import_data' download data from the exchange, parameters
-are a 'start' the first observation (timestamp) and an 'end' the last
-observation (timestamp) save the data in the specific folder and
-format.
-If start is the string 'last' the programm try to find the last data
-download if it exist and update the data base.
-If end is the string 'now' end will be the current time.
-start and end can also be date format 'yyyy-mm-dd hh:mm:ss' as string.
-
-The method 'save' without parameter saves the data downloaded.
-
-The method 'get_data' without parameter returns the data downloaded as
-pd.DataFrame.
+start / end accept:
+  - a timestamp (int)
+  - a date string 'yyyy-mm-dd hh:mm:ss'
+  - 'last' (resume from last saved point) / 'now' (current time)
 
 """
 
-import time
+from dccd.histo_dl import FromBinance
 
-from dccd import FromPoloniex as pk
+# Download hourly BTC/USDT data for 2024
+obj = FromBinance('/home/arthur/Data/Crypto_Currencies/', 'BTC', 3600, fiat='USDT')
 
-# Initialization of the object
-xbtusd = pk('/home/arthur/Data/Crypto_Currencies/', 'XBT', 86400, fiat='USD')
+obj.import_data(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
+obj.save(form='parquet')
 
-start = '2018-03-01 00:00:00'  # date format 'yyyy-mm-dd hh:mm:ss' as string
-end = time.time() - 86400 * 100  # date format timestamp of 5 days before today
+df = obj.get_data()
+print(df.head())
 
-# First import
-xbtusd.import_data(start=start, end=end).save(form='csv').get_data()
-
-# Update the data base
-xbtusd.import_data(start='last', end='now').save(form='xlsx').get_data()
+# Incremental update (resumes from last saved timestamp)
+obj.import_data(start='last', end='now').save(form='parquet')
