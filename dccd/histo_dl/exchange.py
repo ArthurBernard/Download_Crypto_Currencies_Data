@@ -15,11 +15,14 @@ The following object is shapped to download data from crypto-currency exchanges
 
 """
 
+from __future__ import annotations
+
 # Import built-in packages
 import logging
 import os
 import pathlib
 import time
+from typing import TYPE_CHECKING, Any
 
 # Import extern packages
 import pandas as pd
@@ -29,6 +32,9 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 # Import local packages
 from dccd.models import OHLCBar
 from dccd.tools.date_time import TS_to_date, date_to_TS, span_to_str, str_to_span
+
+if TYPE_CHECKING:
+    import polars as pl
 
 __all__ = ['ImportDataCryptoCurrencies']
 
@@ -87,7 +93,7 @@ class ImportDataCryptoCurrencies:
 
     """
 
-    def __init__(self, path, crypto, span, platform, fiat='EUR', form='xlsx'):
+    def __init__(self, path: str, crypto: str, span: int | str, platform: str, fiat: str = 'EUR', form: str = 'xlsx') -> None:
         """ Initialize object. """
         self.logger = logging.getLogger(__name__)
         self.path = path
@@ -99,18 +105,20 @@ class ImportDataCryptoCurrencies:
         self.full_path += str(self.per) + '/' + self.pair
         self.last_df = pd.DataFrame()
         self.form = form
+        self.start: int = 0
+        self.end: int = 0
 
     @retry(retry=retry_if_exception(_should_retry),
            wait=wait_exponential(multiplier=1, min=1, max=60),
            stop=stop_after_attempt(5))
-    def _fetch(self, url, params):
+    def _fetch(self, url: str, params: dict[str, Any]) -> requests.Response:
         """ Fetch URL with automatic retry on HTTP 429. """
         r = requests.get(url, params)
         if r.status_code == 429:
             r.raise_for_status()
         return r
 
-    def _get_last_date(self):
+    def _get_last_date(self) -> int:
         """ Find the last observation imported.
 
         TODO : to finish
@@ -138,7 +146,7 @@ class ImportDataCryptoCurrencies:
 
                 return 1325376000
 
-    def _set_time(self, start, end):
+    def _set_time(self, start: int | str, end: int | str) -> tuple[int, int]:
         """ Set the end and start in timestamp if is not yet.
 
         Parameters
@@ -149,34 +157,33 @@ class ImportDataCryptoCurrencies:
             Timestamp of the last observation of you want.
 
         """
+        _start: int | float
+        _end: int | float
+
         if start == 'last':
-            start = self._get_last_date()
-
+            _start = self._get_last_date()
         elif isinstance(start, str):
-            start = date_to_TS(start)
-
+            _start = date_to_TS(start)
         else:
-            pass
+            _start = start
 
         if end == 'now':
-            end = time.time()
-
+            _end = time.time()
         elif isinstance(end, str):
-            end = date_to_TS(end)
-
+            _end = date_to_TS(end)
         else:
-            pass
+            _end = end
 
-        return int((start // self.span) * self.span), \
-            int((end // self.span) * self.span)
+        return int((_start // self.span) * self.span), \
+            int((_end // self.span) * self.span)
 
-    def _set_by_period(self, TS):
+    def _set_by_period(self, TS: int) -> str:
         return TS_to_date(TS, form='%' + self.by_period)
 
-    def _name_file(self, date):
+    def _name_file(self, date: str) -> str:
         return self.per + '_of_' + self.crypto + self.fiat + '_in_' + date
 
-    def save(self, form='xlsx', by_period='Y'):
+    def save(self, form: str = 'xlsx', by_period: str = 'Y') -> ImportDataCryptoCurrencies:
         """ Save data by period (default is year) in the corresponding format
         and file.
 
@@ -214,7 +221,7 @@ class ImportDataCryptoCurrencies:
                 self.logger.warning('Not allowing format')
         return self
 
-    def _excel_format(self, name, form, group):
+    def _excel_format(self, name: str, form: str, group: pd.DataFrame) -> ImportDataCryptoCurrencies:
         """ Save as excel format. """
         path = self.full_path + '/' + self._name_file(name) + '.' + form
         df_group = group.reset_index(drop=True)
@@ -224,7 +231,7 @@ class ImportDataCryptoCurrencies:
             )
         return self
 
-    def _sort_data(self, data):
+    def _sort_data(self, data: list[dict[str, Any]]) -> ImportDataCryptoCurrencies:
         """ Clean and sort the data.
 
         TODO : to finish
@@ -246,7 +253,7 @@ class ImportDataCryptoCurrencies:
         self.df = df.assign(date=df.Date.dt.date, time=df.Date.dt.time)
         return self
 
-    def import_data(self, start='last', end='now'):
+    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data for specific time interval.
 
         Parameters
@@ -268,7 +275,7 @@ class ImportDataCryptoCurrencies:
 
         return self._sort_data(data)
 
-    def get_data(self, format='pandas'):
+    def get_data(self, format: str = 'pandas') -> pd.DataFrame | pl.DataFrame:
         """ Return the downloaded data.
 
         Parameters
@@ -287,18 +294,25 @@ class ImportDataCryptoCurrencies:
             return pl.from_pandas(self.df)
         return self.df
 
-    def _period(self, span):
+    def _period(self, span: int | str) -> tuple[int, str]:
         if type(span) is str:
-            return str_to_span(span), span
+            seconds = str_to_span(span)
+            if seconds is None:
+                raise ValueError(f"Unknown span string: {span!r}")
+            return seconds, span
         elif type(span) is int:
-            return span, span_to_str(span)
+            label = span_to_str(span)
+            if label is None:
+                raise ValueError(f"Unknown span value: {span}")
+            return span, label
         else:
-            self.logger.warning(
-                "Error, span don't have the appropriate format "
-                "as string or integer (seconds)"
-            )
+            raise TypeError("span must be str or int")
 
-    def set_hierarchy(self, liste):
+    def _import_data(self, start: int | str, end: int | str) -> list[dict[str, Any]]:
+        """ Fetch raw data from the exchange (implemented by subclasses). """
+        raise NotImplementedError
+
+    def set_hierarchy(self, liste: list[str]) -> None:
         """ Set the specific hierarchy of the files where will save your data.
 
         TODO : to finish

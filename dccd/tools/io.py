@@ -12,8 +12,10 @@
 import os.path
 import sqlite3
 import time
+from collections.abc import Callable
 from os import makedirs
 from pickle import Pickler, Unpickler
+from typing import Any
 
 # Third-party packages
 import pandas as pd
@@ -68,7 +70,7 @@ class IODataBase:
     # - Add output methods
     # - Add unitest/doctest
 
-    def __init__(self, path='./', method='csv'):
+    def __init__(self, path: str = './', method: str = 'csv') -> None:
         """ Initialize object. """
         # Verify path exist
         makedirs(path, exist_ok=True)
@@ -76,7 +78,7 @@ class IODataBase:
         # Set init attribute
         self.path = path if path.endswith('/') else path + '/'
         self.method = method.lower()
-        self.parser = {
+        self.parser: dict[str, Callable[..., None]] = {
             'dataframe': self.save_as_dataframe,
             'sqlite': self.save_as_sqlite,
             'csv': self.save_as_csv,
@@ -96,7 +98,7 @@ class IODataBase:
                 "`method` should be DataFrame, SQLite, CSV or Excel"
             )
 
-    def __call__(self, new_data, **kwargs):
+    def __call__(self, new_data: pd.DataFrame, **kwargs: Any) -> None:
         """ Append and save `new_data` in database as `method` format.
 
         Parameters
@@ -109,7 +111,7 @@ class IODataBase:
         """
         return self.parser[self.method](new_data, **kwargs)
 
-    def save_as_dataframe(self, new_data, name=None, ext='.dat'):
+    def save_as_dataframe(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.dat') -> None:
         """ Append and save `new_data` as pd.DataFrame binary object.
 
         With pickle save as binary pd.DataFrame object, if `name` database
@@ -136,7 +138,7 @@ class IODataBase:
         # Save new data
         save_df(database, self.path, name, ext=ext)
 
-    def get_from_dataframe(self, name, ext='.dat'):
+    def get_from_dataframe(self, name: str, ext: str = '.dat') -> pd.DataFrame:
         """ Get data from pd.DataFrame binary object.
 
         With pickle get as binary pd.DataFrame object.
@@ -151,8 +153,7 @@ class IODataBase:
         """
         return get_df(self.path, name, ext=ext)
 
-    def save_as_sqlite(self, new_data, table='main_table', name=None,
-                       ext='.db', index=True, index_label=None):
+    def save_as_sqlite(self, new_data: pd.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '.db', index: bool = True, index_label: str | list[str] | None = None) -> None:
         """ Append and save `new_data` in SQLite database.
 
         With sqlite, if `name` database already exists append `new_data`, else
@@ -188,7 +189,7 @@ class IODataBase:
         # Close connection
         conn.close()
 
-    def get_from_sqlite(self, name, table='main_table', ext='.db'):
+    def get_from_sqlite(self, name: str, table: str = 'main_table', ext: str = '.db') -> pd.DataFrame:
         """ Get data from SQLite database.
 
         Parameters
@@ -219,10 +220,7 @@ class IODataBase:
 
         return df
 
-    def save_as_sql(self, new_data, table='main_table', name=None,
-                    ext='', index=True, index_label=None, driver=None,
-                    username=None, password=None, host=None, port=None,
-                    **kwargs):
+    def save_as_sql(self, new_data: pd.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '', index: bool = True, index_label: str | list[str] | None = None, driver: str | None = None, username: str | None = None, password: str | None = None, host: str | None = None, port: str | int | None = None, **kwargs: Any) -> None:
         """ Append and save `new_data` in SQL database.
 
         SQL database as `method={'PostgreSQL', 'Oracle', 'MSSQL', 'MySQL'}`.
@@ -287,8 +285,7 @@ class IODataBase:
         # Close connection
         # conn.close()
 
-    def save_as_csv(self, new_data, name=None, ext='.csv', index=True,
-                    index_label=None):
+    def save_as_csv(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.csv', index: bool = True, index_label: str | list[str] | None = None) -> None:
         """ Append and save `new_data` in database as CSV format.
 
         With pickle save as binary pd.DataFrame object, if `name` database
@@ -325,8 +322,7 @@ class IODataBase:
             new_data.to_csv(self.path + name + ext, mode='w', header=True,
                             index=index, index_label=index_label)
 
-    def save_as_parquet(self, new_data, name=None, ext='.parquet', index=True,
-                        compression='snappy'):
+    def save_as_parquet(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', index: bool = True, compression: str = 'snappy') -> None:
         """ Append and save `new_data` as Parquet file.
 
         Requires pyarrow: ``pip install dccd[io]``.
@@ -354,8 +350,7 @@ class IODataBase:
             new_data = pd.concat([existing, new_data])
         new_data.to_parquet(path, index=index, compression=compression)
 
-    def save_as_polars(self, new_data, name=None, ext='.parquet',
-                       compression='snappy'):
+    def save_as_polars(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', compression: str = 'snappy') -> None:
         """ Append and save `new_data` as Parquet file via Polars.
 
         Requires polars: ``pip install dccd[io]``.
@@ -387,8 +382,7 @@ class IODataBase:
             new_pl = pl.concat([existing, new_pl])
         new_pl.write_parquet(path, compression=compression)
 
-    def save_as_excel(self, new_data, name=None, sheet_name='Sheet1',
-                      ext='.xlsx', index=True, index_label=None):
+    def save_as_excel(self, new_data: pd.DataFrame, name: str | None = None, sheet_name: str = 'Sheet1', ext: str = '.xlsx', index: bool = True, index_label: str | list[str] | None = None) -> None:
         """ Append and save `new_data` in database as Excel format.
 
         With pickle save as binary pd.DataFrame object, if `name` database
@@ -432,7 +426,7 @@ class IODataBase:
                               index=index, index_label=index_label)
 
 
-def get_df(path, name, ext=''):
+def get_df(path: str, name: str, ext: str = '') -> pd.DataFrame:
     """ Load a dataframe as binnary file.
 
     Parameters
@@ -463,7 +457,7 @@ def get_df(path, name, ext=''):
         return pd.DataFrame()
 
 
-def save_df(df, path, name, ext=''):
+def save_df(df: pd.DataFrame, path: str, name: str, ext: str = '') -> None:
     """ Save a dataframe as a binnary file.
 
     Parameters

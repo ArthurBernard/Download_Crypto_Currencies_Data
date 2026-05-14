@@ -56,8 +56,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install ruff
-        run: pip install "ruff>=0.4"
+      - name: Install ruff and mypy
+        run: pip install "ruff>=0.4" "mypy>=1.0" "pandas-stubs>=2.0"
 
       - name: Run ruff
         run: ruff check dccd/
+
+      - name: Run mypy
+        run: mypy dccd/
