@@ -19,6 +19,9 @@ High level API
    bitmex.get_data_bitmex -- download data from Bitmex exchange and update the database
    bitmex.get_orderbook_bitmex -- download order book from Bitmex exchange and update the database
    bitmex.get_trades_bitmex -- download trades from Bitmex exchange and update the database
+   bybit.get_data_bybit -- download data from Bybit exchange and update the database
+   bybit.get_orderbook_bybit -- download order book from Bybit exchange and update the database
+   bybit.get_trades_bybit -- download trades from Bybit exchange and update the database
 
 Low level API
 -------------
@@ -28,3 +31,4 @@ Low level API
 
    bitfinex.DownloadBitfinexData -- basis object to download data from Bitfinex client websocket API
    bitmex.DownloadBitmexData -- basis object to download data from Bitmex client websocket API
+   bybit.DownloadBybitData -- basis object to download data from Bybit client websocket API

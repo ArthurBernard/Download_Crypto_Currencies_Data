@@ -19,9 +19,7 @@
 # Import built-in packages
 
 # Import third party packages
-import json
 
-import requests
 
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
@@ -102,13 +100,13 @@ class FromCoinbase(ImportDataCryptoCurrencies):
             'end': TS_to_date(self.end),
             'granularity': self.span,
         }
-        r = requests.get(
+        r = self._fetch(
             'https://api.exchange.coinbase.com/products/{}/candles'.format(
                 self.pair
             ),
-            params=param,
+            param,
         )
-        text = json.loads(r.text)
+        text = r.json()
         data = [{
             'date': float(e[0]),
             'open': float(e[3]),

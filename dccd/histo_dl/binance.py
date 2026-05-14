@@ -17,18 +17,17 @@
 """
 
 # Import built-in packages
+import logging
 
 # Import third-party packages
-import json
-
-import requests
-
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 # Import local packages
 from dccd.tools.date_time import binance_interval
 
 __all__ = ['FromBinance']
+
+_logger = logging.getLogger(__name__)
 
 
 class FromBinance(ImportDataCryptoCurrencies):
@@ -86,8 +85,10 @@ class FromBinance(ImportDataCryptoCurrencies):
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         """ Initialize object. """
         if fiat in ['EUR', 'USD']:
-            print("Binance don't allow fiat currencies.",
-                  "The equivalent of US dollar is Tether USD as USDT.")
+            _logger.warning(
+                "Binance don't allow fiat currencies. "
+                "The equivalent of US dollar is Tether USD as USDT."
+            )
             self.fiat = fiat = 'USDT'
 
         if crypto == 'XBT':
@@ -111,8 +112,8 @@ class FromBinance(ImportDataCryptoCurrencies):
             'interval': binance_interval(self.span),
         }
 
-        r = requests.get('https://api.binance.com/api/v1/klines', param)
-        text = json.loads(r.text)
+        r = self._fetch('https://api.binance.com/api/v3/klines', param)
+        text = r.json()
 
         data = [{
             'date': float(e[0] / 1000),

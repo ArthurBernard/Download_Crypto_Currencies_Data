@@ -19,6 +19,12 @@ from pickle import Pickler, Unpickler
 import pandas as pd
 from sqlalchemy import URL, create_engine
 
+try:
+    import polars as pl
+    HAS_POLARS = True
+except ImportError:
+    HAS_POLARS = False
+
 # Local packages
 
 
@@ -75,6 +81,8 @@ class IODataBase:
             'sqlite': self.save_as_sqlite,
             'csv': self.save_as_csv,
             'excel': self.save_as_excel,
+            'parquet': self.save_as_parquet,
+            'polars': self.save_as_polars,
             'postgresql': self.save_as_sql,
             'mysql': self.save_as_sql,
             'oracle': self.save_as_sql,
@@ -316,6 +324,68 @@ class IODataBase:
         else:
             new_data.to_csv(self.path + name + ext, mode='w', header=True,
                             index=index, index_label=index_label)
+
+    def save_as_parquet(self, new_data, name=None, ext='.parquet', index=True,
+                        compression='snappy'):
+        """ Append and save `new_data` as Parquet file.
+
+        Requires pyarrow: ``pip install dccd[io]``.
+
+        Parameters
+        ----------
+        new_data : pd.DataFrame
+            Data to append to the database.
+        name : str, optional
+            Name of the file, default is the current year.
+        ext : str, optional
+            Extension, default is '.parquet'.
+        index : bool, optional
+            Write DataFrame index, default is True.
+        compression : str, optional
+            Compression codec, default is 'snappy'.
+
+        """
+        if name is None:
+            name = time.strftime('%y', time.gmtime(time.time()))
+
+        path = self.path + name + ext
+        if os.path.exists(path):
+            existing = pd.read_parquet(path)
+            new_data = pd.concat([existing, new_data])
+        new_data.to_parquet(path, index=index, compression=compression)
+
+    def save_as_polars(self, new_data, name=None, ext='.parquet',
+                       compression='snappy'):
+        """ Append and save `new_data` as Parquet file via Polars.
+
+        Requires polars: ``pip install dccd[io]``.
+
+        Parameters
+        ----------
+        new_data : pd.DataFrame
+            Data to append to the database.
+        name : str, optional
+            Name of the file, default is the current year.
+        ext : str, optional
+            Extension, default is '.parquet'.
+        compression : str, optional
+            Compression codec, default is 'snappy'.
+
+        """
+        if not HAS_POLARS:
+            raise ImportError(
+                "polars is required for this method: pip install dccd[io]"
+            )
+
+        if name is None:
+            name = time.strftime('%y', time.gmtime(time.time()))
+
+        path = self.path + name + ext
+        new_pl = pl.from_pandas(new_data)
+        if os.path.exists(path):
+            existing = pl.read_parquet(path)
+            new_pl = pl.concat([existing, new_pl])
+        new_pl.write_parquet(path, compression=compression)
 
     def save_as_excel(self, new_data, name=None, sheet_name='Sheet1',
                       ext='.xlsx', index=True, index_label=None):

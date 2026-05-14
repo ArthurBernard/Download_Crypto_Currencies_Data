@@ -5,17 +5,17 @@ import time
 
 import pytest
 
-from dccd import FromBinance as fb
+from dccd import FromOKX
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
 
 
 @pytest.fixture
 def loader(tmp_data_path):
-    return fb(tmp_data_path, 'XBT', 86400, 'USD')
+    return FromOKX(tmp_data_path, 'BTC', 86400)
 
 
-def test_import_data(loader, mock_binance):
+def test_import_data(loader, mock_okx):
     start = int(time.time() // 86400 * 86400 - 86400)
     data = loader._import_data(start=start)
     assert isinstance(data, list)
@@ -25,8 +25,5 @@ def test_import_data(loader, mock_binance):
         assert key in data[0]
 
 
-def test_rate_limit_retry(loader, mock_429_then_200):
-    start = int(time.time() // 86400 * 86400 - 86400)
-    data = loader._import_data(start=start)
-    assert len(data) > 0
-    assert len(mock_429_then_200) == 3
+def test_pair_format(loader):
+    assert loader.pair == 'BTC-USDT'

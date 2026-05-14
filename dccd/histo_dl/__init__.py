@@ -57,12 +57,16 @@ Method chaining is available for these classes.
 # Third party packages
 
 # Local packages
-from . import binance, coinbase, exchange, kraken
+from . import binance, bybit, coinbase, exchange, kraken, okx
 from .binance import *
+from .bybit import *
 from .coinbase import *
 from .kraken import *
+from .okx import *
 
 __all__ = ['exchange']
 __all__ += binance.__all__
+__all__ += bybit.__all__
 __all__ += coinbase.__all__
 __all__ += kraken.__all__
+__all__ += okx.__all__
