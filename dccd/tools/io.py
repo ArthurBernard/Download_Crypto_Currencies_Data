@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 from os import makedirs
 from pickle import Pickler, Unpickler
-from typing import Any
+from typing import Any, Literal
 
 # Third-party packages
 import pandas as pd
@@ -322,7 +322,7 @@ class IODataBase:
             new_data.to_csv(self.path + name + ext, mode='w', header=True,
                             index=index, index_label=index_label)
 
-    def save_as_parquet(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', index: bool = True, compression: str = 'snappy') -> None:
+    def save_as_parquet(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', index: bool = True, compression: Literal['snappy', 'gzip', 'brotli', 'lz4', 'zstd'] = 'snappy') -> None:
         """ Append and save `new_data` as Parquet file.
 
         Requires pyarrow: ``pip install dccd[io]``.
@@ -350,7 +350,7 @@ class IODataBase:
             new_data = pd.concat([existing, new_data])
         new_data.to_parquet(path, index=index, compression=compression)
 
-    def save_as_polars(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', compression: str = 'snappy') -> None:
+    def save_as_polars(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', compression: Literal['snappy', 'gzip', 'brotli', 'lz4', 'zstd'] = 'snappy') -> None:
         """ Append and save `new_data` as Parquet file via Polars.
 
         Requires polars: ``pip install dccd[io]``.
