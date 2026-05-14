@@ -59,6 +59,12 @@ ignore = ["E501"]
 "dccd/**/__init__.py" = ["F401", "F403", "F405"]
 "dccd/__init__.py" = ["F401", "F403", "F405"]
 
+[tool.coverage.run]
+omit = [
+    "dccd/continuous_dl/*",
+    "dccd/tools/websocket.py",
+]
+
 [tool.interrogate]
 ignore-init-method = true
 ignore-magic = true

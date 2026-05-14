@@ -30,3 +30,7 @@ done/
 .coverage
 htmlcov/
 coverage.xml
+
+# Sphinx generated files
+doc/source/generated/
+doc/build/
