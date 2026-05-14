@@ -49,7 +49,7 @@ class FromCoinbase(ImportDataCryptoCurrencies):
 
     See Also
     --------
-    FromBinance, FromKraken
+    FromBinance, FromKraken, FromBybit, FromOKX
 
     Notes
     -----

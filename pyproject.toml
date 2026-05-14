@@ -42,6 +42,8 @@ doc = ["sphinx>=7.0", "furo", "numpydoc", "sphinx-design", "sphinx-copybutton"]
 
 [project.urls]
 Homepage = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data"
+Documentation = "https://download-crypto-currencies-data.readthedocs.io/"
+Changelog = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/blob/master/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 include = ["dccd*"]

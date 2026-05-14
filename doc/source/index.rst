@@ -2,7 +2,7 @@
  Welcome to Download Crypto Currencies Data project
 ====================================================
 
-This is the documentation of ``dccd`` package, a package to download crypto-currencies data from Binance, Bitfinex, Bitmex, Coinbase, and Kraken.
+This is the documentation of ``dccd`` package, a package to download crypto-currencies data from Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, and Bitmex.
 
 Installation
 ------------
@@ -23,9 +23,9 @@ Presentation
 The ``dccd`` package allow you two main methods to download data. The first one is recommended to download data at high frequency (**minutely** or **tick by tick**), and the second one is recommended to download data at a lower frequency (**hourly** or **daily**):
 
 - Continuous Downloader :mod:`dccd.continuous_dl`:
-   Download and update continuously data (orderbook, trades tick by tick, ohlc, etc) and save it in a database. *Currently only support Bitfinex and Bitmex exchanges*.
+   Download and update continuously data (orderbook, trades tick by tick, ohlc, etc) and save it in a database. *Supports Bitfinex, Bitmex, and Bybit exchanges*.
 - Historical Downloader :mod:`dccd.histo_dl`:
-   Download historical data (ohlc, trades, etc.) and save it. *Currently only support Binance, Coinbase, and Kraken exchanges*.
+   Download historical data (ohlc, trades, etc.) and save it. *Supports Binance, Coinbase, Kraken, Bybit, and OKX exchanges*.
 
 Contents
 --------
