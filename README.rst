@@ -9,6 +9,10 @@ Download Crypto-Currency Data
     :target: https://pypi.org/project/dccd/
     :alt: PyPI
 
+.. image:: https://img.shields.io/pypi/status/dccd.svg?colorB=blue
+    :target: https://pypi.org/project/dccd/
+    :alt: PyPI - Status
+
 .. image:: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/actions/workflows/ci.yml/badge.svg
     :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/actions/workflows/ci.yml
     :alt: CI
@@ -20,6 +24,14 @@ Download Crypto-Currency Data
 .. image:: https://readthedocs.org/projects/download-crypto-currencies-data/badge/?version=latest
     :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/
     :alt: Documentation Status
+
+.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/master/interrogate_badge_output.svg
+    :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
+    :alt: Docstring Coverage
+
+.. image:: https://pepy.tech/badge/dccd
+    :target: https://pepy.tech/project/dccd
+    :alt: Downloads
 
 Python package to download crypto-currency data (OHLCV, trades, order book) from multiple
 exchanges via REST and WebSocket APIs. Data can be saved to CSV, Excel, SQLite, PostgreSQL,
