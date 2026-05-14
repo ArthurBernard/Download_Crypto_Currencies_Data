@@ -37,7 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 io = ["pyarrow>=13", "polars>=0.20"]
-dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4", "interrogate>=1.5"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4", "interrogate>=1.5", "mypy>=1.0", "pandas-stubs>=2.0"]
 doc = ["sphinx>=7.0", "furo", "numpydoc", "sphinx-design", "sphinx-copybutton"]
 
 [project.urls]
@@ -67,6 +67,23 @@ omit = [
     "dccd/continuous_dl/*",
     "dccd/tools/websocket.py",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_return_any = false
+warn_unused_configs = true
+disable_error_code = ["import-untyped"]
+exclude = ["dccd/tests/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "dccd.continuous_dl.bitfinex",
+    "dccd.continuous_dl.bitmex",
+    "dccd.tools.websocket",
+    "dccd",
+]
+ignore_errors = true
 
 [tool.interrogate]
 ignore-init-method = true
