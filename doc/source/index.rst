@@ -34,8 +34,13 @@ Contents
    :maxdepth: 2
 
    continuous_dl
+   continuous_dl.bitfinex
+   continuous_dl.bitmex
    continuous_dl.bybit
    histo_dl
+   histo_dl.binance
+   histo_dl.coinbase
+   histo_dl.kraken
    histo_dl.bybit
    histo_dl.okx
    process_data

@@ -21,10 +21,6 @@ Download Crypto-Currency Data
     :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/
     :alt: Documentation Status
 
-.. image:: https://pepy.tech/badge/dccd
-    :target: https://pepy.tech/project/dccd
-    :alt: Downloads
-
 Python package to download crypto-currency data (OHLCV, trades, order book) from multiple
 exchanges via REST and WebSocket APIs. Data can be saved to CSV, Excel, SQLite, PostgreSQL,
 or Parquet.
@@ -46,48 +42,74 @@ From source::
     $ cd Download_Crypto_Currencies_Data
     $ pip install -e .
 
-Requirements
-============
+Supported exchanges
+===================
 
-- Python >= 3.10
-- numpy >= 1.26
-- pandas >= 2.0
-- requests >= 2.28
-- openpyxl >= 3.1
-- websockets >= 12.0
-- scipy >= 1.10
-- SQLAlchemy >= 2.0
-- tenacity >= 8.0
-- pydantic >= 2.0
++------------------+------------+-----------------+
+| Exchange         | Historical | Real-time       |
++==================+============+=================+
+| Binance          | ✓          |                 |
++------------------+------------+-----------------+
+| Coinbase         | ✓          |                 |
++------------------+------------+-----------------+
+| Kraken           | ✓          |                 |
++------------------+------------+-----------------+
+| Bybit            | ✓          | ✓               |
++------------------+------------+-----------------+
+| OKX              | ✓          |                 |
++------------------+------------+-----------------+
+| Bitfinex         |            | ✓               |
++------------------+------------+-----------------+
+| Bitmex           |            | ✓               |
++------------------+------------+-----------------+
 
 Presentation
 ============
 
-The ``dccd`` package provides two main download methods:
-
 **Historical Downloader** ``dccd.histo_dl``
-    Download historical OHLCV data via REST APIs and save to disk.
-    Supports **Binance**, **Coinbase**, **Kraken**, **Bybit**, **OKX**.
+    Download OHLCV data via REST APIs and save to disk. Supports chunked
+    requests, automatic retry on rate-limit (HTTP 429), and incremental
+    updates from the last saved timestamp.
 
 **Continuous Downloader** ``dccd.continuous_dl``
-    Stream real-time data (order book, trades) via WebSocket and update a database
-    continuously. Supports **Bitfinex**, **Bitmex**, **Bybit**.
+    Stream real-time data (order book, trades) via WebSocket with automatic
+    reconnection and configurable processing/saving callbacks.
+
+Output formats
+--------------
+
+Historical data can be saved as **CSV**, **Excel** (``.xlsx``), **SQLite**,
+**PostgreSQL** (via SQLAlchemy), or **Parquet** (requires ``dccd[io]``).
+Parquet files can be read back as either a ``pandas.DataFrame`` or a
+``polars.DataFrame``.
 
 Quick start
 ===========
 
-Historical data::
+Historical data (pandas)::
 
     from dccd.histo_dl import FromBinance
 
-    obj = FromBinance('/path/to/data/', 'BTC', 3600)
+    obj = FromBinance('/path/to/data/', 'BTC', 3600, fiat='USDT')
     obj.import_data(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
     obj.save(form='parquet')
-    df = obj.get_data()
+    df = obj.get_data()            # pandas DataFrame
 
 Polars output::
 
     df_pl = obj.get_data(format='polars')
+
+Incremental update (resume from last saved point)::
+
+    obj.import_data(start='last', end='now').save(form='parquet')
+
+Other exchanges::
+
+    from dccd.histo_dl import FromKraken, FromBybit, FromOKX
+
+    FromKraken('/path/', 'ETH', 3600).import_data(start='2024-01-01', end='now').save()
+    FromBybit('/path/', 'BTC', 86400).import_data(start='2024-01-01', end='now').save()
+    FromOKX('/path/', 'BTC', 3600).import_data(start='2024-01-01', end='now').save()
 
 Links
 =====

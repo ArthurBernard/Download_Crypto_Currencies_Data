@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Docstrings `See Also` updated in `FromBinance`, `FromKraken`, `FromCoinbase` — replaced defunct `FromGDax`/`FromPoloniex` with `FromBybit`/`FromOKX`
-- `doc/source/index.rst` — exchange lists updated (Bybit, OKX added)
+- `doc/source/index.rst` — exchange lists updated (Bybit, OKX added); all exchange RST pages added to toctree (previously orphaned)
 - `dccd/__init__.py` module docstring — exchange list updated
-- `pyproject.toml` — added `Documentation` and `Changelog` URLs
+- `pyproject.toml` — added `Documentation` and `Changelog` project URLs
+- `README.rst` — added exchange support table, output format section, multi-exchange Quick start examples
 - `examples/historical_downloader.py` — rewritten with modern API (Binance + Parquet)
 
 ## [2.0.0] - 2026-05-14
