@@ -79,6 +79,9 @@ exclude = ["dccd/tests/"]
 module = [
     "dccd.tools.websocket",
     "dccd",
+    "dccd.continuous_dl.binance",
+    "dccd.continuous_dl.kraken",
+    "dccd.continuous_dl.okx",
 ]
 ignore_errors = true
 
