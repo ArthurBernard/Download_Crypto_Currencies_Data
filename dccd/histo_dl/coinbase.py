@@ -120,7 +120,7 @@ class FromCoinbase(ImportDataCryptoCurrencies):
 
         return data
 
-    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> FromCoinbase:
+    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Coinbase for specific time interval.
 
         Parameters

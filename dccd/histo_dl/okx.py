@@ -139,7 +139,7 @@ class FromOKX(ImportDataCryptoCurrencies):
 
         return data
 
-    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> FromOKX:
+    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from OKX for a specific time interval.
 
         Parameters

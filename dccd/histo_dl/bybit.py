@@ -140,7 +140,7 @@ class FromBybit(ImportDataCryptoCurrencies):
 
         return data
 
-    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> FromBybit:
+    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Bybit for a specific time interval.
 
         Parameters

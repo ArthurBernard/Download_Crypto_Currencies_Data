@@ -130,7 +130,7 @@ class FromBinance(ImportDataCryptoCurrencies):
 
         return data
 
-    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> FromBinance:
+    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Binance for specific time interval.
 
         Parameters

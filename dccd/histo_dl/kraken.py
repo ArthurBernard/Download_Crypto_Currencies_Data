@@ -108,7 +108,7 @@ class FromKraken(ImportDataCryptoCurrencies):
                 UserWarning,
                 stacklevel=2,
             )
-        self.start, self.end = self._set_time(start, time.time())
+        self.start, self.end = self._set_time(start, int(time.time()))
 
         param = {
             'pair': self.pair,
@@ -134,7 +134,7 @@ class FromKraken(ImportDataCryptoCurrencies):
 
     def import_data(
         self, start: int | str = 'last', end: int | str | None = None
-    ) -> FromKraken:
+    ) -> ImportDataCryptoCurrencies:
         """ Download data from Kraken since a specific time until now.
 
         Parameters
