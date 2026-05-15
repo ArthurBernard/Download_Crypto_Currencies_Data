@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `dccd/daemon/config.py` — declarative YAML config with Pydantic v2: `CollectorConfig`, `HistoJob`, `StreamJob`, `StorageConfig`, `AlertConfig`, `RemoteConfig`, and `load_config()` loader (#XX)
-- `dccd/daemon/storage.py` — `RemoteStorage.push()`: delegates to rclone via subprocess; no-op when no remote configured, warning if rclone absent (#XX)
-- `dccd/daemon/scheduler.py` — `build_histo_scheduler()` (APScheduler 3.x `BackgroundScheduler`, one interval job per `(exchange, pair)`), `run_histo_job()`, and `run_once()` (#XX)
-- `examples/config.example.yml` — annotated reference config for the daemon (#XX)
-- `pyproject.toml` — `[daemon]` optional extra (`pyyaml`, `apscheduler`) (#XX)
+- `dccd/daemon/config.py` — declarative YAML config with Pydantic v2: `CollectorConfig`, `HistoJob`, `StreamJob`, `StorageConfig`, `AlertConfig`, `RemoteConfig`, and `load_config()` loader (#25)
+- `dccd/daemon/storage.py` — `RemoteStorage.push()`: delegates to rclone via subprocess; no-op when no remote configured, warning if rclone absent (#25)
+- `dccd/daemon/scheduler.py` — `build_histo_scheduler()` (APScheduler 3.x `BackgroundScheduler`, one interval job per `(exchange, pair)`), `run_histo_job()`, and `run_once()` (#25)
+- `examples/config.example.yml` — annotated reference config for the daemon (#25)
+- `pyproject.toml` — `[daemon]` optional extra (`pyyaml`, `apscheduler`) (#25)
 
 ## [2.1.0] - 2026-05-15
 
