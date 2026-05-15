@@ -2,6 +2,8 @@
 # coding: utf-8
 
 
+import logging
+
 import pandas as pd
 
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
@@ -9,9 +11,13 @@ from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 _FALLBACK_TS = 1325376000  # 2012-01-01 00:00:00 UTC
 
 
+class _ConcreteDownloader(ImportDataCryptoCurrencies):
+    def _import_data(self, start, end):
+        return []
+
+
 def _make_obj(full_path: str) -> ImportDataCryptoCurrencies:
-    obj = ImportDataCryptoCurrencies.__new__(ImportDataCryptoCurrencies)
-    import logging
+    obj = _ConcreteDownloader.__new__(_ConcreteDownloader)
     obj.logger = logging.getLogger(__name__)
     obj.last_df = pd.DataFrame()
     obj.full_path = full_path

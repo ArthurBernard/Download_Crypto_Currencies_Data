@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import time
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 # Import extern packages
@@ -44,7 +45,7 @@ def _should_retry(exc):
             and exc.response.status_code == 429)
 
 
-class ImportDataCryptoCurrencies:
+class ImportDataCryptoCurrencies(ABC):
     """ Base class to import data about crypto-currencies from some exchanges.
 
     Parameters
@@ -380,9 +381,9 @@ class ImportDataCryptoCurrencies:
         else:
             raise TypeError("span must be str or int")
 
+    @abstractmethod
     def _import_data(self, start: int | str, end: int | str) -> list[dict[str, Any]]:
         """ Fetch raw data from the exchange (implemented by subclasses). """
-        raise NotImplementedError
 
     def set_hierarchy(self, liste: list[str]) -> None:
         """ Override the default save path with a custom directory hierarchy.
