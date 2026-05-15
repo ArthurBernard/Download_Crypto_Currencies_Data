@@ -25,7 +25,7 @@ Download Crypto-Currency Data
     :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/
     :alt: Documentation Status
 
-.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/badges/interrogate_badge.svg
+.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/interrogate_badge.svg
     :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
     :alt: Docstring Coverage
 
