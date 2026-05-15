@@ -1,0 +1,81 @@
+# dccd daemon — example configuration
+#
+# Copy this file, adapt it to your setup, and pass it to the daemon:
+#   dccd validate --config config.yml    # check without running
+#   dccd run --once --config config.yml  # run all jobs once and exit
+#   dccd start --config config.yml       # run as a daemon
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+storage:
+  # Root directory on the daemon host where data files are written.
+  local_path: /data/crypto/
+
+  # Optional: push data to a remote after each save.
+  # Requires rclone (https://rclone.org) installed on the daemon host and
+  # a named remote configured with `rclone config`.
+  #
+  # Examples:
+  #   mynas:crypto/         → NAS / Freebox via SMB or SFTP
+  #   mypc:data/crypto/     → local PC via SFTP (OpenSSH)
+  #   s3:mybucket/crypto/   → Amazon S3
+  #   gdrive:crypto/        → Google Drive
+  #
+  # Remove this block to keep data on the daemon host only.
+  remote:
+    provider: rclone
+    remote: "mynas:crypto/"   # rclone remote name + path
+
+
+# ---------------------------------------------------------------------------
+# Historical (REST API) jobs
+# ---------------------------------------------------------------------------
+# Each job polls one exchange at a fixed interval and saves OHLCV candles.
+# One file per period (by_period) is created under:
+#   {local_path}/{Exchange}/Data/Clean_Data/{span_label}/{pair}/
+histo_jobs:
+
+  - exchange: binance          # one of: binance, kraken, bybit, okx, coinbase
+    pairs:
+      - BTC/USDT               # 'CRYPTO/FIAT' format
+      - ETH/USDT
+    span: 3600                 # candle interval in seconds (>= 60)
+    format: parquet            # one of: parquet, csv, xlsx
+    by_period: Y               # file grouping: Y (year), M (month), D (day)
+
+  - exchange: kraken
+    pairs:
+      - BTC/USD
+      - ETH/USD
+    span: 86400                # daily candles
+    format: parquet
+    by_period: Y
+
+  - exchange: bybit
+    pairs:
+      - BTC/USDT
+    span: 900                  # 15-minute candles
+    format: csv
+    by_period: M               # one file per month
+
+
+# ---------------------------------------------------------------------------
+# Real-time (WebSocket) jobs  [not yet implemented — reserved for task 4.4]
+# ---------------------------------------------------------------------------
+# stream_jobs:
+#   - exchange: binance
+#     pairs:
+#       - BTC/USDT
+#     channels:
+#       - trades
+#       - book
+#     time_step: 60            # snapshot interval in seconds
+
+
+# ---------------------------------------------------------------------------
+# Alerts  (optional)
+# ---------------------------------------------------------------------------
+# alerts:
+#   webhook_url: "https://hooks.slack.com/services/T.../B.../..."
+#   max_consecutive_errors: 3  # send alert after N consecutive failures
