@@ -41,7 +41,22 @@ _BYBIT_WS_URL = 'wss://stream.bybit.com/v5/public/spot'
 
 
 def _parser_trades(msg):
-    """ Parse a publicTrade message from Bybit WebSocket. """
+    """Parse a publicTrade message from Bybit WebSocket v5.
+
+    Parameters
+    ----------
+    msg : dict
+        Raw message with a ``'data'`` list of trade dicts.
+        Each trade dict contains: ``'i'`` (id), ``'T'`` (timestamp ms),
+        ``'p'`` (price), ``'v'`` (volume), ``'S'`` (side 'Buy'/'Sell').
+
+    Returns
+    -------
+    list of dict
+        Each dict has keys: ``'tid'``, ``'timestamp'``, ``'price'``,
+        ``'amount'``, ``'type'`` ('buy' or 'sell').
+
+    """
     return [{
         'tid': int(d['i']),
         'timestamp': int(d['T']) / 1000,
@@ -52,7 +67,21 @@ def _parser_trades(msg):
 
 
 def _parser_book(msg):
-    """ Parse an orderbook message from Bybit WebSocket. """
+    """Parse an orderbook message from Bybit WebSocket v5.
+
+    Parameters
+    ----------
+    msg : dict
+        Raw message with a ``'data'`` dict containing ``'b'`` (bids) and
+        ``'a'`` (asks), each a list of ``[price_str, qty_str]``.
+
+    Returns
+    -------
+    dict
+        Unified book dict: bid prices as positive float values keyed by the
+        price string, ask prices prefixed with ``'-'`` as negative float values.
+
+    """
     data = msg.get('data', {})
     book = {}
     for bid in data.get('b', []):

@@ -130,7 +130,7 @@ class ContinuousDownloader(BasisWebSocket):
 
     async def _loop(self) -> None:
         """ Loop to process and save data into database. """
-        await self.wait_that('_data')
+        await self.wait_that('is_connect')
 
         async for data in self:
             self.logger.debug('Get data.')
@@ -203,44 +203,28 @@ class ContinuousDownloader(BasisWebSocket):
         self.saver = call
         self.io_params = kwargs
 
-    def _parser_debug(self, data: Any, level: int = 0) -> None:
-        # Function to debug and understand data structure
-        if level == 0:
-            self._data[self.t] = data
-
-        if isinstance(data, list):
-            self.logger.debug('Data is a list')
-            for d in data:
-                self._parser_debug(d, level=level + 1)
-
-        elif isinstance(data, dict):
-            self.logger.debug('Data is a dict')
-            for k, a in data.items():
-                self.logger.debug('{}: {}'.format(k, a))
-
-        else:
-            self.logger.debug('Data is {}: {}'.format(type(data), data))
-
     def get_parser(self, key: str) -> Callable[..., Any]:
         """ Get allowed data parser.
 
         Parameters
         ----------
         key : str
-            Name code of data to parse. If `key` is not allowed then return a
-            debug_parser which will display data structure.
+            Name code of data to parse.
 
         Returns
         -------
         function
             The allowed function to parse this kind of data.
 
-        """
-        if key not in self._parser_data.keys():
-            self.logger.error('Unknown parser key {}, only {} allowed.'.format(
-                key, self._parser_data.keys()
-            ))
+        Raises
+        ------
+        KeyError
+            If `key` is not in the allowed parser keys.
 
-            return self._parser_debug
+        """
+        if key not in self._parser_data:
+            raise KeyError(
+                f"Unknown parser key {key!r}, allowed: {list(self._parser_data)}"
+            )
 
         return self._parser_data[key]

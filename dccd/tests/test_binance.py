@@ -30,3 +30,22 @@ def test_rate_limit_retry(loader, mock_429_then_200):
     data = loader._import_data(start=start)
     assert len(data) > 0
     assert len(mock_429_then_200) == 3
+
+
+def test_http_500_raises(loader, mock_http_500):
+    with pytest.raises(ValueError):
+        loader._import_data(start=0)
+
+
+def test_malformed_response_raises(loader, monkeypatch):
+    monkeypatch.setattr("requests.get", lambda *a, **kw: _mock_bad())
+    with pytest.raises((KeyError, TypeError, ValueError)):
+        loader._import_data(start=0)
+
+
+def _mock_bad():
+    from unittest.mock import MagicMock
+    m = MagicMock()
+    m.status_code = 200
+    m.json.return_value = {"error": "bad"}
+    return m

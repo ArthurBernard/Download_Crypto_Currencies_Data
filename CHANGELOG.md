@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/tests/test_binance.py`, `test_kraken.py`, `test_bybit.py`, `test_okx.py`, `test_coinbase.py` — REST error-scenario tests: HTTP 500 and malformed response for every exchange (#22)
 - `dccd/continuous_dl/binance.py` — `DownloadBinanceData` streaming trades and order book via Binance combined WebSocket streams (#20)
 - `dccd/continuous_dl/kraken.py` — `DownloadKrakenData` streaming trades, order book, and OHLCV via Kraken WebSocket v2 (#20)
 - `dccd/continuous_dl/okx.py` — `DownloadOKXData` streaming trades, order book, and candles via OKX WebSocket v5 (#20)
@@ -25,9 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `dccd/continuous_dl/exchange.py` — `get_parser()` now raises `KeyError` on unknown key instead of falling back to the removed debug parser; `_loop()` awaits `is_connect` instead of `_data` (#22)
+- `dccd/continuous_dl/bitmex.py`, `dccd/continuous_dl/bybit.py` — added numpydoc docstrings on `_parser_trades()` and `_parser_book()` (#22)
+- `dccd/histo_dl/exchange.py` — `ImportDataCryptoCurrencies` docstring updated: `See Also` lists all five exchanges; `platform` parameter documents all supported values; fixed typos (#22)
 - `dccd/histo_dl/exchange.py` — `ImportDataCryptoCurrencies` now inherits from `ABC` and `_import_data` is decorated with `@abstractmethod`, preventing accidental instantiation of the base class (#21)
 - `dccd/histo_dl/binance.py`, `coinbase.py`, `bybit.py`, `okx.py`, `kraken.py` — added `from __future__ import annotations`, `from typing import Any`, and full type hints on `_import_data` and `import_data` signatures (#21)
-
 - `dccd/histo_dl/exchange.py` — `_get_last_date` now reads `.csv` and `.parquet` files in addition to `.xlsx` instead of falling back to 2012-01-01 (#12)
 - `dccd/histo_dl/exchange.py` — completed numpydoc docstrings for `_get_last_date`, `_set_by_period`, `_name_file`, `_excel_format`, `_sort_data`, `set_hierarchy` (#12)
 - `dccd/tools/io.py` — documented `driver`, `username`, `password`, `host`, `port` parameters of `save_as_sql` (#12)
@@ -35,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dccd/continuous_dl/bitfinex.py` — resolved all inline TODOs, added full type annotations, removed dead `__main__` block (#12)
 - `dccd/continuous_dl/bitmex.py` — resolved all inline TODOs, added full type annotations, fixed undefined `pair` variable in `get_data_bitmex`, removed dead `__main__` block (#12)
 - `pyproject.toml` — removed `bitfinex` and `bitmex` from mypy `ignore_errors` override; lifted `continuous_dl/*` and `tools/websocket.py` from coverage omit (#12)
+
+### Removed
+
+- `ContinuousDownloader._parser_debug()` — dead method, never called; `dccd/tools/__init__.py` commented-out imports removed (#22)
 
 ## [2.0.2] - 2026-05-15
 
