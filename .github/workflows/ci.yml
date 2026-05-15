@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,io]"
 
       - name: Run tests
         run: pytest --cov=dccd --cov-report=term-missing --cov-report=xml
