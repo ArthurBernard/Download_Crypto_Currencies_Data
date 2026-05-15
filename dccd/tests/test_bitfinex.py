@@ -3,8 +3,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from dccd.continuous_dl.bitfinex import DownloadBitfinexData
 
 

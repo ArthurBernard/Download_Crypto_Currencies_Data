@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-from unittest.mock import patch
 
 import pandas as pd
-import pytest
 
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 

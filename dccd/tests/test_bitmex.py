@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
