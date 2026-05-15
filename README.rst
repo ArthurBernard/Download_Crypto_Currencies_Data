@@ -25,6 +25,10 @@ Download Crypto-Currency Data
     :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/
     :alt: Documentation Status
 
+.. image:: https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data
+    :alt: Coverage
+
 .. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/badges/interrogate_badge.svg
     :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
     :alt: Docstring Coverage
