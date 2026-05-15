@@ -72,6 +72,15 @@ def mock_okx(monkeypatch):
 
 
 @pytest.fixture
+def mock_http_500(monkeypatch):
+    """Simulate an HTTP 500 response whose body is not valid JSON."""
+    m = MagicMock()
+    m.status_code = 500
+    m.json.side_effect = ValueError("Server error — no JSON body")
+    monkeypatch.setattr("requests.get", lambda *a, **kw: m)
+
+
+@pytest.fixture
 def mock_429_then_200(monkeypatch):
     """Simulate two 429 responses then a 200."""
     calls = []

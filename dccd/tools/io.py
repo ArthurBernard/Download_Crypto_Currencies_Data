@@ -244,18 +244,21 @@ class IODataBase:
             Column label for index column(s). If None is given (default) and
             index is True, then the index names are used. A sequence should be
             given if the pd.DataFrame uses pd.MultiIndex.
-        driver : {'psycopg2', 'pg8000', 'mysqlclient', pymysql', 'cx_oracle',\
-                  'pyodbc', 'pymssql'}
-            The name of the DBAPI to be used to connect to the database using
-            all lowercase letters. If not specified, a default DBAPI will be
-            imported if available - this default is typically the most widely
-            known driver available for that backend.
-        username, password : str
-            Username and password to connect to the SQL database.
+        driver : str, optional
+            DBAPI driver name, e.g. ``'psycopg2'``, ``'pg8000'``,
+            ``'mysqlclient'``, ``'pymysql'``, ``'cx_oracle'``, ``'pyodbc'``,
+            ``'pymssql'``.  When ``None`` (default) the dialect's default DBAPI
+            is used.  Passed to SQLAlchemy as ``{method}+{driver}``.
+        username : str, optional
+            Username for the database connection.  Default is ``None``.
+        password : str, optional
+            Password for the database connection.  Default is ``None``.
         host : str, optional
-            Host to connect, default is 'localhost'.
-        port : str, optional
-            The port number, default is None.
+            Hostname or IP address of the database server.  Default is
+            ``None`` (SQLAlchemy falls back to ``'localhost'``).
+        port : str or int, optional
+            Port number of the database server.  Default is ``None``
+            (uses the dialect's default port).
         kwargs : dict, optional
             A dictionary of options to be passed to the dialect and/or the
             DBAPI upon connect.

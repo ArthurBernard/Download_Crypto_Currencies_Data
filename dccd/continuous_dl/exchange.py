@@ -6,14 +6,7 @@
 # @Last modified by: ArthurBernard
 # @Last modified time: 2019-08-30 10:01:33
 
-""" Basis object to download continuously data from websocket.
-
-Notes
------
-The following objects are shapped to download data from crypto-currency
-exchanges (currently only bitfinex and bitmex).
-
-"""
+""" Basis object to download continuously data from websocket. """
 
 # Built-in packages
 import asyncio
@@ -33,14 +26,15 @@ class ContinuousDownloader(BasisWebSocket):
 
     Parameters
     ----------
-    host : {url, 'binance', 'bitfinex', 'bitmex'}
-        Name of an allowed exchange or url of the host exchange. If url of
-        a host exchange is provided, keyword arguments for connection and
-        subscribe parameters must be also specified.
-    time_step : int, optional
+    host : str
+        WebSocket URL of the exchange, or one of the magic strings
+        ``'bitfinex'`` / ``'bitmex'`` for pre-configured connections.
+        For all other exchanges pass the full URL directly.
+    time_step : int or None, optional
         Number of seconds between two snapshots of data, minimum is 1,
-        default is 60 (one minute). Each `time_step` data will be
-        processed and updated to the database.
+        default is 60 (one minute). Each ``time_step`` seconds data will be
+        processed and pushed to the database.  Pass ``None`` to receive data
+        tick-by-tick without periodic aggregation.
     STOP : int, optional
         Number of seconds before stoping, default is `3600` (one hour).
     kwargs : dict, optional
@@ -69,18 +63,9 @@ class ContinuousDownloader(BasisWebSocket):
     set_process_data
     set_saver
 
-    TODO :
-    - None time_step send tick by tick data
-    - Clean private/public methods
-    - Add optional setting parser
-
     """
 
     _parser_exchange: dict[str, Any] = {
-        'binance': {
-            'host': 'wss://stream.binance.com:9443/ws',
-            'subs': {},  # {'stream': None},
-        },
         'bitfinex': {
             'host': 'wss://api-pub.bitfinex.com/ws/2',
             'subs': {'event': 'subscribe'},  # , 'stream': None},
@@ -145,7 +130,7 @@ class ContinuousDownloader(BasisWebSocket):
 
     async def _loop(self) -> None:
         """ Loop to process and save data into database. """
-        await self.wait_that('_data')
+        await self.wait_that('is_connect')
 
         async for data in self:
             self.logger.debug('Get data.')
@@ -218,44 +203,28 @@ class ContinuousDownloader(BasisWebSocket):
         self.saver = call
         self.io_params = kwargs
 
-    def _parser_debug(self, data: Any, level: int = 0) -> None:
-        # Function to debug and understand data structure
-        if level == 0:
-            self._data[self.t] = data
-
-        if isinstance(data, list):
-            self.logger.debug('Data is a list')
-            for d in data:
-                self._parser_debug(d, level=level + 1)
-
-        elif isinstance(data, dict):
-            self.logger.debug('Data is a dict')
-            for k, a in data.items():
-                self.logger.debug('{}: {}'.format(k, a))
-
-        else:
-            self.logger.debug('Data is {}: {}'.format(type(data), data))
-
     def get_parser(self, key: str) -> Callable[..., Any]:
         """ Get allowed data parser.
 
         Parameters
         ----------
         key : str
-            Name code of data to parse. If `key` is not allowed then return a
-            debug_parser which will display data structure.
+            Name code of data to parse.
 
         Returns
         -------
         function
             The allowed function to parse this kind of data.
 
-        """
-        if key not in self._parser_data.keys():
-            self.logger.error('Unknown parser key {}, only {} allowed.'.format(
-                key, self._parser_data.keys()
-            ))
+        Raises
+        ------
+        KeyError
+            If `key` is not in the allowed parser keys.
 
-            return self._parser_debug
+        """
+        if key not in self._parser_data:
+            raise KeyError(
+                f"Unknown parser key {key!r}, allowed: {list(self._parser_data)}"
+            )
 
         return self._parser_data[key]

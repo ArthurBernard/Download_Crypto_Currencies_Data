@@ -25,7 +25,11 @@ Download Crypto-Currency Data
     :target: https://download-crypto-currencies-data.readthedocs.io/en/latest/
     :alt: Documentation Status
 
-.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/master/interrogate_badge_output.svg
+.. image:: https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data
+    :alt: Coverage
+
+.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/badges/interrogate_badge.svg
     :target: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
     :alt: Docstring Coverage
 
@@ -57,23 +61,25 @@ From source::
 Supported exchanges
 ===================
 
-+------------------+------------+-----------------+
-| Exchange         | Historical | Real-time       |
-+==================+============+=================+
-| Binance          | ✓          |                 |
-+------------------+------------+-----------------+
-| Coinbase         | ✓          |                 |
-+------------------+------------+-----------------+
-| Kraken           | ✓          |                 |
-+------------------+------------+-----------------+
-| Bybit            | ✓          | ✓               |
-+------------------+------------+-----------------+
-| OKX              | ✓          |                 |
-+------------------+------------+-----------------+
-| Bitfinex         |            | ✓               |
-+------------------+------------+-----------------+
-| Bitmex           |            | ✓               |
-+------------------+------------+-----------------+
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| Exchange         | REST OHLCV | REST Trades | REST Order Book | WS OHLCV | WS Trades | WS Order Book  |
++==================+============+=============+=================+==========+===========+================+
+| Binance          | ✓          |             |                 |          | ✓         | ✓              |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| Coinbase         | ✓          |             |                 |          |           |                |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| Kraken           | ✓          |             |                 | ✓        | ✓         | ✓              |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| Bybit            | ✓          |             |                 |          | ✓         | ✓              |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| OKX              | ✓          |             |                 | ✓        | ✓         | ✓              |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| Bitfinex         |            |             |                 | ✓\*      | ✓         | ✓              |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+| Bitmex           |            |             |                 |          | ✓         | ✓              |
++------------------+------------+-------------+-----------------+----------+-----------+----------------+
+
+\* Bitfinex WS OHLCV is aggregated from the trades stream via ``get_ohlc_bitfinex``.
 
 Presentation
 ============

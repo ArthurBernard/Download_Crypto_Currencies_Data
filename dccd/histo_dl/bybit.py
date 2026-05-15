@@ -11,10 +11,12 @@
 
 """
 
+from __future__ import annotations
+
 # Import built-in packages
+from typing import Any
 
 # Import third-party packages
-
 # Import local packages
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
@@ -110,7 +112,7 @@ class FromBybit(ImportDataCryptoCurrencies):
         self.full_path = self.path + '/Bybit/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
-    def _import_data(self, start='last', end='now'):
+    def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)
 
         param = {
@@ -138,7 +140,7 @@ class FromBybit(ImportDataCryptoCurrencies):
 
         return data
 
-    def import_data(self, start='last', end='now'):
+    def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Bybit for a specific time interval.
 
         Parameters

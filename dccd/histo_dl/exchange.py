@@ -10,8 +10,8 @@
 
 Notes
 -----
-The following object is shapped to download data from crypto-currency exchanges
-(currently only Binance, Coinbase, Kraken).
+The following object is shaped to download data from crypto-currency exchanges
+(Binance, Coinbase, Kraken, Bybit, OKX).
 
 """
 
@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import time
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 # Import extern packages
@@ -44,25 +45,26 @@ def _should_retry(exc):
             and exc.response.status_code == 429)
 
 
-class ImportDataCryptoCurrencies:
+class ImportDataCryptoCurrencies(ABC):
     """ Base class to import data about crypto-currencies from some exchanges.
 
     Parameters
     ----------
     path : str
-        The path where data will be save.
+        The path where data will be saved.
     crypto : str
-        The abreviation of the crypto-currencie.
+        The abbreviation of the crypto-currency.
     span : {int, 'weekly', 'daily', 'hourly'}
         - If str, periodicity of observation.
         - If int, number of the seconds between each observation, minimal span\
             is 60 seconds.
     platform : str
-        The platform of your choice: 'Kraken', 'Coinbase'.
+        The platform of your choice: 'Binance', 'Kraken', 'Coinbase',
+        'Bybit', 'OKX'.
     fiat : str
         A fiat currency or a crypto-currency.
     form : {'xlsx', 'csv'}
-        Your favorit format. Only 'xlsx' and 'csv' at the moment.
+        Your favorite format. Only 'xlsx' and 'csv' at the moment.
 
     Notes
     -----
@@ -70,7 +72,7 @@ class ImportDataCryptoCurrencies:
 
     See Also
     --------
-    FromBinance, FromKraken, FromCoinbase
+    FromBinance, FromKraken, FromCoinbase, FromBybit, FromOKX
 
     Attributes
     ----------
@@ -119,32 +121,45 @@ class ImportDataCryptoCurrencies:
         return r
 
     def _get_last_date(self) -> int:
-        """ Find the last observation imported.
+        """ Find the timestamp of the last imported observation.
 
-        TODO : to finish
+        Scans :attr:`full_path` for saved files and reads the last row of the
+        most-recent file.  Supports ``.xlsx``, ``.csv``, and ``.parquet``
+        formats.  Falls back to ``1325376000`` (2012-01-01 00:00:00 UTC) when
+        the directory is empty or the file extension is not recognised.
+
+        Returns
+        -------
+        int
+            Unix timestamp of the last row in the latest saved file, or
+            ``1325376000`` if no file is found or the format is unsupported.
+
         """
         pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
 
         if not os.listdir(self.full_path):
-
             return 1325376000
 
+        last_file = sorted(os.listdir(self.full_path), reverse=True)[0]
+        ext = last_file.rsplit('.', 1)[-1]
+        full = os.path.join(self.full_path, last_file)
+
+        if ext == 'xlsx':
+            self.last_df = pd.read_excel(full)
+        elif ext == 'csv':
+            self.last_df = pd.read_csv(full)
+        elif ext == 'parquet':
+            self.last_df = pd.read_parquet(full)
         else:
-            last_file = sorted(os.listdir(self.full_path), reverse=True)[0]
-            if last_file.split('.')[-1] == 'xlsx':
-                self.last_df = pd.read_excel(
-                    self.full_path + '/' + str(last_file)
-                )
+            self.logger.warning(
+                'Unsupported file format %s. Starting at 2012-01-01.', ext
+            )
+            return 1325376000
 
-                return self.last_df.TS.iloc[-1]
+        if 'TS' in self.last_df.columns:
+            return int(self.last_df['TS'].iloc[-1])
 
-            else:
-                self.logger.warning(
-                    'Last saved file is in format not allowing. '
-                    'Start at 1st January 2012.'
-                )
-
-                return 1325376000
+        return int(self.last_df.index[-1])
 
     def _set_time(self, start: int | str, end: int | str) -> tuple[int, int]:
         """ Set the end and start in timestamp if is not yet.
@@ -178,9 +193,36 @@ class ImportDataCryptoCurrencies:
             int((_end // self.span) * self.span)
 
     def _set_by_period(self, TS: int) -> str:
+        """ Convert a timestamp to a period label for grouping files.
+
+        Parameters
+        ----------
+        TS : int
+            Unix timestamp.
+
+        Returns
+        -------
+        str
+            Date string formatted according to :attr:`by_period`
+            (e.g. ``'2024'`` for ``by_period='Y'``).
+
+        """
         return TS_to_date(TS, form='%' + self.by_period)
 
     def _name_file(self, date: str) -> str:
+        """ Build the file stem for a given period label.
+
+        Parameters
+        ----------
+        date : str
+            Period label returned by :meth:`_set_by_period`.
+
+        Returns
+        -------
+        str
+            File stem of the form ``{per}_of_{crypto}{fiat}_in_{date}``.
+
+        """
         return self.per + '_of_' + self.crypto + self.fiat + '_in_' + date
 
     def save(self, form: str = 'xlsx', by_period: str = 'Y') -> ImportDataCryptoCurrencies:
@@ -222,7 +264,23 @@ class ImportDataCryptoCurrencies:
         return self
 
     def _excel_format(self, name: str, form: str, group: pd.DataFrame) -> ImportDataCryptoCurrencies:
-        """ Save as excel format. """
+        """ Save a grouped DataFrame slice to an Excel file.
+
+        Parameters
+        ----------
+        name : str
+            Period label used to build the file name via :meth:`_name_file`.
+        form : str
+            File extension (e.g. ``'xlsx'``).
+        group : pd.DataFrame
+            Slice of data for the period ``name``.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` to allow method chaining.
+
+        """
         path = self.full_path + '/' + self._name_file(name) + '.' + form
         df_group = group.reset_index(drop=True)
         with pd.ExcelWriter(path, engine='openpyxl') as writer:
@@ -232,9 +290,25 @@ class ImportDataCryptoCurrencies:
         return self
 
     def _sort_data(self, data: list[dict[str, Any]]) -> ImportDataCryptoCurrencies:
-        """ Clean and sort the data.
+        """ Validate, merge, and sort raw OHLCV data against :attr:`last_df`.
 
-        TODO : to finish
+        Validates each record through :class:`~dccd.models.OHLCBar`, builds a
+        complete timestamp grid from ``self.start`` to ``self.end``, outer-merges
+        with new data, forward-fills gaps, and stores the result in
+        :attr:`df`.
+
+        Parameters
+        ----------
+        data : list of dict
+            Raw OHLCV records as returned by :meth:`_import_data`.  Each dict
+            must contain at least the keys expected by
+            :class:`~dccd.models.OHLCBar`.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` to allow method chaining.
+
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
         df = pd.DataFrame(
@@ -308,14 +382,22 @@ class ImportDataCryptoCurrencies:
         else:
             raise TypeError("span must be str or int")
 
+    @abstractmethod
     def _import_data(self, start: int | str, end: int | str) -> list[dict[str, Any]]:
         """ Fetch raw data from the exchange (implemented by subclasses). """
-        raise NotImplementedError
 
     def set_hierarchy(self, liste: list[str]) -> None:
-        """ Set the specific hierarchy of the files where will save your data.
+        """ Override the default save path with a custom directory hierarchy.
 
-        TODO : to finish
+        Rebuilds :attr:`full_path` by joining :attr:`path` with each element
+        in ``liste``.  Call this before :meth:`import_data` if you want to
+        store files in a non-standard directory layout.
+
+        Parameters
+        ----------
+        liste : list of str
+            Path components to append to :attr:`path`.
+
         """
         self.full_path = self.path
         for elt in liste:

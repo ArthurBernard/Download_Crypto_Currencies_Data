@@ -34,6 +34,7 @@ Low level API
 import asyncio
 import logging
 import time
+from typing import Any
 
 from dccd.continuous_dl.exchange import ContinuousDownloader
 from dccd.process_data import set_marketdepth, set_ohlc, set_orders, set_trades
@@ -47,14 +48,12 @@ __all__ = [
     'get_trades_bitfinex',
 ]
 
-# TODO : - get_raw_orderbook; get_ohlc;
-
 # =========================================================================== #
 #                              Parser functions                               #
 # =========================================================================== #
 
 
-def _parser_trades(tData):
+def _parser_trades(tData: list[Any]) -> dict[str, Any]:
     if tData[1] == 'te':
             tData = tData[2]
 
@@ -67,7 +66,7 @@ def _parser_trades(tData):
     }
 
 
-def _parser_book(tData):
+def _parser_book(tData: list[Any]) -> dict[str, Any]:
     if isinstance(tData[1], list):
         tData = tData[1]
 
@@ -84,18 +83,19 @@ class DownloadBitfinexData(ContinuousDownloader):
 
     Parameters
     ----------
-    time_step : int, optional
+    time_step : int or None, optional
         Number of seconds between two snapshots of data, minimum is 1, default
-        is 60 (one minute). Each `time_step` data will be processed and updated
-        to the database.
+        is 60 (one minute). Each ``time_step`` seconds data will be processed
+        and pushed to the database.  Pass ``None`` to receive data tick-by-tick
+        without periodic aggregation.
     until : int, optional
-        Number of seconds before stoping or timestamp of when stoping, default
-        is 3600 (one hour).
+        Number of seconds before stopping, or a future Unix timestamp at which
+        to stop.  Default is ``3600`` (one hour).
 
     Attributes
     ----------
     host : str
-        Adress of host to connect.
+        Address of host to connect.
     conn_par : dict
         Parameters of websocket connection.
     ws : websockets.client.WebSocketClientProtocol
@@ -117,36 +117,36 @@ class DownloadBitfinexData(ContinuousDownloader):
 
     """
 
-    # TODO :
-    # - None time_step send tick by tick data
-    # - Clean private/public methods
-    # - Add optional setting parser
-    # TODO : docstring
-    # TODO : add more parser methods
+    def __init__(self, time_step: int = 60, until: int | None = 3600) -> None:
+        """ Initialize object.
 
-    def __init__(self, time_step=60, until=3600):
-        """ Initialize object. """
-        # TODO : set until parser to convert date, time, etc
+        Parameters
+        ----------
+        time_step : int or None, optional
+            Snapshot interval in seconds.  Default is ``60``.
+        until : int or None, optional
+            Seconds to run, or a future Unix timestamp to stop at.
+            Default is ``3600``.
+
+        """
         if until is None:
             until = 0
-
         elif until > time.time():
             until -= int(time.time())
 
         ContinuousDownloader.__init__(self, 'bitfinex', time_step=time_step,
                                       STOP=until)
 
-        self._parser_data = {
+        self._parser_data: dict[str, Any] = {
             'book': self.parser_book,
             'book_raw': self.parser_raw_book,
             'trades': self.parser_trades,
             'trades_raw': self.parser_raw_trades,
-            # 'candles': None,
         }
         self.logger = logging.getLogger(__name__)
-        self.d = {}
+        self.d: dict[str, Any] = {}
 
-    def parser_raw_book(self, data):
+    def parser_raw_book(self, data: list[Any]) -> None:
         """ Parse raw order book, each timestep set in a list all orders.
 
         Parameters
@@ -155,11 +155,10 @@ class DownloadBitfinexData(ContinuousDownloader):
             Order data.
 
         """
-        data = _parser_book(data)
+        parsed = _parser_book(data)
+        self._raw_parser(parsed)
 
-        self._raw_parser(data)
-
-    def parser_book(self, data):
+    def parser_book(self, data: list[Any]) -> None:
         """ Parse market depth of order book.
 
         Parameters
@@ -168,22 +167,20 @@ class DownloadBitfinexData(ContinuousDownloader):
             Order data.
 
         """
-        data = _parser_book(data)
+        parsed = _parser_book(data)
 
-        if data['count'] > 0:
-            if data['price'] in self.d.keys():
-                self.d[data['price']]['amount'] += data['amount']
-
+        if parsed['count'] > 0:
+            if parsed['price'] in self.d.keys():
+                self.d[parsed['price']]['amount'] += parsed['amount']
             else:
-                self.d[data['price']] = data
-
+                self.d[parsed['price']] = parsed
         else:
-            self.d.pop(data['price'])
+            self.d.pop(parsed['price'])
 
-        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}
+        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}  # type: ignore[assignment]
 
-    def parser_raw_trades(self, data):
-        """ Parse trade data.
+    def parser_raw_trades(self, data: list[Any]) -> None:
+        """ Parse raw trade data tick-by-tick.
 
         Parameters
         ----------
@@ -192,15 +189,13 @@ class DownloadBitfinexData(ContinuousDownloader):
 
         """
         if data[1] == 'tu':
-
             return
 
-        data = _parser_trades(data)
+        parsed = _parser_trades(data)
+        self._raw_parser(parsed)
 
-        self._raw_parser(data)
-
-    def parser_trades(self, data):
-        """ Parse OHLC data.
+    def parser_trades(self, data: list[Any]) -> None:
+        """ Parse trade data and aggregate into OHLCV snapshots.
 
         Parameters
         ----------
@@ -208,33 +203,26 @@ class DownloadBitfinexData(ContinuousDownloader):
             Trade data.
 
         """
-        # TODO : process ohlc
         if data[1] == 'tu':
-
             return
 
-        data = _parser_trades(data)
+        parsed = _parser_trades(data)
+        self._raw_parser(parsed)
 
-        self._raw_parser(data)
-
-    async def on_message(self, data):
-        """ Set data to order book. """
+    async def on_message(self, data: dict[str, Any] | list[Any]) -> None:
+        """ Route an incoming websocket message to the appropriate parser. """
         if isinstance(data, list):
             if data[1] == 'hb':
                 self.logger.info('HeartBeat')
-
             elif isinstance(data[1][0], list):
-
                 for d in data[1]:
                     self.parser(d)
-
             else:
                 self.parser(data)
-
         else:
             self.logger.info('{}'.format(data))
 
-    def __call__(self, channel, **kwargs):
+    def __call__(self, channel: str, **kwargs: Any) -> 'DownloadBitfinexData':
         """ Open a websocket connection and save/update the database.
 
         Run asynchronously two loops to get data from bitfinex websocket and
@@ -278,12 +266,11 @@ class DownloadBitfinexData(ContinuousDownloader):
 #                            High level functions                             #
 # =========================================================================== #
 
-# TODO : Finish docstring
 
-
-def get_data_bitfinex(channel, process_func, process_params={},
-                      save_method='dataframe', io_params={}, time_step=60,
-                      until=None, path=None, **kwargs):
+def get_data_bitfinex(channel: str, process_func: Any, process_params: dict[str, Any] = {},
+                      save_method: str = 'dataframe', io_params: dict[str, Any] = {},
+                      time_step: int = 60, until: int | None = None, path: str | None = None,
+                      **kwargs: Any) -> None:
     """ Download data from Bitfinex exchange and update the database.
 
     Parameters
@@ -337,105 +324,51 @@ def get_data_bitfinex(channel, process_func, process_params={},
     .. [2] https://docs.bitfinex.com/v2/docs/ws-public
 
     """
-    # Set database connector object
     if path is None:
         path = './database/bitfinex/{}'.format(channel)
 
-    # Set saver object
     saver = IODataBase(path, method=save_method)
-
-    # Set websocket downloader object
     downloader = DownloadBitfinexData(time_step=time_step, until=until)
     downloader.set_process_data(process_func, **process_params)
     downloader.set_saver(saver, **io_params)
-
     downloader(channel, **kwargs)
 
-    # DEBUG
-    # print('TO DEBUG, DATA LEFT:')
-    # print(downloader._data)
 
-
-def get_orders_bitfinex(symbol, precision='P0', frequency='F0', lenght='25',
-                        time_step=60, until=None, path=None,
-                        save_method='dataframe', io_params={}):
-    """ Download orderbook from Bitfinex exchange. """
+def get_orders_bitfinex(symbol: str, precision: str = 'P0', frequency: str = 'F0',
+                        lenght: str = '25', time_step: int = 60, until: int | None = None,
+                        path: str | None = None, save_method: str = 'dataframe',
+                        io_params: dict[str, Any] = {}) -> None:
+    """ Download raw order data from Bitfinex exchange. """
     get_data_bitfinex('book_raw', set_orders, time_step=time_step, until=until,
                       path=path, save_method=save_method, io_params=io_params,
                       symbol=symbol, precision=precision, frequency=frequency,
                       lenght=lenght)
 
 
-def get_orderbook_bitfinex(symbol, precision='P0', frequency='F0', lenght='25',
-                           time_step=60, until=None, path=None,
-                           save_method='dataframe', io_params={}):
-    """ Download orderbook from Bitfinex exchange. """
+def get_orderbook_bitfinex(symbol: str, precision: str = 'P0', frequency: str = 'F0',
+                           lenght: str = '25', time_step: int = 60, until: int | None = None,
+                           path: str | None = None, save_method: str = 'dataframe',
+                           io_params: dict[str, Any] = {}) -> None:
+    """ Download reconstructed order book from Bitfinex exchange. """
     get_data_bitfinex('book', set_marketdepth, time_step=time_step,
                       until=until, path=path, save_method=save_method,
                       io_params=io_params, symbol=symbol, precision=precision,
                       frequency=frequency, lenght=lenght)
 
 
-def get_trades_bitfinex(symbol, time_step=60, until=None, path=None,
-                        save_method='dataframe', io_params={}):
+def get_trades_bitfinex(symbol: str, time_step: int = 60, until: int | None = None,
+                        path: str | None = None, save_method: str = 'dataframe',
+                        io_params: dict[str, Any] = {}) -> None:
     """ Download trades tick by tick from Bitfinex exchange. """
     get_data_bitfinex('trades_raw', set_trades, time_step=time_step,
                       until=until, path=path, save_method=save_method,
                       io_params=io_params, symbol=symbol)
 
 
-def get_ohlc_bitfinex(symbol, time_step=60, until=None, path=None,
-                      save_method='dataframe', io_params={}):
-    """ Download trades tick by tick from Bitfinex exchange. """
+def get_ohlc_bitfinex(symbol: str, time_step: int = 60, until: int | None = None,
+                      path: str | None = None, save_method: str = 'dataframe',
+                      io_params: dict[str, Any] = {}) -> None:
+    """ Download OHLCV data from Bitfinex exchange. """
     get_data_bitfinex('trades', set_ohlc, time_step=time_step, until=until,
                       path=path, save_method=save_method, io_params=io_params,
                       process_params={'ts': time_step}, symbol=symbol)
-
-
-# =========================================================================== #
-#                                   Tests                                     #
-# =========================================================================== #
-
-# TODO : Clean this part
-
-if __name__ == '__main__':
-
-    import logging.config
-
-    import yaml
-
-    logging_path = '/home/arthur/Data/bitfinex_data_bot/scripts/logging.ini'
-    with open(logging_path, 'rb') as f:
-        config = yaml.safe_load(f.read())
-
-    logging.config.dictConfig(config)
-
-    pair = 'tBTCUSD'
-    time_step = 60
-    until = 900
-    path = '/home/arthur/database/bitfinex/'
-    save_method = 'dataframe'
-    io_params = {'name': '2019'}
-
-    def f(x):
-        return x
-
-    # get_data_bitfinex('candles', f, symbol=pair, key='trade:1m:tBTCUSD',
-    #                  time_step=time_step, until=until, path=path,
-    #                  save_method=save_method, io_params=io_params)
-
-    get_orderbook_bitfinex(pair, time_step=time_step, until=until,
-                           path=path + '/orderbook/' + pair + '/',
-                           save_method=save_method, io_params=io_params)
-
-    get_trades_bitfinex(pair, time_step=time_step, until=until,
-                        path=path + '/trades/' + pair + '/',
-                        save_method=save_method, io_params=io_params)
-
-    get_orders_bitfinex(pair, time_step=time_step, until=until,
-                        path=path + '/orders/' + pair + '/',
-                        save_method=save_method, io_params=io_params)
-
-    get_ohlc_bitfinex(pair, time_step=time_step, until=until,
-                      path=path + '/ohlc/' + pair + '/',
-                      save_method=save_method, io_params=io_params)
