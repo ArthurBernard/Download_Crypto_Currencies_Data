@@ -29,6 +29,7 @@ jobs:
       - name: Push badge to badges branch
         run: |
           cp interrogate_badge.svg /tmp/interrogate_badge.svg
+          rm -f interrogate_badge.svg
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git ls-remote --exit-code origin badges; then
