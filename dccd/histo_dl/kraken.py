@@ -16,8 +16,12 @@
 
 """
 
+from __future__ import annotations
+
 # Import built-in packages
 import time
+import warnings
+from typing import Any
 
 # Import third party packages
 # Import local packages
@@ -94,7 +98,16 @@ class FromKraken(ImportDataCryptoCurrencies):
         else:
             self.pair = 'X' + crypto + 'Z' + fiat
 
-    def _import_data(self, start='last', end=None):
+    def _import_data(
+        self, start: int | str = 'last', end: int | str | None = None
+    ) -> list[dict[str, Any]]:
+        if end is not None:
+            warnings.warn(
+                "The Kraken OHLC API does not support an end date — the 'end' "
+                "parameter is ignored and data is always fetched up to now.",
+                UserWarning,
+                stacklevel=2,
+            )
         self.start, self.end = self._set_time(start, time.time())
 
         param = {
@@ -119,21 +132,28 @@ class FromKraken(ImportDataCryptoCurrencies):
 
         return data
 
-    def import_data(self, start='last', end=None):
+    def import_data(
+        self, start: int | str = 'last', end: int | str | None = None
+    ) -> FromKraken:
         """ Download data from Kraken since a specific time until now.
 
         Parameters
         ----------
         start : int or str
-            Timestamp of the first observation of you want as int or date
-            format 'yyyy-mm-dd hh:mm:ss' as string.
+            Timestamp of the first observation as a Unix timestamp (int) or a
+            date string ``'yyyy-mm-dd hh:mm:ss'``.
+        end : int, str or None
+            Ignored. The Kraken OHLC API does not support a custom end date
+            and always returns data up to the current time. Passing a non-None
+            value raises a :class:`UserWarning`.
 
         Returns
         -------
-        data : pd.DataFrame
-            Data sorted and cleaned in a data frame.
+        self : FromKraken
+            Data sorted and cleaned in a data frame, accessible via
+            :meth:`get_data`.
 
         """
-        data = self._import_data(start=start)
+        data = self._import_data(start=start, end=end)
 
         return self._sort_data(data)
