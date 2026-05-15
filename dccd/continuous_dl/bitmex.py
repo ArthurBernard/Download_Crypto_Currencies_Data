@@ -54,6 +54,24 @@ __all__ = [
 
 
 def _parser_trades(tData: dict[str, Any], i: int = 0) -> dict[str, Any]:
+    """Parse a single trade entry from a Bitmex WebSocket message.
+
+    Parameters
+    ----------
+    tData : dict
+        Raw trade dict from the Bitmex 'trade' table action.
+        Expected keys: ``'timestamp'``, ``'price'``, ``'size'``, ``'side'``.
+    i : int, optional
+        Index used to make the ``tid`` unique within the same millisecond,
+        default is 0.
+
+    Returns
+    -------
+    dict
+        Normalised trade with keys: ``'tid'``, ``'timestamp'``,
+        ``'price'``, ``'amount'``, ``'type'``.
+
+    """
     t = dt.strptime(tData['timestamp'], '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()
 
     return {
@@ -66,6 +84,21 @@ def _parser_trades(tData: dict[str, Any], i: int = 0) -> dict[str, Any]:
 
 
 def _parser_book(tData: dict[str, Any]) -> dict[str, Any] | int:
+    """Parse a single order-book entry from a Bitmex WebSocket message.
+
+    Parameters
+    ----------
+    tData : dict
+        Raw order dict from the Bitmex 'orderBookL2' table action.
+        Expected keys: ``'side'``, and optionally ``'price'`` and ``'size'``.
+
+    Returns
+    -------
+    dict or int
+        If ``'price'`` is present: ``{'amount': signed_size, 'price': price}``.
+        Otherwise: signed size as int (positive for Buy, negative for Sell).
+
+    """
     if tData['side'] == 'Buy':
         s = 1
     else:

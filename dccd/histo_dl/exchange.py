@@ -10,8 +10,8 @@
 
 Notes
 -----
-The following object is shapped to download data from crypto-currency exchanges
-(currently only Binance, Coinbase, Kraken).
+The following object is shaped to download data from crypto-currency exchanges
+(Binance, Coinbase, Kraken, Bybit, OKX).
 
 """
 
@@ -51,19 +51,20 @@ class ImportDataCryptoCurrencies(ABC):
     Parameters
     ----------
     path : str
-        The path where data will be save.
+        The path where data will be saved.
     crypto : str
-        The abreviation of the crypto-currencie.
+        The abbreviation of the crypto-currency.
     span : {int, 'weekly', 'daily', 'hourly'}
         - If str, periodicity of observation.
         - If int, number of the seconds between each observation, minimal span\
             is 60 seconds.
     platform : str
-        The platform of your choice: 'Kraken', 'Coinbase'.
+        The platform of your choice: 'Binance', 'Kraken', 'Coinbase',
+        'Bybit', 'OKX'.
     fiat : str
         A fiat currency or a crypto-currency.
     form : {'xlsx', 'csv'}
-        Your favorit format. Only 'xlsx' and 'csv' at the moment.
+        Your favorite format. Only 'xlsx' and 'csv' at the moment.
 
     Notes
     -----
@@ -71,7 +72,7 @@ class ImportDataCryptoCurrencies(ABC):
 
     See Also
     --------
-    FromBinance, FromKraken, FromCoinbase
+    FromBinance, FromKraken, FromCoinbase, FromBybit, FromOKX
 
     Attributes
     ----------

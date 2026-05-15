@@ -25,8 +25,6 @@
 # Third party packages
 
 # Local packages
-# from .io import *
-# from .date_time import *
 from . import date_time, io, websocket
 
 __all__ = io.__all__

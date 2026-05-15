@@ -49,37 +49,6 @@
 
 ---
 
-## 3. Qualité & polish
-
-> Code mort, tests manquants, documentation. Important mais ne bloque rien.
-
-### 3.1 Suppression du code mort
-
-- [ ] Supprimer (ou promouvoir) `ContinuousDownloader._parser_debug()` :
-  jamais appelé directement, a un effet de bord non documenté
-  (`self._data[self.t] = data`)
-- [ ] Retirer les imports commentés dans `dccd/tools/__init__.py`
-- [ ] Revoir `await self.wait_that('_data')` dans `ContinuousDownloader._loop()`
-  — un dict non-vide est toujours truthy, cette attente ne garantit rien
-
-### 3.2 Tests manquants
-
-- [ ] Ajouter des tests pour `dccd/process_data.py` (`set_ohlc`, `set_marketdepth`,
-  `set_trades`, `set_orders`) — aucun test direct aujourd'hui
-- [ ] Tester la reconstruction du carnet d'ordres Bitmex (machine à états
-  `partial/insert/update/delete`)
-- [ ] Tester les scénarios d'erreur REST : HTTP 5xx, JSON malformé, champ manquant
-
-### 3.3 Documentation
-
-- [ ] Ajouter des docstrings aux fonctions `_parser_trades()` et `_parser_book()`
-  dans `dccd/continuous_dl/bybit.py` et `bitmex.py` (Kraken, OKX, Binance ont
-  des docstrings complets)
-- [ ] Mettre à jour la docstring de `ImportDataCryptoCurrencies` : elle cite encore
-  "only Binance, Coinbase, and Kraken" alors que Bybit et OKX sont supportés
-
----
-
 ## 4. Daemon autonome (déploiement serveur)
 
 > Grand chantier fonctionnel. Dépend de la stabilité de la section 1 et 2.
