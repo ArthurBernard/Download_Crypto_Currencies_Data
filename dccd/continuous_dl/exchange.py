@@ -6,14 +6,7 @@
 # @Last modified by: ArthurBernard
 # @Last modified time: 2019-08-30 10:01:33
 
-""" Basis object to download continuously data from websocket.
-
-Notes
------
-The following objects are shapped to download data from crypto-currency
-exchanges (currently only bitfinex and bitmex).
-
-"""
+""" Basis object to download continuously data from websocket. """
 
 # Built-in packages
 import asyncio
@@ -33,10 +26,10 @@ class ContinuousDownloader(BasisWebSocket):
 
     Parameters
     ----------
-    host : {url, 'binance', 'bitfinex', 'bitmex'}
-        Name of an allowed exchange or url of the host exchange. If url of
-        a host exchange is provided, keyword arguments for connection and
-        subscribe parameters must be also specified.
+    host : str
+        WebSocket URL of the exchange, or one of the magic strings
+        ``'bitfinex'`` / ``'bitmex'`` for pre-configured connections.
+        For all other exchanges pass the full URL directly.
     time_step : int or None, optional
         Number of seconds between two snapshots of data, minimum is 1,
         default is 60 (one minute). Each ``time_step`` seconds data will be
@@ -73,10 +66,6 @@ class ContinuousDownloader(BasisWebSocket):
     """
 
     _parser_exchange: dict[str, Any] = {
-        'binance': {
-            'host': 'wss://stream.binance.com:9443/ws',
-            'subs': {},  # {'stream': None},
-        },
         'bitfinex': {
             'host': 'wss://api-pub.bitfinex.com/ws/2',
             'subs': {'event': 'subscribe'},  # , 'stream': None},
