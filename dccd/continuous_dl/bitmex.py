@@ -34,6 +34,7 @@ Low level API
 import asyncio
 import time
 from datetime import datetime as dt
+from typing import Any
 
 from dccd.continuous_dl.exchange import ContinuousDownloader
 from dccd.process_data import set_marketdepth, set_trades
@@ -47,14 +48,12 @@ __all__ = [
     'get_trades_bitmex',
 ]
 
-# TODO : get_raw_orderbook; get_ohlc;
-
 # =========================================================================== #
 #                              Parser functions                               #
 # =========================================================================== #
 
 
-def _parser_trades(tData, i=0):
+def _parser_trades(tData: dict[str, Any], i: int = 0) -> dict[str, Any]:
     t = dt.strptime(tData['timestamp'], '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()
 
     return {
@@ -66,14 +65,13 @@ def _parser_trades(tData, i=0):
     }
 
 
-def _parser_book(tData):
+def _parser_book(tData: dict[str, Any]) -> dict[str, Any] | int:
     if tData['side'] == 'Buy':
         s = 1
     else:
         s = -1
 
     if 'price' in tData.keys():
-
         return {'amount': s * tData['size'], 'price': tData['price']}
 
     return s * tData['size']
@@ -89,18 +87,19 @@ class DownloadBitmexData(ContinuousDownloader):
 
     Parameters
     ----------
-    time_step : int, optional
+    time_step : int or None, optional
         Number of seconds between two snapshots of data, minimum is 1, default
-        is 60 (one minute). Each `time_step` data will be processed and updated
-        to the database.
+        is 60 (one minute). Each ``time_step`` seconds data will be processed
+        and pushed to the database.  Pass ``None`` to receive data tick-by-tick
+        without periodic aggregation.
     until : int, optional
-        Number of seconds before stoping or timestamp of when stoping, default
-        is 3600 (one hour).
+        Number of seconds before stopping, or a future Unix timestamp at which
+        to stop.  Default is ``3600`` (one hour).
 
     Attributes
     ----------
     host : str
-        Adress of host to connect.
+        Address of host to connect.
     conn_par : dict
         Parameters of websocket connection.
     ws : websockets.client.WebSocketClientProtocol
@@ -122,71 +121,76 @@ class DownloadBitmexData(ContinuousDownloader):
 
     """
 
-    # TODO :
-    # - None time_step send tick by tick data
-    # - Clean private/public methods
-    # - Add optional setting parser
-    # TODO : docstring
-    # TODO : add more parser methods
+    def __init__(self, time_step: int = 60, until: int | None = 3600) -> None:
+        """ Initialize object.
 
-    def __init__(self, time_step=60, until=3600):
-        """ Initialize object. """
-        # TODO : set until parser to convert date, time, etc
-        if until > time.time():
-            until -= int(time.time())
+        Parameters
+        ----------
+        time_step : int or None, optional
+            Snapshot interval in seconds.  Default is ``60``.
+        until : int or None, optional
+            Seconds to run, or a future Unix timestamp to stop at.
+            Default is ``3600``.
+
+        """
+        stop: int
+        if until is None:
+            stop = 0
+        elif until > time.time():
+            stop = until - int(time.time())
+        else:
+            stop = until
 
         ContinuousDownloader.__init__(self, 'bitmex', time_step=time_step,
-                                      STOP=until)
-        self._parser_data = {
+                                      STOP=stop)
+        self._parser_data: dict[str, Any] = {
             'orderBookL2_25': self.parser_book,
             'trade': self.parser_trades,
-            # 'candles': None,
         }
-        self.d = {}
+        self.d: dict[int, Any] = {}
         self.start = False
 
-    def parser_book(self, data):
-        """ Parse data of order book.
+    def parser_book(self, data: dict[str, Any]) -> None:
+        """ Parse and maintain a local copy of the order book.
+
+        Handles ``partial`` (snapshot), ``insert``, ``update``, and ``delete``
+        actions from the Bitmex WebSocket feed.
 
         Parameters
         ----------
         data : dict
-            Order data from the ws API.
+            Order book message from the WebSocket API.  Must contain
+            ``'action'`` and ``'data'`` keys.
 
         """
         action = data['action']
 
         for d in data['data']:
-            if action == 'partial':  # or action == 'insert':
+            if action == 'partial':
                 self.d[d['id']] = _parser_book(d)
                 self.start = True
-
             elif not self.start:
                 self.logger.info("Waiting data")
-
                 continue
-
             elif action == 'delete':
                 self.d.pop(d['id'])
-
             elif action == 'insert':
                 self.d[d['id']] = _parser_book(d)
-
             elif action == 'update':
                 self.d[d['id']]['amount'] = _parser_book(d)
-
             else:
                 self.logger.error('Unknown action {}: {}'.format(action, data))
 
-        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}
+        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}  # type: ignore[assignment]
 
-    def parser_trades(self, data):
-        """ Parse data of trades.
+    def parser_trades(self, data: dict[str, Any]) -> None:
+        """ Parse trade data and accumulate records for the current timestep.
 
         Parameters
         ----------
         data : dict
-            Order data from the ws API.
+            Trade message from the WebSocket API.  Must contain a ``'data'``
+            key with a list of trade records.
 
         """
         i, _data = 0, []
@@ -196,22 +200,20 @@ class DownloadBitmexData(ContinuousDownloader):
 
         if self.t in self._data.keys():
             self._data[self.t] += _data
-
         else:
             self._data[self.t] = _data
 
-    async def on_message(self, data):
-        """ Set data to order book. """
+    async def on_message(self, data: dict[str, Any] | list[Any]) -> None:
+        """ Route an incoming websocket message to the appropriate parser. """
         if isinstance(data, dict):
             if 'action' not in data.keys():
                 self.logger.info('No action: {}'.format(data))
             else:
                 self.parser(data)
-
         else:
             self.logger.error('Not recognizing: {}'.format(data))
 
-    def __call__(self, *args):
+    def __call__(self, *args: str) -> 'DownloadBitmexData':
         """ Open a websocket connection and save/update the database.
 
         Run asynchronously two loops to get data from Bitmex websocket and
@@ -219,14 +221,11 @@ class DownloadBitmexData(ContinuousDownloader):
 
         Parameters
         ----------
-        channel : {'orderBookL2_25', 'trade'}
-            Channel to get data, by default data will be aggregated (OHLC for
-            'trades' and reconstructed orderbook for 'orderBookL2_25'), add
-            '_raw' to the `channel` to get raw data (trade tick by tick or each
-            orders).
-        **kwargs
-            Any revelevant keyword arguments will be passed to the websocket
-            connector, see API documentation [1]_ for more details.
+        *args : str
+            Positional arguments joined with ``':'`` and passed as the
+            ``args`` subscribe parameter.  The first element should be the
+            channel name (e.g. ``'orderBookL2_25'`` or ``'trade'``) followed
+            by any instrument symbol (e.g. ``'XBTUSD'``).
 
         Warnings
         --------
@@ -254,133 +253,75 @@ class DownloadBitmexData(ContinuousDownloader):
 #                            High level functions                             #
 # =========================================================================== #
 
-# TODO : Finish docstring
-# TODO : Verify integration
-# TODO : Verify docstring match with function signature
 
-def get_data_bitmex(process_func, *args, time_step=60, until=None,
-                    path=None, save_method='dataframe', io_params={},
-                    **kwargs):
+def get_data_bitmex(process_func: Any, *args: str, time_step: int = 60,
+                    until: int | None = None, path: str | None = None,
+                    save_method: str = 'dataframe', io_params: dict[str, Any] = {},
+                    **kwargs: Any) -> None:
     """ Download data from Bitmex exchange and update the database.
 
     Parameters
     ----------
-    channel : str, {'book', 'book_raw', 'trades', 'trades_raw'}
-        Websocket channel to get data, by default data will be aggregated (OHLC
-        for 'trades' and reconstructed orderbook for 'book'), add '_raw' to the
-        `channel` to get raw data (trade tick by tick or each orders).
     process_func : callable
-        Function to process and clean data before to be saved. Must take `data`
-        in arguments and can take any optional keywords arguments, cf function
-        exemples in :mod:`dccd.process_data`.
-    process_params : dict, optional
-        Dictionary of the keyword arguments available to `process_func`, cf
-        documentation into :mod:`dccd.process_data`.
-    save_method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
-                   'Oracle', 'MSSQL', 'MySQL'},
-        It will create an IODataBase object to save/update the database in the
-        specified format `save_method`, default is 'DataFrame' it save as
-        binary pd.DataFrame object. More informations are available into
-        :mod:`dccd.tools.io`.
-    io_params : dict, optional
-        Dictionary of the keyword arguments available to the
-        ``dccd.tools.io.IODataBase`` callable method. Note: With SQL format
-        some parameters are compulsory, seed details into :mod:`dccd.tools.io`.
+        Function to process and clean data before saving.  Must accept
+        ``data`` as its first argument plus optional keyword arguments; see
+        :mod:`dccd.process_data` for examples.
+    *args : str
+        Channel and optional instrument, e.g. ``'trade', 'XBTUSD'``.  Passed
+        directly to :meth:`DownloadBitmexData.__call__`.
     time_step : int, optional
-        Number of second between two snapshots of data, default 60 (1 minute).
+        Number of seconds between snapshots, default ``60`` (1 minute).
     until : int, optional
-        Number of seconds before stoping to download and update, default is
-        None. If `until` equal 0 or None it means it never stop.
+        Seconds to run, or a future Unix timestamp to stop at.  ``None`` or
+        ``0`` means run indefinitely.
     path : str, optional
-        Path to save/update the database, default is None. If `path` is None,
-        database is saved at the relative path './database/bitmex/`channel`'.
+        Directory for the database.  Defaults to
+        ``'database/bitmex/{channel}'``.
+    save_method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL',\
+                   'Oracle', 'MSSQL', 'MySQL'}, optional
+        Storage format for :class:`~dccd.tools.io.IODataBase`, default
+        ``'dataframe'``.
+    io_params : dict, optional
+        Extra keyword arguments forwarded to the
+        :class:`~dccd.tools.io.IODataBase` callable.
     **kwargs
-        Any revelevant keyword arguments will be passed to the websocket
-        connector, see Bitmex API documentation [2]_ for more details.
+        Additional keyword arguments forwarded to the websocket connector.
 
     Warnings
     --------
-    '_raw' option not yet working for bitmex.
+    '_raw' option not yet working for Bitmex.
 
     See Also
     --------
-    process_data : function to process/clean data (set_marketdepth, set_ohlc,
-        set_orders, set_marketdepth).
-    tools.io.IODataBase : object to save/update the database with respect to
-        specified format.
+    process_data : helper functions to transform raw payloads.
+    tools.io.IODataBase : persistence layer.
 
     References
     ----------
-    .. [2] https://www.bitmex.com/api/
+    .. [1] https://www.bitmex.com/api/
 
     """
-    # Set database connector object
     if path is None:
-        path = 'database/orders/{}'.format(pair)
+        path = 'database/bitmex/{}'.format(args[0])
 
-    # Set saver object
     saver = IODataBase(path, method=save_method)
-
-    # Set websocket downloader object
     downloader = DownloadBitmexData(time_step=time_step, until=until)
     downloader.set_process_data(process_func)
     downloader.set_saver(saver, **io_params)
-
     downloader(*args)
 
 
-def get_orderbook_bitmex(*args, time_step=60, until=None, path=None,
-                         save_method='dataframe', io_params={}):
-    """ Download orderbook from Bitmex exchange. """
+def get_orderbook_bitmex(*args: str, time_step: int = 60, until: int | None = None,
+                         path: str | None = None, save_method: str = 'dataframe',
+                         io_params: dict[str, Any] = {}) -> None:
+    """ Download reconstructed order book from Bitmex exchange. """
     get_data_bitmex(set_marketdepth, *args, time_step=time_step, until=until,
                     path=path, save_method=save_method, io_params=io_params)
 
 
-def get_trades_bitmex(*args, time_step=60, until=None, path=None,
-                      save_method='dataframe', io_params={}):
+def get_trades_bitmex(*args: str, time_step: int = 60, until: int | None = None,
+                      path: str | None = None, save_method: str = 'dataframe',
+                      io_params: dict[str, Any] = {}) -> None:
     """ Download trades tick by tick from Bitmex exchange. """
     get_data_bitmex(set_trades, *args, time_step=time_step, until=until,
                     path=path, save_method=save_method, io_params=io_params)
-
-
-# =========================================================================== #
-#                                   Tests                                     #
-# =========================================================================== #
-
-# TODO : Clean this part
-
-
-if __name__ == '__main__':
-
-    import logging.config
-
-    import yaml
-
-    logging_path = '/home/arthur/Data/bitfinex_data_bot/scripts/logging.ini'
-    with open(logging_path, 'rb') as f:
-        config = yaml.safe_load(f.read())
-
-    logging.config.dictConfig(config)
-
-    pair = 'XBTUSD'
-    time_step = 60
-    until = 0
-    path_ord = '/home/arthur/database/bitmex/orders/XBTUSD/'
-    path_tra = '/home/arthur/database/bitmex/trades/XBTUSD/'
-    save_method = 'dataframe'
-    io_params = {'name': '2019'}
-
-    def f(x):
-        return x
-
-    # get_data_bitmex('candles', f, symbol=pair, key='trade:1m:tBTCUSD',
-    #                  time_step=time_step, until=until, path=path,
-    #                  save_method=save_method, io_params=io_params)
-
-    # get_orderbook_bitmex('orderBookL2_25', pair, time_step=time_step,
-    #                     until=until, path=path_ord, save_method=save_method,
-    #                     io_params=io_params)
-
-    get_trades_bitmex('trade', pair, time_step=time_step, until=until,
-                      path=path_tra, save_method=save_method,
-                      io_params=io_params)

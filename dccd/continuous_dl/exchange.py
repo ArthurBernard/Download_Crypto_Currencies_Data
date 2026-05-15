@@ -37,10 +37,11 @@ class ContinuousDownloader(BasisWebSocket):
         Name of an allowed exchange or url of the host exchange. If url of
         a host exchange is provided, keyword arguments for connection and
         subscribe parameters must be also specified.
-    time_step : int, optional
+    time_step : int or None, optional
         Number of seconds between two snapshots of data, minimum is 1,
-        default is 60 (one minute). Each `time_step` data will be
-        processed and updated to the database.
+        default is 60 (one minute). Each ``time_step`` seconds data will be
+        processed and pushed to the database.  Pass ``None`` to receive data
+        tick-by-tick without periodic aggregation.
     STOP : int, optional
         Number of seconds before stoping, default is `3600` (one hour).
     kwargs : dict, optional
@@ -68,11 +69,6 @@ class ContinuousDownloader(BasisWebSocket):
     -------
     set_process_data
     set_saver
-
-    TODO :
-    - None time_step send tick by tick data
-    - Clean private/public methods
-    - Add optional setting parser
 
     """
 
