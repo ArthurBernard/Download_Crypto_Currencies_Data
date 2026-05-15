@@ -16,7 +16,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install interrogate
-      - run: >
+      - name: Generate badge
+        run: >
           interrogate dccd/
           --generate-badge .
           --ignore-init-method
@@ -25,7 +26,19 @@ jobs:
           --ignore-private
           --exclude dccd/tests
           --fail-under 0
-      - uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update docstring coverage badge"
-          file_pattern: "interrogate_badge.svg"
+      - name: Push badge to badges branch
+        run: |
+          cp interrogate_badge.svg /tmp/interrogate_badge.svg
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin badges; then
+            git fetch origin badges
+            git checkout -b badges origin/badges
+          else
+            git checkout --orphan badges
+            git rm -rf .
+          fi
+          cp /tmp/interrogate_badge.svg interrogate_badge.svg
+          git add interrogate_badge.svg
+          git diff --cached --quiet || git commit -m "chore: update docstring coverage badge [skip ci]"
+          git push origin badges
