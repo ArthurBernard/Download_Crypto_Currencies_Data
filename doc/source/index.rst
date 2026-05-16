@@ -86,14 +86,18 @@ Supported exchanges
 Presentation
 ------------
 
-The ``dccd`` package provides two main methods to download data:
+The ``dccd`` package provides three ways to download data:
 
-- **Continuous Downloader** :mod:`dccd.continuous_dl`:
-   Stream real-time data (order book, trades, OHLCV) via WebSocket with automatic
-   reconnection. Supports Binance, Bitfinex, Bitmex, Bybit, Kraken, and OKX.
 - **Historical Downloader** :mod:`dccd.histo_dl`:
    Download OHLCV data via REST APIs with chunked requests and incremental updates.
    Supports Binance, Coinbase, Kraken, Bybit, and OKX.
+- **Continuous Downloader** :mod:`dccd.continuous_dl`:
+   Stream real-time data (order book, trades, OHLCV) via WebSocket with automatic
+   reconnection. Supports Binance, Bitfinex, Bitmex, Bybit, Kraken, and OKX.
+- **Daemon** :mod:`dccd.daemon`:
+   Autonomous, server-side collector driven by a YAML config.  Runs REST jobs on a
+   schedule (APScheduler), opens WebSocket streams, and syncs data to remote
+   destinations (NAS, S3, SFTP, …) via rclone.
 
 Contents
 --------
@@ -114,5 +118,6 @@ Contents
    histo_dl.kraken
    histo_dl.bybit
    histo_dl.okx
+   daemon
    process_data
    tools
