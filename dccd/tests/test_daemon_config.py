@@ -65,12 +65,38 @@ def test_remote_config_parsed():
         **_VALID_CONFIG,
         'storage': {
             'local_path': '/data/',
-            'remote': {'provider': 'rclone', 'remote': 'mynas:crypto/'},
+            'remotes': [{'provider': 'rclone', 'remote': 'mynas:crypto/'}],
         },
     }
     cfg = CollectorConfig.model_validate(data)
-    assert cfg.storage.remote is not None
-    assert cfg.storage.remote.remote == 'mynas:crypto/'
+    assert len(cfg.storage.remotes) == 1
+    assert cfg.storage.remotes[0].remote == 'mynas:crypto/'
+
+
+def test_multiple_remotes_parsed():
+    data = {
+        **_VALID_CONFIG,
+        'storage': {
+            'local_path': '/data/',
+            'remotes': [
+                {'provider': 'rclone', 'remote': 'mynas:crypto/'},
+                {'provider': 'rclone', 'remote': 's3:bucket/crypto/'},
+            ],
+        },
+    }
+    cfg = CollectorConfig.model_validate(data)
+    assert len(cfg.storage.remotes) == 2
+
+
+def test_sync_interval_default():
+    cfg = CollectorConfig.model_validate(_VALID_CONFIG)
+    assert cfg.storage.sync_interval == 3600
+
+
+def test_sync_interval_custom():
+    data = {**_VALID_CONFIG, 'storage': {**_VALID_STORAGE, 'sync_interval': 300}}
+    cfg = CollectorConfig.model_validate(data)
+    assert cfg.storage.sync_interval == 300
 
 
 # ---------------------------------------------------------------------------

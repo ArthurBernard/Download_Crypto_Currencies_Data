@@ -58,13 +58,18 @@ class StorageConfig(BaseModel):
     ----------
     local_path : str
         Absolute path where data is stored on the daemon host.
-    remote : RemoteConfig or None
-        Remote push configuration. If ``None``, data is kept locally only.
+    remotes : list of RemoteConfig
+        Remote destinations.  Empty list (default) keeps data locally only.
+        Multiple entries are all synced by :class:`SyncService`.
+    sync_interval : int
+        Seconds between periodic syncs to remote destinations.  ``0`` disables
+        the sync service.  Default is ``3600`` (1 hour).
 
     """
 
     local_path: str
-    remote: RemoteConfig | None = None
+    remotes: list[RemoteConfig] = Field(default_factory=list)
+    sync_interval: int = 3600
 
 
 class HistoJob(BaseModel):
