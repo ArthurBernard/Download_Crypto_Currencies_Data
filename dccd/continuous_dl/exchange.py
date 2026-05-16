@@ -18,6 +18,7 @@ from typing import Any, AsyncIterator
 
 # Third party packages
 # Local packages
+from dccd.models import Trade
 from dccd.process_data import set_marketdepth, set_trades
 from dccd.tools.websocket import BasisWebSocket
 
@@ -102,6 +103,7 @@ class ContinuousDownloader(BasisWebSocket):
         # Set data
         self._data: dict[int, dict[str, Any]] = {}
         self._checkpoint_dir: Path | None = Path(checkpoint_dir) if checkpoint_dir else None
+        self.d: dict = {}
 
     def __aiter__(self) -> AsyncIterator[dict[str, Any] | None]:
         """ Set iterative method. """
@@ -181,11 +183,51 @@ class ContinuousDownloader(BasisWebSocket):
         """ Set current time rounded by `timestep`. """
         return int((time.time() + 0.001) // self.ts * self.ts)
 
-    def _get_book_state(self) -> dict[str, Any]:
-        return {}
+    def __call__(self, *args: Any, **kwargs: Any) -> 'ContinuousDownloader':
+        """ Start the WebSocket stream and block until it stops.
 
-    def _restore_book_state(self, state: dict[str, Any]) -> None:
-        pass
+        Parameters
+        ----------
+        *args, **kwargs
+            Forwarded to :meth:`~dccd.tools.websocket.BasisWebSocket._connect`.
+
+        Returns
+        -------
+        ContinuousDownloader
+            The downloader instance (for chaining).
+
+        """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(asyncio.gather(
+                self._connect(*args, **kwargs),
+                self._loop(),
+            ))
+        finally:
+            loop.close()
+        return self
+
+    def _push_trades(self, parsed: list[dict[str, Any]]) -> None:
+        """ Validate and store a normalised list of trade dicts. """
+        for item in parsed:
+            Trade.model_validate(item)
+            self._raw_parser(item)
+
+    def _push_book_updates(self, updates: dict[str, Any]) -> None:
+        """ Apply a price→qty update dict to the local book and snapshot it. """
+        for price, qty in updates.items():
+            if qty == 0:
+                self.d.pop(price, None)
+            else:
+                self.d[price] = qty
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = dict(self.d)
+
+    def _get_book_state(self) -> dict:
+        return dict(self.d)
+
+    def _restore_book_state(self, state: dict) -> None:
+        self.d = state
 
     def _checkpoint_file(self) -> Path | None:
         if self._checkpoint_dir is None:

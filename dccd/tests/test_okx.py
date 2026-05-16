@@ -6,8 +6,18 @@ import time
 import pytest
 
 from dccd import FromOKX
+from dccd.histo_dl.okx import FromOKX as _FromOKX
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+
+@pytest.mark.parametrize('crypto,fiat,expected', [
+    ('BTC', 'USDT', 'BTC-USDT'),
+    ('ETH', 'USDT', 'ETH-USDT'),
+    ('SOL', 'BTC',  'SOL-BTC'),
+])
+def test_format_pair(crypto, fiat, expected):
+    assert _FromOKX.format_pair(crypto, fiat) == expected
 
 
 @pytest.fixture

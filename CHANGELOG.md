@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/histo_dl/{binance,coinbase,bybit,okx,kraken}.py` — `format_pair(crypto, fiat)` static method on each REST exchange class; extracts inline pair-building logic from `__init__` and makes it independently testable (#XX)
+- `dccd/continuous_dl/exchange.py` — `ContinuousDownloader.__call__(*args, **kwargs)`: base `__call__` using `asyncio.new_event_loop()`; Bitfinex/Bitmex overrides trimmed to exchange-specific setup only (#XX)
+- `dccd/continuous_dl/exchange.py` — `_push_trades(parsed)`: validates each trade dict against `Trade` (Pydantic) then appends via `_raw_parser`; shared by Binance, Kraken, Bybit, OKX (#XX)
+- `dccd/continuous_dl/exchange.py` — `_push_book_updates(updates)`: applies a `{price: qty}` delta to `self.d` and snapshots the book into `_data`; shared by Binance, Kraken, Bybit, OKX (#XX)
+- `dccd/tests/test_kraken.py` — 10 parametrized cases for `FromKraken.format_pair` covering BTC→XBT, BCH/DASH exemption, X/Z prefix rules, and cross-crypto pairs (#XX)
+
+### Changed
+
+- `dccd/continuous_dl/exchange.py` — `self.d: dict = {}` initialised in base `__init__`; `_get_book_state()` and `_restore_book_state()` upgraded from stubs to working defaults; removed redundant overrides in Binance, Kraken, Bybit, OKX, Bitfinex (#XX)
+
 - `dccd/continuous_dl/exchange.py` — `set_trades_saver(saver, process_func)` and `set_book_saver(saver, process_func)`: separate savers for the trades and order-book channels; high-level helpers updated accordingly (#28)
 - `dccd/continuous_dl/exchange.py` — crash-recovery checkpoint: `checkpoint_dir` parameter serialises `self.d` (live book state) to JSON after each snapshot; reloaded on restart via `_load_checkpoint()` (#28)
 - `dccd/continuous_dl/exchange.py` — `snapshot_ts` (UTC milliseconds) injected into every yielded snapshot payload by `__anext__` (#28)

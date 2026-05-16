@@ -6,8 +6,18 @@ import time
 import pytest
 
 from dccd import FromBinance as fb
+from dccd.histo_dl.binance import FromBinance
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+
+@pytest.mark.parametrize('crypto,fiat,expected', [
+    ('BTC',  'USDT', 'BTCUSDT'),
+    ('ETH',  'USDT', 'ETHUSDT'),
+    ('XBT',  'USDT', 'BTCUSDT'),  # XBT alias → BTC
+])
+def test_format_pair(crypto, fiat, expected):
+    assert FromBinance.format_pair(crypto, fiat) == expected
 
 
 @pytest.fixture

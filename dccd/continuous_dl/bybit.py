@@ -140,7 +140,6 @@ class DownloadBybitData(ContinuousDownloader):
             'book': self.parser_book,
         }
         self.logger = logging.getLogger(__name__)
-        self.d = {}
         self._load_checkpoint()
 
     async def on_message(self, msg):
@@ -160,8 +159,7 @@ class DownloadBybitData(ContinuousDownloader):
             Raw WebSocket trade message.
 
         """
-        for trade in _parser_trades(msg):
-            self._raw_parser(trade)
+        self._push_trades(_parser_trades(msg))
 
     def parser_book(self, msg):
         """ Parse and update order book from WebSocket messages.
@@ -172,19 +170,7 @@ class DownloadBybitData(ContinuousDownloader):
             Raw WebSocket orderbook message.
 
         """
-        updates = _parser_book(msg)
-        for price, qty in updates.items():
-            if qty == 0:
-                self.d.pop(price, None)
-            else:
-                self.d[price] = qty
-        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = dict(self.d)
-
-    def _get_book_state(self):
-        return dict(self.d)
-
-    def _restore_book_state(self, state):
-        self.d = state
+        self._push_book_updates(_parser_book(msg))
 
 
 def get_trades_bybit(path, pair='BTCUSDT', time_step=60, until=3600, form='csv'):

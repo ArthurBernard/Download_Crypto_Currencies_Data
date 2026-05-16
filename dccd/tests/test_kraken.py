@@ -6,8 +6,25 @@ import time
 import pytest
 
 from dccd import FromKraken as fk
+from dccd.histo_dl.kraken import FromKraken
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+
+@pytest.mark.parametrize('crypto,fiat,expected', [
+    ('BTC', 'USD',  'XXBTZUSD'),
+    ('BTC', 'EUR',  'XXBTZEUR'),
+    ('BTC', 'CAD',  'XXBTZCAD'),
+    ('BTC', 'JPY',  'XXBTZJPY'),
+    ('BTC', 'GBP',  'XXBTZGBP'),
+    ('BCH', 'EUR',  'BCHEUR'),
+    ('BCH', 'USD',  'BCHUSD'),
+    ('DASH', 'USD', 'DASHUSD'),
+    ('XMR', 'XBT',  'XXMRXXBT'),
+    ('XMR', 'EUR',  'XXMRZEUR'),
+])
+def test_format_pair(crypto, fiat, expected):
+    assert FromKraken.format_pair(crypto, fiat) == expected
 
 
 @pytest.fixture

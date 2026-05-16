@@ -83,14 +83,31 @@ class FromCoinbase(ImportDataCryptoCurrencies):
 
     """
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
-        """ Initialize object. """
+    @staticmethod
+    def format_pair(crypto: str, fiat: str) -> str:
+        """ Return the Coinbase pair symbol for *crypto* and *fiat*.
+
+        Parameters
+        ----------
+        crypto, fiat : str
+            Asset symbols (e.g. ``'BTC'``, ``'USD'``).
+
+        Returns
+        -------
+        str
+            Dash-separated pair (e.g. ``'BTC-USD'``).
+
+        """
         if crypto == 'XBT':
             crypto = 'BTC'
+        return crypto + '-' + fiat
+
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+        """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Coinbase', fiat, form
         )
-        self.pair = crypto + '-' + fiat
+        self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/Coinbase/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 

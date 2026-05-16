@@ -193,7 +193,6 @@ class DownloadOKXData(ContinuousDownloader):
             'kline': self.parser_kline,
         }
         self.logger = logging.getLogger(__name__)
-        self.d: dict[str, float] = {}
         self._load_checkpoint()
 
     async def on_message(self, msg: dict) -> None:
@@ -222,8 +221,7 @@ class DownloadOKXData(ContinuousDownloader):
             The ``data`` field from the OKX trades push message.
 
         """
-        for trade in _parser_trades(data):
-            self._raw_parser(trade)
+        self._push_trades(_parser_trades(data))
 
     def parser_book(self, msg: dict) -> None:
         """ Parse and update the order book from a books push message.
@@ -234,19 +232,7 @@ class DownloadOKXData(ContinuousDownloader):
             Full OKX books push message (contains ``action`` and ``data``).
 
         """
-        updates = _parser_book(msg.get('data', []))
-        for price, qty in updates.items():
-            if qty == 0:
-                self.d.pop(price, None)
-            else:
-                self.d[price] = qty
-        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = dict(self.d)
-
-    def _get_book_state(self) -> dict[str, float]:
-        return dict(self.d)
-
-    def _restore_book_state(self, state: dict[str, float]) -> None:  # type: ignore[override]
-        self.d = state
+        self._push_book_updates(_parser_book(msg.get('data', [])))
 
     def parser_kline(self, data: list[list]) -> None:
         """ Parse and store a candle push message.
