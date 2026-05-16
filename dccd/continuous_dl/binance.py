@@ -134,7 +134,6 @@ class DownloadBinanceData(ContinuousDownloader):
             'book': self.parser_book,
         }
         self.logger = logging.getLogger(__name__)
-        self.d: dict[str, float] = {}
         self._load_checkpoint()
 
     async def _subscribe(self, **kwargs: object) -> None:
@@ -166,8 +165,7 @@ class DownloadBinanceData(ContinuousDownloader):
             The ``data`` field from the combined-stream trade envelope.
 
         """
-        for trade in _parser_trades(data):
-            self._raw_parser(trade)
+        self._push_trades(_parser_trades(data))
 
     def parser_book(self, data: dict) -> None:
         """ Parse and update the order book from a depth message.
@@ -178,19 +176,7 @@ class DownloadBinanceData(ContinuousDownloader):
             The ``data`` field from the combined-stream depth envelope.
 
         """
-        updates = _parser_book(data)
-        for price, qty in updates.items():
-            if qty == 0:
-                self.d.pop(price, None)
-            else:
-                self.d[price] = qty
-        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = dict(self.d)
-
-    def _get_book_state(self) -> dict[str, float]:
-        return dict(self.d)
-
-    def _restore_book_state(self, state: dict[str, float]) -> None:  # type: ignore[override]
-        self.d = state
+        self._push_book_updates(_parser_book(data))
 
 
 def get_trades_binance(path: str, pair: str = 'BTCUSDT', time_step: int = 60,

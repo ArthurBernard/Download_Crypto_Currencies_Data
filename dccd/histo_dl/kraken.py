@@ -81,22 +81,46 @@ class FromKraken(ImportDataCryptoCurrencies):
 
     """
 
+    @staticmethod
+    def format_pair(crypto: str, fiat: str) -> str:
+        """ Return the Kraken pair symbol for *crypto* and *fiat*.
+
+        Parameters
+        ----------
+        crypto, fiat : str
+            Asset symbols using common names (e.g. ``'BTC'``, ``'USD'``).
+
+        Returns
+        -------
+        str
+            Kraken pair string, e.g. ``'XXBTZUSD'``, ``'BCHUSD'``, or
+            ``'XXMRXXBT'`` for cross-crypto pairs.
+
+        Notes
+        -----
+        Rules applied in order:
+
+        1. ``'BTC'`` is renamed to ``'XBT'`` (Kraken convention).
+        2. ``'BCH'`` and ``'DASH'`` are exempt from the X/Z prefix scheme.
+        3. Major fiats (EUR, USD, CAD, JPY, GBP) use ``X<crypto>Z<fiat>``.
+        4. All other fiats (incl. crypto quoted in crypto) use
+           ``X<crypto>X<fiat>``.
+
+        """
+        if crypto == 'BTC':
+            crypto = 'XBT'
+        if crypto in ('BCH', 'DASH'):
+            return crypto + fiat
+        if fiat not in ('EUR', 'USD', 'CAD', 'JPY', 'GBP'):
+            return 'X' + crypto + 'X' + fiat
+        return 'X' + crypto + 'Z' + fiat
+
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Kraken', fiat=fiat, form=form
         )
-        if crypto == 'BTC':
-            crypto = 'XBT'
-
-        if crypto == 'BCH' or crypto == 'DASH':
-            self.pair = crypto + fiat
-
-        elif fiat not in ['EUR', 'USD', 'CAD', 'JPY', 'GBP']:
-            self.pair = 'X' + crypto + 'X' + fiat
-
-        else:
-            self.pair = 'X' + crypto + 'Z' + fiat
+        self.pair = self.format_pair(crypto, fiat)
 
     def _import_data(
         self, start: int | str = 'last', end: int | str | None = None

@@ -6,8 +6,18 @@ import time
 import pytest
 
 from dccd import FromCoinbase as fc
+from dccd.histo_dl.coinbase import FromCoinbase
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+
+@pytest.mark.parametrize('crypto,fiat,expected', [
+    ('BTC', 'USD',  'BTC-USD'),
+    ('ETH', 'EUR',  'ETH-EUR'),
+    ('XBT', 'USD',  'BTC-USD'),  # XBT alias → BTC
+])
+def test_format_pair(crypto, fiat, expected):
+    assert FromCoinbase.format_pair(crypto, fiat) == expected
 
 
 @pytest.fixture

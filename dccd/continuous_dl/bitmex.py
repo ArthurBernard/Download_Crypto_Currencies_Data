@@ -31,7 +31,6 @@ Low level API
 """
 
 # Built-in packages
-import asyncio
 import time
 from datetime import datetime as dt
 from typing import Any
@@ -180,7 +179,6 @@ class DownloadBitmexData(ContinuousDownloader):
             'orderBookL2_25': self.parser_book,
             'trade': self.parser_trades,
         }
-        self.d: dict[int, Any] = {}
         self.start = False
         self._load_checkpoint()
 
@@ -233,9 +231,6 @@ class DownloadBitmexData(ContinuousDownloader):
         for i, d in enumerate(data['data']):
             slot['trades'].append(_parser_trades(d, i))
 
-    def _get_book_state(self) -> dict[int, Any]:  # type: ignore[override]
-        return dict(self.d)
-
     def _restore_book_state(self, state: dict[int, Any]) -> None:  # type: ignore[override]
         self.d = {int(k): v for k, v in state.items()}
 
@@ -273,16 +268,8 @@ class DownloadBitmexData(ContinuousDownloader):
 
         """
         self.parser = self.get_parser(args[0])
-
         self.logger.info('Try connect WS and set {} stream.'.format(args[0]))
-
-        self.loop = asyncio.get_event_loop()
-        self.loop.run_until_complete(asyncio.gather(
-            self._connect(args=':'.join(args)),
-            self._loop()
-        ))
-
-        return self
+        return super().__call__(args=':'.join(args))  # type: ignore[return-value]
 
 
 # =========================================================================== #

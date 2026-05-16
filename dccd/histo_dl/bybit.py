@@ -103,12 +103,29 @@ class FromBybit(ImportDataCryptoCurrencies):
 
     """
 
+    @staticmethod
+    def format_pair(crypto: str, fiat: str) -> str:
+        """ Return the Bybit pair symbol for *crypto* and *fiat*.
+
+        Parameters
+        ----------
+        crypto, fiat : str
+            Asset symbols (e.g. ``'BTC'``, ``'USDT'``).
+
+        Returns
+        -------
+        str
+            Concatenated pair (e.g. ``'BTCUSDT'``).
+
+        """
+        return crypto + fiat
+
     def __init__(self, path, crypto, span, fiat='USDT', form='xlsx'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Bybit', fiat, form
         )
-        self.pair = crypto + fiat
+        self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/Bybit/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 

@@ -6,8 +6,18 @@ import time
 import pytest
 
 from dccd import FromBybit
+from dccd.histo_dl.bybit import FromBybit as _FromBybit
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+
+
+@pytest.mark.parametrize('crypto,fiat,expected', [
+    ('BTC', 'USDT', 'BTCUSDT'),
+    ('ETH', 'USDT', 'ETHUSDT'),
+    ('SOL', 'BTC',  'SOLBTC'),
+])
+def test_format_pair(crypto, fiat, expected):
+    assert _FromBybit.format_pair(crypto, fiat) == expected
 
 
 @pytest.fixture
