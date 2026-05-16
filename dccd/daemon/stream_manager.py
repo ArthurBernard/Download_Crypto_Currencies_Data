@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # Exchange class registry
 # ---------------------------------------------------------------------------
 
-_STREAM_CLASSES: dict[str, type[ContinuousDownloader]] = {
+_STREAM_CLASSES: dict[str, Any] = {
     'binance':  DownloadBinanceData,
     'bybit':    DownloadBybitData,
     'kraken':   DownloadKrakenData,
