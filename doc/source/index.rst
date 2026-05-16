@@ -8,14 +8,18 @@ Installation
 ------------
 
 From pip:
-   $ pip install dccd
+
+.. code-block:: bash
+
+   pip install dccd
 
 From source:
-   $ git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data.git
 
-   $ cd Download_Crypto_Currencies_Data
+.. code-block:: bash
 
-   $ pip install -e .
+   git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data.git
+   cd Download_Crypto_Currencies_Data
+   pip install -e .
 
 Supported exchanges
 -------------------

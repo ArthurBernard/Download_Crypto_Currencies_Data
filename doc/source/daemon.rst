@@ -15,11 +15,15 @@ periodically syncs all local data to one or more remote destinations via rclone.
 Quick start
 -----------
 
-1. Install the daemon extra::
+1. Install the daemon extra:
+
+   .. code-block:: bash
 
        pip install "dccd[daemon]"
 
-2. Write a configuration file (see :ref:`daemon-config`)::
+2. Write a configuration file (see :ref:`daemon-config`):
+
+   .. code-block:: yaml
 
        storage:
          local_path: /data/crypto/
@@ -41,7 +45,9 @@ Quick start
            channels: [trades, book]
            time_step: 60
 
-3. Run a one-shot collection, then start the daemon::
+3. Run a one-shot collection, then start the daemon:
+
+   .. code-block:: python
 
        from dccd.daemon.config import load_config
        from dccd.daemon.scheduler import run_once, build_histo_scheduler

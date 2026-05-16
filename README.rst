@@ -116,7 +116,9 @@ Parquet files can be read back as either a ``pandas.DataFrame`` or a
 Quick start
 ===========
 
-Historical data (pandas)::
+Historical data (pandas):
+
+.. code-block:: python
 
     from dccd.histo_dl import FromBinance
 
@@ -125,15 +127,21 @@ Historical data (pandas)::
     obj.save(form='parquet')
     df = obj.get_data()            # pandas DataFrame
 
-Polars output::
+Polars output:
+
+.. code-block:: python
 
     df_pl = obj.get_data(format='polars')
 
-Incremental update (resume from last saved point)::
+Incremental update (resume from last saved point):
+
+.. code-block:: python
 
     obj.import_data(start='last', end='now').save(form='parquet')
 
-Other exchanges::
+Other exchanges:
+
+.. code-block:: python
 
     from dccd.histo_dl import FromKraken, FromBybit, FromOKX
 
@@ -141,26 +149,31 @@ Other exchanges::
     FromBybit('/path/', 'BTC', 86400).import_data(start='2024-01-01', end='now').save()
     FromOKX('/path/', 'BTC', 3600).import_data(start='2024-01-01', end='now').save()
 
-Daemon (autonomous collector)::
+Daemon (autonomous collector) — ``config.yml``:
 
-    # config.yml
-    # storage:
-    #   local_path: /data/crypto/
-    #   remotes:
-    #     - provider: rclone
-    #       remote: "mynas:crypto/"
-    #   sync_interval: 3600
-    # histo_jobs:
-    #   - exchange: binance
-    #     pairs: [BTC/USDT, ETH/USDT]
-    #     span: 3600
-    #     format: parquet
-    #     by_period: Y
-    # stream_jobs:
-    #   - exchange: binance
-    #     pairs: [BTC/USDT]
-    #     channels: [trades, book]
-    #     time_step: 60
+.. code-block:: yaml
+
+    storage:
+      local_path: /data/crypto/
+      remotes:
+        - provider: rclone
+          remote: "mynas:crypto/"
+      sync_interval: 3600
+
+    histo_jobs:
+      - exchange: binance
+        pairs: [BTC/USDT, ETH/USDT]
+        span: 3600
+        format: parquet
+        by_period: Y
+
+    stream_jobs:
+      - exchange: binance
+        pairs: [BTC/USDT]
+        channels: [trades, book]
+        time_step: 60
+
+.. code-block:: python
 
     from dccd.daemon.config import load_config
     from dccd.daemon.scheduler import run_once, build_histo_scheduler
@@ -176,7 +189,7 @@ Daemon (autonomous collector)::
     scheduler.start()
 
     mgr = StreamManager(config)
-    mgr.start()      # blocks until mgr.stop() is called
+    mgr.start()      # runs until mgr.stop() is called
 
 Links
 =====
