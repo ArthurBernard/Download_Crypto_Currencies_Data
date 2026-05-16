@@ -182,6 +182,7 @@ class DownloadBitmexData(ContinuousDownloader):
         }
         self.d: dict[int, Any] = {}
         self.start = False
+        self._load_checkpoint()
 
     def parser_book(self, data: dict[str, Any]) -> None:
         """ Parse and maintain a local copy of the order book.
@@ -214,7 +215,9 @@ class DownloadBitmexData(ContinuousDownloader):
             else:
                 self.logger.error('Unknown action {}: {}'.format(action, data))
 
-        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}  # type: ignore[assignment]
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = {
+            v['price']: v['amount'] for v in self.d.values()
+        }
 
     def parser_trades(self, data: dict[str, Any]) -> None:
         """ Parse trade data and accumulate records for the current timestep.
@@ -226,15 +229,15 @@ class DownloadBitmexData(ContinuousDownloader):
             key with a list of trade records.
 
         """
-        i, _data = 0, []
-        for d in data['data']:
-            _data += [_parser_trades(d, i)]
-            i += 1
+        slot = self._data.setdefault(self.t, {'trades': [], 'book': {}})
+        for i, d in enumerate(data['data']):
+            slot['trades'].append(_parser_trades(d, i))
 
-        if self.t in self._data.keys():
-            self._data[self.t] += _data
-        else:
-            self._data[self.t] = _data
+    def _get_book_state(self) -> dict[int, Any]:
+        return dict(self.d)
+
+    def _restore_book_state(self, state: dict[int, Any]) -> None:  # type: ignore[override]
+        self.d = {int(k): v for k, v in state.items()}
 
     async def on_message(self, data: dict[str, Any] | list[Any]) -> None:
         """ Route an incoming websocket message to the appropriate parser. """

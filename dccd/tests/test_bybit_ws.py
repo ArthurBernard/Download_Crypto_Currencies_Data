@@ -71,18 +71,19 @@ def test_parser_trades_appends_to_data():
     dl = _make_downloader()
     dl.parser_trades(_TRADE_MSG)
     assert 2000 in dl._data
-    assert len(dl._data[2000]) == 2
-    assert dl._data[2000][0]['price'] == 30000.0
+    assert len(dl._data[2000]['trades']) == 2
+    assert dl._data[2000]['trades'][0]['price'] == 30000.0
 
 
 def test_parser_book_updates_and_removes():
     dl = _make_downloader()
     dl.parser_book(_BOOK_MSG)
+    book = dl._data[2000]['book']
     # qty > 0 → kept
-    assert '29990.0' in dl._data[2000]
-    assert dl._data[2000]['29990.0'] == 2.0
+    assert '29990.0' in book
+    assert book['29990.0'] == 2.0
     # qty == 0 → removed from book
-    assert '29980.0' not in dl._data[2000]
+    assert '29980.0' not in book
 
 
 @pytest.mark.asyncio

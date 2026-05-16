@@ -10,12 +10,15 @@
 
 # Built-in packages
 import asyncio
+import json
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 # Third party packages
 # Local packages
+from dccd.process_data import set_marketdepth, set_trades
 from dccd.tools.websocket import BasisWebSocket
 
 __all__ = ['ContinuousDownloader']
@@ -82,7 +85,8 @@ class ContinuousDownloader(BasisWebSocket):
     }
     _parser_data: dict[str, Callable[..., Any]] = {}
 
-    def __init__(self, host: str, time_step: int = 60, STOP: int = 3600, **kwargs: Any) -> None:
+    def __init__(self, host: str, time_step: int = 60, STOP: int = 3600,
+                 checkpoint_dir: str | None = None, **kwargs: Any) -> None:
         """ Initialize object. """
         if host.lower() in ContinuousDownloader._parser_exchange.keys():
             BasisWebSocket.__init__(self, **self._parser_exchange[host])
@@ -96,15 +100,16 @@ class ContinuousDownloader(BasisWebSocket):
         self.until = time.time() + STOP if STOP > 0 else time.time() * 10
 
         # Set data
-        self._data: dict[int, list[Any]] = {}
+        self._data: dict[int, dict[str, Any]] = {}
+        self._checkpoint_dir: Path | None = Path(checkpoint_dir) if checkpoint_dir else None
 
-    def __aiter__(self) -> AsyncIterator[list[Any] | None]:
+    def __aiter__(self) -> AsyncIterator[dict[str, Any] | None]:
         """ Set iterative method. """
         self.logger.debug('Starting generator websocket')
 
         return self
 
-    async def __anext__(self) -> list[Any] | None:
+    async def __anext__(self) -> dict[str, Any] | None:
         """ Iterate object. """
         if time.time() > self.until:
             self.logger.info('StopIteration')
@@ -120,39 +125,49 @@ class ContinuousDownloader(BasisWebSocket):
 
         t, self.t = self.t, self._current_timestep()
 
-        if t in self._data.keys():
+        if t in self._data:
+            payload = self._data.pop(t)
+            payload['snapshot_ts'] = int(time.time() * 1000)
+            return payload
 
-            return self._data.pop(t)
-
-        else:
-
-            return None
+        return None
 
     async def _loop(self) -> None:
         """ Loop to process and save data into database. """
         await self.wait_that('is_connect')
 
-        async for data in self:
-            self.logger.debug('Get data.')
-
-            # Continue if no data received
-            if data is None:
+        async for snapshot in self:
+            if snapshot is None:
                 self.logger.debug('No data')
-
                 continue
 
-            # Set DataFrame
-            df = self.process_data(data, **self.process_params)
+            trades = snapshot.get('trades', [])
+            book = snapshot.get('book', {})
+            ts = snapshot['snapshot_ts']
 
-            # Update database
-            self.saver(df, **self.io_params)
+            if trades and hasattr(self, '_trades_saver'):
+                df = self._trades_process_func(trades)
+                self._trades_saver(df, **self._trades_saver_kwargs)
 
-            self.logger.debug('Processed data:\n' + str(df))
-            self.logger.debug('Catch data of TS : {}'.format(self.t))
+            if book and hasattr(self, '_book_saver'):
+                df = self._book_process_func(book, t=ts // 1000)
+                self._book_saver(df, **self._book_saver_kwargs)
+
+            self._save_checkpoint()
+
+            # Legacy fallback for callers that still use set_process_data + set_saver
+            if not (hasattr(self, '_trades_saver') or hasattr(self, '_book_saver')):
+                if hasattr(self, 'process_data') and hasattr(self, 'saver'):
+                    legacy_data = trades if trades else book
+                    if legacy_data:
+                        df = self.process_data(legacy_data, **self.process_params)
+                        self.saver(df, **self.io_params)
+
+            self.logger.debug(
+                'snapshot_ts=%d trades=%d book_levels=%d', ts, len(trades), len(book)
+            )
 
             if not self.is_connect:
-                self.logger.info('End to import data from Bitfinex.\n')
-
                 return
 
     async def on_message(self, data: dict[str, Any] | list[Any]) -> None:
@@ -160,16 +175,75 @@ class ContinuousDownloader(BasisWebSocket):
         self._raw_parser(data)
 
     def _raw_parser(self, data: Any) -> None:
-        # Set all data to a list
-        if self.t in self._data.keys():
-            self._data[self.t] += [data]
-
-        else:
-            self._data[self.t] = [data]
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['trades'].append(data)
 
     def _current_timestep(self) -> int:
         """ Set current time rounded by `timestep`. """
         return int((time.time() + 0.001) // self.ts * self.ts)
+
+    def _get_book_state(self) -> dict[str, Any]:
+        return {}
+
+    def _restore_book_state(self, state: dict[str, Any]) -> None:
+        pass
+
+    def _checkpoint_file(self) -> Path | None:
+        if self._checkpoint_dir is None:
+            return None
+        name = getattr(self, 'pair', 'default')
+        return self._checkpoint_dir / f'{name}_book.json'
+
+    def _save_checkpoint(self) -> None:
+        f = self._checkpoint_file()
+        if f is None:
+            return
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(self._get_book_state()))
+
+    def _load_checkpoint(self) -> None:
+        f = self._checkpoint_file()
+        if f and f.exists():
+            self._restore_book_state(json.loads(f.read_text()))
+
+    def set_trades_saver(self, saver: Callable[..., Any],
+                         process_func: Callable[..., Any] = set_trades,
+                         **kwargs: Any) -> None:
+        """ Set saver for the trades channel.
+
+        Parameters
+        ----------
+        saver : callable
+            Callable to persist the processed DataFrame (e.g. ``IODataBase``).
+        process_func : callable, optional
+            Function to convert raw trade list to a DataFrame, default is
+            :func:`dccd.process_data.set_trades`.
+        **kwargs
+            Extra keyword arguments forwarded to ``saver`` on each call.
+
+        """
+        self._trades_saver = saver
+        self._trades_process_func = process_func
+        self._trades_saver_kwargs = kwargs
+
+    def set_book_saver(self, saver: Callable[..., Any],
+                       process_func: Callable[..., Any] = set_marketdepth,
+                       **kwargs: Any) -> None:
+        """ Set saver for the order-book channel.
+
+        Parameters
+        ----------
+        saver : callable
+            Callable to persist the processed DataFrame (e.g. ``IODataBase``).
+        process_func : callable, optional
+            Function to convert the book dict to a DataFrame, default is
+            :func:`dccd.process_data.set_marketdepth`.
+        **kwargs
+            Extra keyword arguments forwarded to ``saver`` on each call.
+
+        """
+        self._book_saver = saver
+        self._book_process_func = process_func
+        self._book_saver_kwargs = kwargs
 
     def set_process_data(self, func: Callable[..., Any], **kwargs: Any) -> None:
         """ Set processing function.

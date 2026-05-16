@@ -97,24 +97,25 @@ def test_parser_trades_appends_to_data():
     dl = _make_downloader()
     dl.parser_trades(_TRADE_DATA)
     assert 2000 in dl._data
-    assert len(dl._data[2000]) == 2
-    assert dl._data[2000][0]['price'] == 30000.0
+    assert len(dl._data[2000]['trades']) == 2
+    assert dl._data[2000]['trades'][0]['price'] == 30000.0
 
 
 def test_parser_book_updates_and_removes():
     dl = _make_downloader()
     msg = {'channel': 'book', 'type': 'snapshot', 'data': _BOOK_DATA}
     dl.parser_book(msg)
-    assert '29990.0' in dl._data[2000]
-    assert dl._data[2000]['29990.0'] == 2.0
-    assert '29980.0' not in dl._data[2000]
+    book = dl._data[2000]['book']
+    assert '29990.0' in book
+    assert book['29990.0'] == 2.0
+    assert '29980.0' not in book
 
 
 def test_parser_kline_appends():
     dl = _make_downloader()
     dl.parser_kline(_KLINE_DATA)
     assert 2000 in dl._data
-    assert dl._data[2000][0]['open'] == 30000.0
+    assert dl._data[2000]['trades'][0]['open'] == 30000.0
 
 
 @pytest.mark.asyncio

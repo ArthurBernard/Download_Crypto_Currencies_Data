@@ -29,7 +29,6 @@ import time
 # Third party packages
 # Local packages
 from dccd.continuous_dl.exchange import ContinuousDownloader
-from dccd.process_data import set_marketdepth, set_orders, set_trades
 from dccd.tools.io import IODataBase
 
 __all__ = [
@@ -119,7 +118,7 @@ class DownloadBinanceData(ContinuousDownloader):
     """
 
     def __init__(self, pair: str = 'BTCUSDT', time_step: int = 60,
-                 until: int | None = 3600) -> None:
+                 until: int | None = 3600, checkpoint_dir: str | None = None) -> None:
         """ Initialize object. """
         if until is None:
             until = 0
@@ -128,13 +127,15 @@ class DownloadBinanceData(ContinuousDownloader):
 
         self.pair = pair
         url = _BINANCE_WS_URL.format(sym=pair.lower())
-        ContinuousDownloader.__init__(self, url, time_step=time_step, STOP=until)
+        ContinuousDownloader.__init__(self, url, time_step=time_step, STOP=until,
+                                      checkpoint_dir=checkpoint_dir)
         self._parser_data = {
             'trades': self.parser_trades,
             'book': self.parser_book,
         }
         self.logger = logging.getLogger(__name__)
         self.d: dict[str, float] = {}
+        self._load_checkpoint()
 
     async def _subscribe(self, **kwargs: object) -> None:
         """ Wait for connection; Binance streams are declared in the URL. """
@@ -183,12 +184,13 @@ class DownloadBinanceData(ContinuousDownloader):
                 self.d.pop(price, None)
             else:
                 self.d[price] = qty
-        self._data[self.t] = dict(self.d)
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = dict(self.d)
 
-    def _raw_parser(self, data: object) -> None:
-        if self.t not in self._data:
-            self._data[self.t] = []
-        self._data[self.t].append(data)  # type: ignore[union-attr]
+    def _get_book_state(self) -> dict[str, float]:
+        return dict(self.d)
+
+    def _restore_book_state(self, state: dict[str, float]) -> None:  # type: ignore[override]
+        self.d = state
 
 
 def get_trades_binance(path: str, pair: str = 'BTCUSDT', time_step: int = 60,
@@ -210,8 +212,7 @@ def get_trades_binance(path: str, pair: str = 'BTCUSDT', time_step: int = 60,
 
     """
     downloader = DownloadBinanceData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_trades)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_trades_saver(IODataBase(path, method=form))
     downloader(pair=pair)
 
 
@@ -234,8 +235,7 @@ def get_orderbook_binance(path: str, pair: str = 'BTCUSDT', time_step: int = 60,
 
     """
     downloader = DownloadBinanceData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_marketdepth)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_book_saver(IODataBase(path, method=form))
     downloader(pair=pair)
 
 
@@ -246,7 +246,8 @@ def get_data_binance(path: str, pair: str = 'BTCUSDT', time_step: int = 60,
     Parameters
     ----------
     path : str
-        Path to save data.
+        Root path; trades saved under ``<path>/trades/``, book under
+        ``<path>/book/``.
     pair : str, optional
         Trading pair in Binance format (e.g. 'BTCUSDT'), default is 'BTCUSDT'.
     time_step : int, optional
@@ -258,6 +259,6 @@ def get_data_binance(path: str, pair: str = 'BTCUSDT', time_step: int = 60,
 
     """
     downloader = DownloadBinanceData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_orders)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_trades_saver(IODataBase(f'{path}/trades', method=form))
+    downloader.set_book_saver(IODataBase(f'{path}/book', method=form))
     downloader(pair=pair)

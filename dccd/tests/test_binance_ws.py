@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -80,16 +82,25 @@ def test_parser_trades_appends_to_data():
     dl = _make_downloader()
     dl.parser_trades(_TRADE_DATA)
     assert 2000 in dl._data
-    assert len(dl._data[2000]) == 1
-    assert dl._data[2000][0]['price'] == 30000.0
+    assert len(dl._data[2000]['trades']) == 1
+    assert dl._data[2000]['trades'][0]['price'] == 30000.0
 
 
 def test_parser_book_updates_and_removes():
     dl = _make_downloader()
     dl.parser_book(_BOOK_DATA)
-    assert '29990.0' in dl._data[2000]
-    assert dl._data[2000]['29990.0'] == 2.0
-    assert '29980.0' not in dl._data[2000]
+    book = dl._data[2000]['book']
+    assert '29990.0' in book
+    assert book['29990.0'] == 2.0
+    assert '29980.0' not in book
+
+
+def test_parser_book_does_not_overwrite_trades():
+    dl = _make_downloader()
+    dl.parser_trades(_TRADE_DATA)
+    dl.parser_book(_BOOK_DATA)
+    assert len(dl._data[2000]['trades']) == 1
+    assert '29990.0' in dl._data[2000]['book']
 
 
 @pytest.mark.asyncio
@@ -118,3 +129,59 @@ async def test_on_message_unknown_does_nothing():
     await dl.on_message({'stream': 'btcusdt@miniTicker', 'data': {}})
     dl.parser_trades.assert_not_called()
     dl.parser_book.assert_not_called()
+
+
+# =========================================================================== #
+#                        snapshot_ts and checkpoint tests                     #
+# =========================================================================== #
+
+
+@pytest.mark.asyncio
+async def test_anext_adds_snapshot_ts():
+    dl = _make_downloader()
+    dl.ts = 60
+    dl.until = time.time() + 3600
+    dl._data[dl.t] = {'trades': [{'price': 1.0}], 'book': {}}
+    before = int(time.time() * 1000)
+    payload = await dl.__anext__()
+    after = int(time.time() * 1000)
+    assert payload is not None
+    assert before <= payload['snapshot_ts'] <= after
+
+
+def test_checkpoint_save_and_load(tmp_path: Path):
+    dl = _make_downloader()
+    dl._checkpoint_dir = tmp_path
+    dl.pair = 'BTCUSDT'
+    dl.d = {'30000.0': 1.5, '-30010.0': -0.5}
+
+    dl._save_checkpoint()
+
+    dl2 = _make_downloader()
+    dl2._checkpoint_dir = tmp_path
+    dl2.pair = 'BTCUSDT'
+    dl2._load_checkpoint()
+
+    assert dl2.d == {'30000.0': 1.5, '-30010.0': -0.5}
+
+
+def test_checkpoint_no_dir_does_nothing(tmp_path: Path):
+    dl = _make_downloader()
+    dl._checkpoint_dir = None
+    dl.d = {'30000.0': 1.0}
+    dl._save_checkpoint()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_set_trades_saver_stored():
+    dl = _make_downloader()
+    saver = MagicMock()
+    dl.set_trades_saver(saver)
+    assert dl._trades_saver is saver
+
+
+def test_set_book_saver_stored():
+    dl = _make_downloader()
+    saver = MagicMock()
+    dl.set_book_saver(saver)
+    assert dl._book_saver is saver

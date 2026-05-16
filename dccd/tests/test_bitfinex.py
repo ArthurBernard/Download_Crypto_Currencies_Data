@@ -38,8 +38,8 @@ def test_parser_book_add_order():
     dl = _make_downloader()
     data = [0, [100.0, 1, 0.5]]
     dl.parser_book(data)
-    assert '100.0' in dl._data[1000]
-    assert dl._data[1000]['100.0'] == 0.5
+    assert '100.0' in dl._data[1000]['book']
+    assert dl._data[1000]['book']['100.0'] == 0.5
 
 
 def test_parser_book_remove_order():
@@ -47,7 +47,7 @@ def test_parser_book_remove_order():
     dl.d = {'100.0': {'price': '100.0', 'amount': 0.5}}
     data = [0, [100.0, 0, 0.0]]
     dl.parser_book(data)
-    assert '100.0' not in dl._data[1000]
+    assert '100.0' not in dl._data[1000]['book']
 
 
 def test_parser_raw_trades_skips_tu():
