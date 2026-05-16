@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/continuous_dl/exchange.py` — `set_trades_saver(saver, process_func)` and `set_book_saver(saver, process_func)`: separate savers for the trades and order-book channels; high-level helpers updated accordingly (#28)
+- `dccd/continuous_dl/exchange.py` — crash-recovery checkpoint: `checkpoint_dir` parameter serialises `self.d` (live book state) to JSON after each snapshot; reloaded on restart via `_load_checkpoint()` (#28)
+- `dccd/continuous_dl/exchange.py` — `snapshot_ts` (UTC milliseconds) injected into every yielded snapshot payload by `__anext__` (#28)
 - `dccd/daemon/stream_manager.py` — `StreamManager` (one thread per `(exchange, pair)`, auto-restart on crash) and `SyncService` (periodic rclone push to all remotes, decoupled from collection) (#26)
 - `dccd/daemon/config.py` — declarative YAML config with Pydantic v2: `CollectorConfig`, `HistoJob`, `StreamJob`, `StorageConfig`, `AlertConfig`, `RemoteConfig`, and `load_config()` loader (#25)
 - `dccd/daemon/storage.py` — `RemoteStorage.push()`: delegates to rclone via subprocess; no-op when no remote configured, warning if rclone absent (#25)

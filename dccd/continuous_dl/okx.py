@@ -29,7 +29,6 @@ import time
 # Third party packages
 # Local packages
 from dccd.continuous_dl.exchange import ContinuousDownloader
-from dccd.process_data import set_marketdepth, set_orders, set_trades
 from dccd.tools.io import IODataBase
 
 __all__ = [
@@ -167,7 +166,8 @@ class DownloadOKXData(ContinuousDownloader):
     """
 
     def __init__(self, pair: str = 'BTC-USDT', time_step: int = 60,
-                 until: int | None = 3600, span: int | None = None) -> None:
+                 until: int | None = 3600, span: int | None = None,
+                 checkpoint_dir: str | None = None) -> None:
         """ Initialize object. """
         if until is None:
             until = 0
@@ -184,6 +184,7 @@ class DownloadOKXData(ContinuousDownloader):
 
         ContinuousDownloader.__init__(
             self, _OKX_WS_URL, time_step=time_step, STOP=until,
+            checkpoint_dir=checkpoint_dir,
             subs={'op': 'subscribe', 'args': args},
         )
         self._parser_data = {
@@ -193,6 +194,7 @@ class DownloadOKXData(ContinuousDownloader):
         }
         self.logger = logging.getLogger(__name__)
         self.d: dict[str, float] = {}
+        self._load_checkpoint()
 
     async def on_message(self, msg: dict) -> None:
         """ Dispatch incoming OKX WebSocket push messages.
@@ -238,7 +240,13 @@ class DownloadOKXData(ContinuousDownloader):
                 self.d.pop(price, None)
             else:
                 self.d[price] = qty
-        self._data[self.t] = dict(self.d)
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = dict(self.d)
+
+    def _get_book_state(self) -> dict[str, float]:
+        return dict(self.d)
+
+    def _restore_book_state(self, state: dict[str, float]) -> None:  # type: ignore[override]
+        self.d = state
 
     def parser_kline(self, data: list[list]) -> None:
         """ Parse and store a candle push message.
@@ -251,12 +259,6 @@ class DownloadOKXData(ContinuousDownloader):
         """
         for candle in _parser_kline(data):
             self._raw_parser(candle)
-
-    def _raw_parser(self, data: object) -> None:
-        if self.t not in self._data:
-            self._data[self.t] = []
-        self._data[self.t].append(data)  # type: ignore[union-attr]
-
 
 def get_trades_okx(path: str, pair: str = 'BTC-USDT', time_step: int = 60,
                    until: int = 3600, form: str = 'csv') -> None:
@@ -277,8 +279,7 @@ def get_trades_okx(path: str, pair: str = 'BTC-USDT', time_step: int = 60,
 
     """
     downloader = DownloadOKXData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_trades)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_trades_saver(IODataBase(path, method=form))
     downloader(pair=pair)
 
 
@@ -301,8 +302,7 @@ def get_orderbook_okx(path: str, pair: str = 'BTC-USDT', time_step: int = 60,
 
     """
     downloader = DownloadOKXData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_marketdepth)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_book_saver(IODataBase(path, method=form))
     downloader(pair=pair)
 
 
@@ -313,7 +313,8 @@ def get_data_okx(path: str, pair: str = 'BTC-USDT', time_step: int = 60,
     Parameters
     ----------
     path : str
-        Path to save data.
+        Root path; trades saved under ``<path>/trades/``, book under
+        ``<path>/book/``.
     pair : str, optional
         Trading pair in OKX format (e.g. 'BTC-USDT'), default is 'BTC-USDT'.
     time_step : int, optional
@@ -325,6 +326,6 @@ def get_data_okx(path: str, pair: str = 'BTC-USDT', time_step: int = 60,
 
     """
     downloader = DownloadOKXData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_orders)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_trades_saver(IODataBase(f'{path}/trades', method=form))
+    downloader.set_book_saver(IODataBase(f'{path}/book', method=form))
     downloader(pair=pair)

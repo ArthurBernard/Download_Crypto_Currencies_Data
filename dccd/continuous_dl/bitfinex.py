@@ -117,7 +117,8 @@ class DownloadBitfinexData(ContinuousDownloader):
 
     """
 
-    def __init__(self, time_step: int = 60, until: int | None = 3600) -> None:
+    def __init__(self, time_step: int = 60, until: int | None = 3600,
+                 checkpoint_dir: str | None = None) -> None:
         """ Initialize object.
 
         Parameters
@@ -127,6 +128,9 @@ class DownloadBitfinexData(ContinuousDownloader):
         until : int or None, optional
             Seconds to run, or a future Unix timestamp to stop at.
             Default is ``3600``.
+        checkpoint_dir : str or None, optional
+            Directory to write the order-book crash-recovery checkpoint.
+            Disabled when ``None`` (default).
 
         """
         if until is None:
@@ -135,7 +139,7 @@ class DownloadBitfinexData(ContinuousDownloader):
             until -= int(time.time())
 
         ContinuousDownloader.__init__(self, 'bitfinex', time_step=time_step,
-                                      STOP=until)
+                                      STOP=until, checkpoint_dir=checkpoint_dir)
 
         self._parser_data: dict[str, Any] = {
             'book': self.parser_book,
@@ -145,6 +149,7 @@ class DownloadBitfinexData(ContinuousDownloader):
         }
         self.logger = logging.getLogger(__name__)
         self.d: dict[str, Any] = {}
+        self._load_checkpoint()
 
     def parser_raw_book(self, data: list[Any]) -> None:
         """ Parse raw order book, each timestep set in a list all orders.
@@ -177,7 +182,15 @@ class DownloadBitfinexData(ContinuousDownloader):
         else:
             self.d.pop(parsed['price'])
 
-        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}  # type: ignore[assignment]
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = {
+            v['price']: v['amount'] for v in self.d.values()
+        }
+
+    def _get_book_state(self) -> dict[str, Any]:
+        return dict(self.d)
+
+    def _restore_book_state(self, state: dict[str, Any]) -> None:  # type: ignore[override]
+        self.d = state
 
     def parser_raw_trades(self, data: list[Any]) -> None:
         """ Parse raw trade data tick-by-tick.
