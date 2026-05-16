@@ -269,7 +269,7 @@ class DownloadBitmexData(ContinuousDownloader):
         """
         self.parser = self.get_parser(args[0])
         self.logger.info('Try connect WS and set {} stream.'.format(args[0]))
-        return super().__call__(args=':'.join(args))
+        return super().__call__(args=':'.join(args))  # type: ignore[return-value]
 
 
 # =========================================================================== #

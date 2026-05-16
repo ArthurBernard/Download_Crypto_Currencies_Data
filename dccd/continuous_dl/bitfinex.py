@@ -255,7 +255,7 @@ class DownloadBitfinexData(ContinuousDownloader):
         self.parser = self.get_parser(channel)
         channel = channel[:-4] if channel[-4:] == '_raw' else channel
         self.logger.info('Try connect WS and set {} stream.'.format(channel))
-        return super().__call__(channel=channel, **kwargs)
+        return super().__call__(channel=channel, **kwargs)  # type: ignore[return-value]
 
 
 # =========================================================================== #
