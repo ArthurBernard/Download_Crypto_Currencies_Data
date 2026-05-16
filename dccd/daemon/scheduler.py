@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from dccd.daemon.storage import RemoteStorage
 from dccd.histo_dl.binance import FromBinance
 from dccd.histo_dl.bybit import FromBybit
 from dccd.histo_dl.coinbase import FromCoinbase
@@ -39,13 +38,11 @@ _HISTO_CLASSES: dict[str, type[ImportDataCryptoCurrencies]] = {
 }
 
 
-def run_histo_job(
-    job: HistoJob,
-    pair: str,
-    base_path: str,
-    storage: RemoteStorage,
-) -> None:
-    """ Download and save one (exchange, pair) candle job, then push to remote.
+def run_histo_job(job: HistoJob, pair: str, base_path: str) -> None:
+    """ Download and save one (exchange, pair) candle job locally.
+
+    Data is saved to ``base_path`` on the daemon host.  Remote sync is
+    handled separately by :class:`~dccd.daemon.stream_manager.SyncService`.
 
     Parameters
     ----------
@@ -55,16 +52,12 @@ def run_histo_job(
         Trading pair in ``'CRYPTO/FIAT'`` format (e.g. ``'BTC/USDT'``).
     base_path : str
         Root directory for local storage (``CollectorConfig.storage.local_path``).
-    storage : RemoteStorage
-        Remote storage handler.  :meth:`~RemoteStorage.push` is called after
-        each successful save.
 
     """
     crypto, fiat = pair.split('/', 1)
     cls = _HISTO_CLASSES[job.exchange]
     obj = cls(base_path, crypto, job.span, fiat, form=job.format)
     obj.import_data('last', 'now').save(form=job.format, by_period=job.by_period)
-    storage.push(obj.full_path)
     logger.info('histo job done: %s %s span=%s', job.exchange, pair, job.span)
 
 
@@ -95,7 +88,6 @@ def build_histo_scheduler(config: CollectorConfig) -> BackgroundScheduler:
 
     """
     scheduler = BackgroundScheduler()
-    storage = RemoteStorage(config.storage)
 
     for job in config.histo_jobs:
         for pair in job.pairs:
@@ -104,7 +96,7 @@ def build_histo_scheduler(config: CollectorConfig) -> BackgroundScheduler:
                 run_histo_job,
                 trigger='interval',
                 seconds=job.span,
-                args=[job, pair, config.storage.local_path, storage],
+                args=[job, pair, config.storage.local_path],
                 id=job_id,
                 name=f'{job.exchange} {pair} {job.span}s',
                 coalesce=True,
@@ -127,12 +119,10 @@ def run_once(config: CollectorConfig) -> None:
         Daemon configuration.
 
     """
-    storage = RemoteStorage(config.storage)
-
     for job in config.histo_jobs:
         for pair in job.pairs:
             try:
-                run_histo_job(job, pair, config.storage.local_path, storage)
+                run_histo_job(job, pair, config.storage.local_path)
             except Exception:
                 logger.exception(
                     'histo job failed: %s %s', job.exchange, pair

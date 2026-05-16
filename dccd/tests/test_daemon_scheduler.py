@@ -7,7 +7,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from dccd.daemon.config import CollectorConfig, HistoJob, StorageConfig
 from dccd.daemon.scheduler import build_histo_scheduler, run_histo_job, run_once
-from dccd.daemon.storage import RemoteStorage
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -22,10 +21,6 @@ def _make_config(histo_jobs=None, tmp_path=None):
             HistoJob(exchange='kraken', pairs=['BTC/USD'], span=86400),
         ],
     )
-
-
-def _make_storage(tmp_path):
-    return RemoteStorage(StorageConfig(local_path=str(tmp_path)))
 
 
 # ---------------------------------------------------------------------------
@@ -83,34 +78,31 @@ def test_run_histo_job_calls_chain(tmp_path):
     import dccd.daemon.scheduler as sched_mod
 
     job = HistoJob(exchange='binance', pairs=['BTC/USDT'], span=3600)
-    storage = MagicMock(spec=RemoteStorage)
     mock_cls, mock_obj = _mock_exchange_cls(str(tmp_path / 'Binance'))
 
     original = sched_mod._HISTO_CLASSES.copy()
     sched_mod._HISTO_CLASSES['binance'] = mock_cls
     try:
-        run_histo_job(job, 'BTC/USDT', str(tmp_path), storage)
+        run_histo_job(job, 'BTC/USDT', str(tmp_path))
     finally:
         sched_mod._HISTO_CLASSES.update(original)
 
     mock_cls.assert_called_once_with(str(tmp_path), 'BTC', 3600, 'USDT', form='parquet')
     mock_obj.import_data.assert_called_once_with('last', 'now')
     mock_obj.save.assert_called_once_with(form='parquet', by_period='Y')
-    storage.push.assert_called_once_with(str(tmp_path / 'Binance'))
 
 
 def test_run_histo_job_splits_pair_correctly(tmp_path):
     import dccd.daemon.scheduler as sched_mod
 
     job = HistoJob(exchange='okx', pairs=['ETH/USDT'], span=3600)
-    storage = MagicMock(spec=RemoteStorage)
     mock_cls, mock_obj = _mock_exchange_cls('/tmp')
     mock_obj.full_path = '/tmp'
 
     original = sched_mod._HISTO_CLASSES.copy()
     sched_mod._HISTO_CLASSES['okx'] = mock_cls
     try:
-        run_histo_job(job, 'ETH/USDT', str(tmp_path), storage)
+        run_histo_job(job, 'ETH/USDT', str(tmp_path))
     finally:
         sched_mod._HISTO_CLASSES.update(original)
 

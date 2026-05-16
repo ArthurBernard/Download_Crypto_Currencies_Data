@@ -52,6 +52,10 @@ With optional Parquet / Polars support::
 
     $ pip install "dccd[io]"
 
+With autonomous daemon support (APScheduler + PyYAML)::
+
+    $ pip install "dccd[daemon]"
+
 From source::
 
     $ git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
@@ -93,6 +97,14 @@ Presentation
     Stream real-time data (order book, trades) via WebSocket with automatic
     reconnection and configurable processing/saving callbacks.
 
+**Daemon** ``dccd.daemon``
+    Autonomous, server-side collector driven by a YAML config.  Runs REST
+    jobs on a schedule (APScheduler), opens WebSocket streams for real-time
+    collection, and periodically syncs all local data to one or more remote
+    destinations (NAS, S3, SFTP, …) via rclone.  Multiple remotes and a
+    configurable sync interval are supported; collection is never blocked by
+    remote availability.
+
 Output formats
 --------------
 
@@ -104,7 +116,9 @@ Parquet files can be read back as either a ``pandas.DataFrame`` or a
 Quick start
 ===========
 
-Historical data (pandas)::
+Historical data (pandas):
+
+.. code-block:: python
 
     from dccd.histo_dl import FromBinance
 
@@ -113,21 +127,69 @@ Historical data (pandas)::
     obj.save(form='parquet')
     df = obj.get_data()            # pandas DataFrame
 
-Polars output::
+Polars output:
+
+.. code-block:: python
 
     df_pl = obj.get_data(format='polars')
 
-Incremental update (resume from last saved point)::
+Incremental update (resume from last saved point):
+
+.. code-block:: python
 
     obj.import_data(start='last', end='now').save(form='parquet')
 
-Other exchanges::
+Other exchanges:
+
+.. code-block:: python
 
     from dccd.histo_dl import FromKraken, FromBybit, FromOKX
 
     FromKraken('/path/', 'ETH', 3600).import_data(start='2024-01-01', end='now').save()
     FromBybit('/path/', 'BTC', 86400).import_data(start='2024-01-01', end='now').save()
     FromOKX('/path/', 'BTC', 3600).import_data(start='2024-01-01', end='now').save()
+
+Daemon (autonomous collector) — ``config.yml``:
+
+.. code-block:: yaml
+
+    storage:
+      local_path: /data/crypto/
+      remotes:
+        - provider: rclone
+          remote: "mynas:crypto/"
+      sync_interval: 3600
+
+    histo_jobs:
+      - exchange: binance
+        pairs: [BTC/USDT, ETH/USDT]
+        span: 3600
+        format: parquet
+        by_period: Y
+
+    stream_jobs:
+      - exchange: binance
+        pairs: [BTC/USDT]
+        channels: [trades, book]
+        time_step: 60
+
+.. code-block:: python
+
+    from dccd.daemon.config import load_config
+    from dccd.daemon.scheduler import run_once, build_histo_scheduler
+    from dccd.daemon.stream_manager import StreamManager
+
+    config = load_config('config.yml')
+
+    # One-shot: download all histo jobs once, then exit
+    run_once(config)
+
+    # Daemon mode: periodic REST + live WebSocket streams
+    scheduler = build_histo_scheduler(config)
+    scheduler.start()
+
+    mgr = StreamManager(config)
+    mgr.start()      # runs until mgr.stop() is called
 
 Links
 =====

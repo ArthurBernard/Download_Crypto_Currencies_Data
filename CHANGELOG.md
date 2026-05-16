@@ -8,11 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/daemon/stream_manager.py` — `StreamManager` (one thread per `(exchange, pair)`, auto-restart on crash) and `SyncService` (periodic rclone push to all remotes, decoupled from collection) (#26)
 - `dccd/daemon/config.py` — declarative YAML config with Pydantic v2: `CollectorConfig`, `HistoJob`, `StreamJob`, `StorageConfig`, `AlertConfig`, `RemoteConfig`, and `load_config()` loader (#25)
 - `dccd/daemon/storage.py` — `RemoteStorage.push()`: delegates to rclone via subprocess; no-op when no remote configured, warning if rclone absent (#25)
 - `dccd/daemon/scheduler.py` — `build_histo_scheduler()` (APScheduler 3.x `BackgroundScheduler`, one interval job per `(exchange, pair)`), `run_histo_job()`, and `run_once()` (#25)
 - `examples/config.example.yml` — annotated reference config for the daemon (#25)
 - `pyproject.toml` — `[daemon]` optional extra (`pyyaml`, `apscheduler`) (#25)
+
+### Changed
+
+- `dccd/daemon/config.py` — `StorageConfig.remote: RemoteConfig | None` replaced by `remotes: list[RemoteConfig]` (multiple destinations) and `sync_interval: int` (default 3600 s) (#26)
+- `dccd/daemon/storage.py` — `RemoteStorage.push()` now iterates all `config.remotes`; supports root-path sync (path == local_path) (#26)
+- `dccd/daemon/scheduler.py` — `run_histo_job` no longer takes a `storage` argument and no longer pushes; remote sync is fully delegated to `SyncService` (#26)
 
 ## [2.1.0] - 2026-05-15
 
