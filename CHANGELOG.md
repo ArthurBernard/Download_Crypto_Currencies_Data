@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/daemon/health.py` — `HealthMonitor`: rotating log handler (10 MB × 5 files at `{local_path}/.dccd/dccd.log`), per-job metrics JSON (`metrics.json`), and optional Slack/Discord webhook alerts on consecutive failures; `JobMetrics` dataclass tracks `last_run_at`, `last_success_at`, `rows_collected`, `errors_count` (#30)
+- `dccd/daemon/cli.py` — `dccd` CLI (`validate`, `run`, `start`, `status`, `add` commands) via typer; `[project.scripts]` entrypoint added to `pyproject.toml`; `typer>=0.12` added to the `daemon` optional extra (#30)
+
+### Changed
+
+- `dccd/daemon/scheduler.py` — `run_histo_job`, `build_histo_scheduler`, `run_once` accept an optional `health: HealthMonitor` parameter and call `record_success` / `record_failure` (#30)
+- `dccd/daemon/stream_manager.py` — `StreamManager.__init__` accepts optional `health: HealthMonitor`; `_run_forever` records success/failure on each iteration (#30)
+
 - `dccd/histo_dl/{binance,coinbase,bybit,okx,kraken}.py` — `format_pair(crypto, fiat)` static method on each REST exchange class; extracts inline pair-building logic from `__init__` and makes it independently testable (#29)
 - `dccd/continuous_dl/exchange.py` — `ContinuousDownloader.__call__(*args, **kwargs)`: base `__call__` using `asyncio.new_event_loop()`; Bitfinex/Bitmex overrides trimmed to exchange-specific setup only (#29)
 - `dccd/continuous_dl/exchange.py` — `_push_trades(parsed)`: validates each trade dict against `Trade` (Pydantic) then appends via `_raw_parser`; shared by Binance, Kraken, Bybit, OKX (#29)

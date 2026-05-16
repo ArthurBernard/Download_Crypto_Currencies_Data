@@ -34,6 +34,7 @@ from dccd.tools.io import IODataBase
 
 if TYPE_CHECKING:
     from dccd.daemon.config import CollectorConfig, StorageConfig, StreamJob
+    from dccd.daemon.health import HealthMonitor
 
 __all__ = ['StreamManager', 'SyncService']
 
@@ -265,8 +266,10 @@ class StreamManager:
 
     """
 
-    def __init__(self, config: CollectorConfig) -> None:
+    def __init__(self, config: CollectorConfig,
+                 health: HealthMonitor | None = None) -> None:
         self.config = config
+        self._health = health
         self._threads:     dict[str, threading.Thread]     = {}
         self._downloaders: dict[str, ContinuousDownloader] = {}
         self._stop_event = threading.Event()
@@ -305,8 +308,12 @@ class StreamManager:
         while not self._stop_event.is_set():
             try:
                 self._run_once(job, pair, channels)
+                if self._health:
+                    self._health.record_success(job.exchange, pair)
             except Exception:
                 logger.exception('stream crashed: %s %s', job.exchange, pair)
+                if self._health:
+                    self._health.record_failure(job.exchange, pair)
             if not self._stop_event.is_set():
                 self._stop_event.wait(timeout=_RESTART_DELAY)
 
