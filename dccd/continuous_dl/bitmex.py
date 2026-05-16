@@ -233,7 +233,7 @@ class DownloadBitmexData(ContinuousDownloader):
         for i, d in enumerate(data['data']):
             slot['trades'].append(_parser_trades(d, i))
 
-    def _get_book_state(self) -> dict[int, Any]:
+    def _get_book_state(self) -> dict[int, Any]:  # type: ignore[override]
         return dict(self.d)
 
     def _restore_book_state(self, state: dict[int, Any]) -> None:  # type: ignore[override]
