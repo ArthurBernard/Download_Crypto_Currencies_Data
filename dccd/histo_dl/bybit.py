@@ -6,7 +6,7 @@
 .. currentmodule:: dccd.histo_dl.bybit
 
 .. autoclass:: FromBybit
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -100,6 +100,10 @@ class FromBybit(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
 

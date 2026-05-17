@@ -11,7 +11,7 @@
 .. currentmodule:: dccd.histo_dl.kraken
 
 .. autoclass:: FromKraken
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -78,6 +78,10 @@ class FromKraken(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
 

@@ -86,12 +86,20 @@ class ImportDataCryptoCurrencies(ABC):
         Path to save data.
     form : str
         Format to save data.
+    trades_df : pd.DataFrame
+        Trades data after calling :meth:`import_trades`.
+    orderbook_df : pd.DataFrame
+        Order book snapshot after calling :meth:`import_orderbook`.
 
     Methods
     -------
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
 
