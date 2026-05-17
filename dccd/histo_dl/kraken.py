@@ -11,7 +11,7 @@
 .. currentmodule:: dccd.histo_dl.kraken
 
 .. autoclass:: FromKraken
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -78,6 +78,10 @@ class FromKraken(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
 
@@ -155,6 +159,33 @@ class FromKraken(ImportDataCryptoCurrencies):
         } for e in text]
 
         return data
+
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://api.kraken.com/0/public/Trades',
+            {'pair': self.pair, 'since': start},
+        )
+        trades = r.json()['result'][self.pair]
+        return [{
+            'tid': None,
+            'timestamp': float(e[2]),
+            'price': float(e[0]),
+            'amount': float(e[1]),
+            'type': 'buy' if e[3] == 'b' else 'sell',
+        } for e in trades if float(e[2]) <= end]
+
+    def _import_orderbook(self, depth: int = 50) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://api.kraken.com/0/public/Depth',
+            {'pair': self.pair, 'count': depth},
+        )
+        book = r.json()['result'][self.pair]
+        result = []
+        for bid in book['bids']:
+            result.append({'side': 'bid', 'price': str(bid[0]), 'amount': float(bid[1]), 'count': None})
+        for ask in book['asks']:
+            result.append({'side': 'ask', 'price': str(ask[0]), 'amount': float(ask[1]), 'count': None})
+        return result
 
     def import_data(
         self, start: int | str = 'last', end: int | str | None = None

@@ -6,7 +6,7 @@
 .. currentmodule:: dccd.histo_dl.bybit
 
 .. autoclass:: FromBybit
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -100,6 +100,10 @@ class FromBybit(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
 
@@ -156,6 +160,41 @@ class FromBybit(ImportDataCryptoCurrencies):
         } for e in text]
 
         return data
+
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        """ Fetch the most recent trades from Bybit (recent data only).
+
+        Notes
+        -----
+        The Bybit public REST API returns up to 1 000 of the most recent trades
+        regardless of ``start``/``end``.  Historical trades are not available
+        via this endpoint.
+
+        """
+        r = self._fetch(
+            'https://api.bybit.com/v5/market/recent-trade',
+            {'category': 'spot', 'symbol': self.pair, 'limit': 1000},
+        )
+        return [{
+            'tid': None,
+            'timestamp': float(e['time']) / 1000,
+            'price': float(e['price']),
+            'amount': float(e['size']),
+            'type': 'buy' if e['side'] == 'Buy' else 'sell',
+        } for e in r.json()['result']['list']]
+
+    def _import_orderbook(self, depth: int = 50) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://api.bybit.com/v5/market/orderbook',
+            {'category': 'spot', 'symbol': self.pair, 'limit': depth},
+        )
+        book = r.json()['result']
+        result = []
+        for bid in book['b']:
+            result.append({'side': 'bid', 'price': bid[0], 'amount': float(bid[1]), 'count': None})
+        for ask in book['a']:
+            result.append({'side': 'ask', 'price': ask[0], 'amount': float(ask[1]), 'count': None})
+        return result
 
     def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Bybit for a specific time interval.

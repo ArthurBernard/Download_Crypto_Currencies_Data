@@ -68,15 +68,15 @@ Supported exchanges
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
 | Exchange         | REST OHLCV | REST Trades | REST Order Book | WS OHLCV | WS Trades | WS Order Book  |
 +==================+============+=============+=================+==========+===========+================+
-| Binance          | ✓          |             |                 |          | ✓         | ✓              |
+| Binance          | ✓          | ✓           | ✓               |          | ✓         | ✓              |
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
-| Coinbase         | ✓          |             |                 |          |           |                |
+| Coinbase         | ✓          | ✓†          | ✓               |          |           |                |
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
-| Kraken           | ✓          |             |                 | ✓        | ✓         | ✓              |
+| Kraken           | ✓          | ✓           | ✓               | ✓        | ✓         | ✓              |
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
-| Bybit            | ✓          |             |                 |          | ✓         | ✓              |
+| Bybit            | ✓          | ✓†          | ✓               |          | ✓         | ✓              |
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
-| OKX              | ✓          |             |                 | ✓        | ✓         | ✓              |
+| OKX              | ✓          | ✓           | ✓               | ✓        | ✓         | ✓              |
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
 | Bitfinex         |            |             |                 | ✓\*      | ✓         | ✓              |
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
@@ -84,6 +84,8 @@ Supported exchanges
 +------------------+------------+-------------+-----------------+----------+-----------+----------------+
 
 \* Bitfinex WS OHLCV is aggregated from the trades stream via ``get_ohlc_bitfinex``.
+
+† Recent trades only (Bybit ≤ 1 000, Coinbase ≤ 100) — no deep historical pagination via the public REST API.
 
 Presentation
 ============
@@ -148,6 +150,31 @@ Other exchanges:
     FromKraken('/path/', 'ETH', 3600).import_data(start='2024-01-01', end='now').save()
     FromBybit('/path/', 'BTC', 86400).import_data(start='2024-01-01', end='now').save()
     FromOKX('/path/', 'BTC', 3600).import_data(start='2024-01-01', end='now').save()
+
+Trades (historical or recent):
+
+.. code-block:: python
+
+    from dccd.histo_dl import FromBinance, FromKraken
+
+    obj = FromBinance('/path/', 'BTC', 3600, fiat='USDT')
+    obj.import_trades(start='2024-01-01 00:00:00', end='2024-01-02 00:00:00')
+    obj.save_trades(form='csv')
+    df = obj.trades_df    # pandas DataFrame — columns: timestamp, price, amount, type, tid
+
+    # Kraken also supports full history; Bybit/Coinbase return recent-only snapshots
+    FromKraken('/path/', 'BTC', 3600).import_trades(start='2024-01-01', end='2024-01-02').save_trades()
+
+Order book snapshot:
+
+.. code-block:: python
+
+    from dccd.histo_dl import FromOKX
+
+    obj = FromOKX('/path/', 'BTC', 3600)
+    obj.import_orderbook(depth=50)
+    obj.save_orderbook(form='csv')
+    df = obj.orderbook_df    # columns: side, price, amount, count
 
 Daemon (autonomous collector) — ``config.yml``:
 
