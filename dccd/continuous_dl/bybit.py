@@ -29,7 +29,6 @@ import time
 # Third party packages
 # Local packages
 from dccd.continuous_dl.exchange import ContinuousDownloader
-from dccd.process_data import set_marketdepth, set_orders, set_trades
 from dccd.tools.io import IODataBase
 
 __all__ = [
@@ -122,7 +121,7 @@ class DownloadBybitData(ContinuousDownloader):
 
     """
 
-    def __init__(self, pair='BTCUSDT', time_step=60, until=3600):
+    def __init__(self, pair='BTCUSDT', time_step=60, until=3600, checkpoint_dir=None):
         """ Initialize object. """
         if until is None:
             until = 0
@@ -132,6 +131,7 @@ class DownloadBybitData(ContinuousDownloader):
         self.pair = pair
         ContinuousDownloader.__init__(
             self, _BYBIT_WS_URL, time_step=time_step, STOP=until,
+            checkpoint_dir=checkpoint_dir,
             subs={'op': 'subscribe',
                   'args': [f'publicTrade.{pair}', f'orderbook.50.{pair}']},
         )
@@ -140,7 +140,7 @@ class DownloadBybitData(ContinuousDownloader):
             'book': self.parser_book,
         }
         self.logger = logging.getLogger(__name__)
-        self.d = {}
+        self._load_checkpoint()
 
     async def on_message(self, msg):
         """ Dispatch incoming WebSocket messages. """
@@ -159,8 +159,7 @@ class DownloadBybitData(ContinuousDownloader):
             Raw WebSocket trade message.
 
         """
-        for trade in _parser_trades(msg):
-            self._raw_parser(trade)
+        self._push_trades(_parser_trades(msg))
 
     def parser_book(self, msg):
         """ Parse and update order book from WebSocket messages.
@@ -171,22 +170,10 @@ class DownloadBybitData(ContinuousDownloader):
             Raw WebSocket orderbook message.
 
         """
-        updates = _parser_book(msg)
-        for price, qty in updates.items():
-            if qty == 0:
-                self.d.pop(price, None)
-            else:
-                self.d[price] = qty
-        self._data[self.t] = dict(self.d)
-
-    def _raw_parser(self, data):
-        if self.t not in self._data:
-            self._data[self.t] = []
-        self._data[self.t].append(data)
+        self._push_book_updates(_parser_book(msg))
 
 
-def get_trades_bybit(path, pair='BTCUSDT', time_step=60, until=3600,
-                     form='csv'):
+def get_trades_bybit(path, pair='BTCUSDT', time_step=60, until=3600, form='csv'):
     """ Download trades data from Bybit.
 
     Parameters
@@ -204,13 +191,11 @@ def get_trades_bybit(path, pair='BTCUSDT', time_step=60, until=3600,
 
     """
     downloader = DownloadBybitData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_trades)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_trades_saver(IODataBase(path, method=form))
     downloader(pair=pair)
 
 
-def get_orderbook_bybit(path, pair='BTCUSDT', time_step=60, until=3600,
-                        form='csv'):
+def get_orderbook_bybit(path, pair='BTCUSDT', time_step=60, until=3600, form='csv'):
     """ Download order book data from Bybit.
 
     Parameters
@@ -228,8 +213,7 @@ def get_orderbook_bybit(path, pair='BTCUSDT', time_step=60, until=3600,
 
     """
     downloader = DownloadBybitData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_marketdepth)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_book_saver(IODataBase(path, method=form))
     downloader(pair=pair)
 
 
@@ -239,7 +223,8 @@ def get_data_bybit(path, pair='BTCUSDT', time_step=60, until=3600, form='csv'):
     Parameters
     ----------
     path : str
-        Path to save data.
+        Root path; trades saved under ``<path>/trades/``, book under
+        ``<path>/book/``.
     pair : str, optional
         Trading pair, default is 'BTCUSDT'.
     time_step : int, optional
@@ -251,6 +236,6 @@ def get_data_bybit(path, pair='BTCUSDT', time_step=60, until=3600, form='csv'):
 
     """
     downloader = DownloadBybitData(pair=pair, time_step=time_step, until=until)
-    downloader.set_process_data(set_orders)
-    downloader.set_saver(IODataBase(path, method=form))
+    downloader.set_trades_saver(IODataBase(f'{path}/trades', method=form))
+    downloader.set_book_saver(IODataBase(f'{path}/book', method=form))
     downloader(pair=pair)

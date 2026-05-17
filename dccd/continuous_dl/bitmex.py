@@ -31,7 +31,6 @@ Low level API
 """
 
 # Built-in packages
-import asyncio
 import time
 from datetime import datetime as dt
 from typing import Any
@@ -180,8 +179,8 @@ class DownloadBitmexData(ContinuousDownloader):
             'orderBookL2_25': self.parser_book,
             'trade': self.parser_trades,
         }
-        self.d: dict[int, Any] = {}
         self.start = False
+        self._load_checkpoint()
 
     def parser_book(self, data: dict[str, Any]) -> None:
         """ Parse and maintain a local copy of the order book.
@@ -214,7 +213,9 @@ class DownloadBitmexData(ContinuousDownloader):
             else:
                 self.logger.error('Unknown action {}: {}'.format(action, data))
 
-        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}  # type: ignore[assignment]
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = {
+            v['price']: v['amount'] for v in self.d.values()
+        }
 
     def parser_trades(self, data: dict[str, Any]) -> None:
         """ Parse trade data and accumulate records for the current timestep.
@@ -226,15 +227,12 @@ class DownloadBitmexData(ContinuousDownloader):
             key with a list of trade records.
 
         """
-        i, _data = 0, []
-        for d in data['data']:
-            _data += [_parser_trades(d, i)]
-            i += 1
+        slot = self._data.setdefault(self.t, {'trades': [], 'book': {}})
+        for i, d in enumerate(data['data']):
+            slot['trades'].append(_parser_trades(d, i))
 
-        if self.t in self._data.keys():
-            self._data[self.t] += _data
-        else:
-            self._data[self.t] = _data
+    def _restore_book_state(self, state: dict[int, Any]) -> None:  # type: ignore[override]
+        self.d = {int(k): v for k, v in state.items()}
 
     async def on_message(self, data: dict[str, Any] | list[Any]) -> None:
         """ Route an incoming websocket message to the appropriate parser. """
@@ -270,16 +268,8 @@ class DownloadBitmexData(ContinuousDownloader):
 
         """
         self.parser = self.get_parser(args[0])
-
         self.logger.info('Try connect WS and set {} stream.'.format(args[0]))
-
-        self.loop = asyncio.get_event_loop()
-        self.loop.run_until_complete(asyncio.gather(
-            self._connect(args=':'.join(args)),
-            self._loop()
-        ))
-
-        return self
+        return super().__call__(args=':'.join(args))  # type: ignore[return-value]
 
 
 # =========================================================================== #

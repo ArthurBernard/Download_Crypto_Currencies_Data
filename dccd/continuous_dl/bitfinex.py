@@ -31,7 +31,6 @@ Low level API
 """
 
 # Built-in packages
-import asyncio
 import logging
 import time
 from typing import Any
@@ -117,7 +116,8 @@ class DownloadBitfinexData(ContinuousDownloader):
 
     """
 
-    def __init__(self, time_step: int = 60, until: int | None = 3600) -> None:
+    def __init__(self, time_step: int = 60, until: int | None = 3600,
+                 checkpoint_dir: str | None = None) -> None:
         """ Initialize object.
 
         Parameters
@@ -127,6 +127,9 @@ class DownloadBitfinexData(ContinuousDownloader):
         until : int or None, optional
             Seconds to run, or a future Unix timestamp to stop at.
             Default is ``3600``.
+        checkpoint_dir : str or None, optional
+            Directory to write the order-book crash-recovery checkpoint.
+            Disabled when ``None`` (default).
 
         """
         if until is None:
@@ -135,7 +138,7 @@ class DownloadBitfinexData(ContinuousDownloader):
             until -= int(time.time())
 
         ContinuousDownloader.__init__(self, 'bitfinex', time_step=time_step,
-                                      STOP=until)
+                                      STOP=until, checkpoint_dir=checkpoint_dir)
 
         self._parser_data: dict[str, Any] = {
             'book': self.parser_book,
@@ -144,7 +147,7 @@ class DownloadBitfinexData(ContinuousDownloader):
             'trades_raw': self.parser_raw_trades,
         }
         self.logger = logging.getLogger(__name__)
-        self.d: dict[str, Any] = {}
+        self._load_checkpoint()
 
     def parser_raw_book(self, data: list[Any]) -> None:
         """ Parse raw order book, each timestep set in a list all orders.
@@ -177,7 +180,9 @@ class DownloadBitfinexData(ContinuousDownloader):
         else:
             self.d.pop(parsed['price'])
 
-        self._data[self.t] = {v['price']: v['amount'] for v in self.d.values()}  # type: ignore[assignment]
+        self._data.setdefault(self.t, {'trades': [], 'book': {}})['book'] = {
+            v['price']: v['amount'] for v in self.d.values()
+        }
 
     def parser_raw_trades(self, data: list[Any]) -> None:
         """ Parse raw trade data tick-by-tick.
@@ -248,18 +253,9 @@ class DownloadBitfinexData(ContinuousDownloader):
 
         """
         self.parser = self.get_parser(channel)
-
         channel = channel[:-4] if channel[-4:] == '_raw' else channel
-
         self.logger.info('Try connect WS and set {} stream.'.format(channel))
-
-        self.loop = asyncio.get_event_loop()
-        self.loop.run_until_complete(asyncio.gather(
-            self._connect(channel=channel, **kwargs),
-            self._loop()
-        ))
-
-        return self
+        return super().__call__(channel=channel, **kwargs)  # type: ignore[return-value]
 
 
 # =========================================================================== #

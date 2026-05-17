@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-05-17
+
+### Added
+
+- `dccd/histo_dl/exchange.py` — `import_trades(start, end)` and `import_orderbook(depth)` public methods on `ImportDataCryptoCurrencies`; `_sort_trades` / `_sort_orderbook` helpers validate via Pydantic, sort and deduplicate; `trades_df` / `orderbook_df` attributes; `save_trades` / `save_orderbook` save helpers (#31)
+- `dccd/histo_dl/{binance,kraken,bybit,okx,coinbase}.py` — `_import_trades(start, end)` and `_import_orderbook(depth)` implemented for all five exchanges; Binance and Kraken support full history via paginated endpoints; Bybit (≤ 1 000) and Coinbase (≤ 100) return recent-only snapshots (#31)
+- `dccd/models.py` — `Trade.tid` made optional (`int | None`); `OrderBookEntry` gains required `side` field (`'bid'` or `'ask'`) and `count` made optional (`int | None`) (#31)
+- `dccd/daemon/health.py` — `HealthMonitor`: rotating log handler (10 MB × 5 files), per-job metrics JSON, and optional Slack/Discord webhook alerts on consecutive failures; `JobMetrics` dataclass (#30)
+- `dccd/daemon/cli.py` — `dccd` CLI (`validate`, `run`, `start`, `status`, `add` commands) via typer; `[project.scripts]` entrypoint; `typer>=0.12` added to the `daemon` extra (#30)
+- `dccd/daemon/stream_manager.py` — `StreamManager` (one thread per `(exchange, pair)`, auto-restart on crash) and `SyncService` (periodic rclone push to all remotes, decoupled from collection) (#26)
+- `dccd/daemon/config.py` — declarative YAML config with Pydantic v2: `CollectorConfig`, `HistoJob`, `StreamJob`, `StorageConfig`, `AlertConfig`, `RemoteConfig`, `load_config()` (#25)
+- `dccd/daemon/storage.py` — `RemoteStorage.push()` via rclone; supports multiple remotes and root-path sync (#25, #26)
+- `dccd/daemon/scheduler.py` — `build_histo_scheduler()` (APScheduler 3.x), `run_histo_job()`, `run_once()` (#25)
+- `examples/config.example.yml` — annotated reference config for the daemon (#25)
+- `examples/daemon_example.py` — programmatic daemon example in 6 steps (#30)
+- `pyproject.toml` — `[daemon]` optional extra (`pyyaml`, `apscheduler`, `typer`) (#25, #30)
+
+### Changed
+
+- `dccd/daemon/scheduler.py` — `run_histo_job`, `build_histo_scheduler`, `run_once` accept an optional `health: HealthMonitor` parameter (#30)
+- `dccd/daemon/stream_manager.py` — `StreamManager.__init__` accepts optional `health: HealthMonitor`; `_run_forever` records success/failure on each iteration (#30)
+- `dccd/daemon/config.py` — `StorageConfig.remote` replaced by `remotes: list[RemoteConfig]` and `sync_interval: int` (#26)
+- `dccd/histo_dl/{binance,coinbase,bybit,okx,kraken}.py` — `format_pair(crypto, fiat)` extracted as a static method, independently testable (#29)
+- `dccd/continuous_dl/exchange.py` — unified `__call__`, `_push_trades`, `_push_book_updates`, `_get_book_state`, `_restore_book_state` in base class; separate `set_trades_saver` / `set_book_saver`; crash-recovery checkpoint; `snapshot_ts` injected into every snapshot payload (#28, #29)
+
 ## [2.1.0] - 2026-05-15
 
 ### Added

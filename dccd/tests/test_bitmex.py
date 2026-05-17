@@ -60,7 +60,7 @@ def test_parser_book_partial_populates():
     dl.parser_book(_PARTIAL_MSG)
     assert dl.start is True
     assert 1 in dl.d
-    assert dl._data[1000][30000.0] == 10
+    assert dl._data[1000]['book'][30000.0] == 10
 
 
 def test_parser_book_delete_removes_entry():
@@ -68,22 +68,22 @@ def test_parser_book_delete_removes_entry():
     dl.parser_book(_PARTIAL_MSG)
     dl.parser_book(_DELETE_MSG)
     assert 1 not in dl.d
-    assert 30000.0 not in dl._data[1000]
+    assert 30000.0 not in dl._data[1000]['book']
 
 
 def test_parser_book_update_changes_amount():
     dl = _make_downloader()
     dl.parser_book(_PARTIAL_MSG)
     dl.parser_book(_UPDATE_MSG)
-    assert dl._data[1000][30000.0] == 20
+    assert dl._data[1000]['book'][30000.0] == 20
 
 
 def test_parser_trades_aggregates_in_same_timestep():
     dl = _make_downloader()
     dl.parser_trades(_TRADE_MSG)
-    assert len(dl._data[1000]) == 2
+    assert len(dl._data[1000]['trades']) == 2
     dl.parser_trades(_TRADE_MSG)
-    assert len(dl._data[1000]) == 4
+    assert len(dl._data[1000]['trades']) == 4
 
 
 @pytest.mark.asyncio

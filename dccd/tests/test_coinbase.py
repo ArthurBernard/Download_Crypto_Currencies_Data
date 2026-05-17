@@ -6,8 +6,19 @@ import time
 import pytest
 
 from dccd import FromCoinbase as fc
+from dccd.histo_dl.coinbase import FromCoinbase
 
 OHLC_KEYS = ['date', 'open', 'high', 'low', 'close', 'volume', 'quoteVolume']
+TRADE_KEYS = ['tid', 'timestamp', 'price', 'amount', 'type']
+
+
+@pytest.mark.parametrize('crypto,fiat,expected', [
+    ('BTC', 'USD',  'BTC-USD'),
+    ('ETH', 'EUR',  'ETH-EUR'),
+    ('XBT', 'USD',  'BTC-USD'),  # XBT alias → BTC
+])
+def test_format_pair(crypto, fiat, expected):
+    assert FromCoinbase.format_pair(crypto, fiat) == expected
 
 
 @pytest.fixture
@@ -38,3 +49,25 @@ def test_malformed_response_raises(loader, monkeypatch):
     monkeypatch.setattr("requests.get", lambda *a, **kw: m)
     with pytest.raises((TypeError, ValueError)):
         loader._import_data(start=0)
+
+
+def test_import_trades(loader, mock_coinbase_trades):
+    data = loader._import_trades(start=0, end=int(time.time()))
+    assert isinstance(data, list)
+    assert len(data) > 0
+    for key in TRADE_KEYS:
+        assert key in data[0]
+
+
+def test_import_orderbook(loader, mock_coinbase_book):
+    data = loader._import_orderbook(depth=2)
+    assert isinstance(data, list)
+    assert len(data) > 0
+    sides = {d['side'] for d in data}
+    assert 'bid' in sides
+    assert 'ask' in sides
+
+
+def test_import_trades_http_500_raises(loader, mock_http_500):
+    with pytest.raises(ValueError):
+        loader._import_trades(start=0, end=1)

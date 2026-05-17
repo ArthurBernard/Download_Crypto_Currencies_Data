@@ -11,7 +11,7 @@
 .. currentmodule:: dccd.histo_dl.binance
 
 .. autoclass:: FromBinance
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -82,8 +82,31 @@ class FromBinance(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
+
+    @staticmethod
+    def format_pair(crypto: str, fiat: str) -> str:
+        """ Return the Binance pair symbol for *crypto* and *fiat*.
+
+        Parameters
+        ----------
+        crypto, fiat : str
+            Asset symbols (e.g. ``'BTC'``, ``'USDT'``).
+
+        Returns
+        -------
+        str
+            Concatenated pair (e.g. ``'BTCUSDT'``).
+
+        """
+        if crypto == 'XBT':
+            crypto = 'BTC'
+        return crypto + fiat
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
         """ Initialize object. """
@@ -94,14 +117,11 @@ class FromBinance(ImportDataCryptoCurrencies):
             )
             self.fiat = fiat = 'USDT'
 
-        if crypto == 'XBT':
-            crypto = 'BTC'
-
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Binance', fiat, form
         )
 
-        self.pair = crypto + fiat
+        self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/Binance/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
@@ -129,6 +149,35 @@ class FromBinance(ImportDataCryptoCurrencies):
         } for e in text]
 
         return data
+
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        param = {
+            'symbol': self.pair,
+            'startTime': start * 1000,
+            'endTime': end * 1000,
+            'limit': 1000,
+        }
+        r = self._fetch('https://api.binance.com/api/v3/aggTrades', param)
+        return [{
+            'tid': int(e['a']),
+            'timestamp': float(e['T']) / 1000,
+            'price': float(e['p']),
+            'amount': float(e['q']),
+            'type': 'sell' if e['m'] else 'buy',
+        } for e in r.json()]
+
+    def _import_orderbook(self, depth: int = 50) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://api.binance.com/api/v3/depth',
+            {'symbol': self.pair, 'limit': depth},
+        )
+        book = r.json()
+        result = []
+        for bid in book['bids']:
+            result.append({'side': 'bid', 'price': bid[0], 'amount': float(bid[1]), 'count': None})
+        for ask in book['asks']:
+            result.append({'side': 'ask', 'price': ask[0], 'amount': float(ask[1]), 'count': None})
+        return result
 
     def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Binance for specific time interval.

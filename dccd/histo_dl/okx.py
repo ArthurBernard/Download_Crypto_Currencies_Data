@@ -6,7 +6,7 @@
 .. currentmodule:: dccd.histo_dl.okx
 
 .. autoclass:: FromOKX
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -100,15 +100,36 @@ class FromOKX(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
+
+    @staticmethod
+    def format_pair(crypto: str, fiat: str) -> str:
+        """ Return the OKX pair symbol for *crypto* and *fiat*.
+
+        Parameters
+        ----------
+        crypto, fiat : str
+            Asset symbols (e.g. ``'BTC'``, ``'USDT'``).
+
+        Returns
+        -------
+        str
+            Dash-separated pair (e.g. ``'BTC-USDT'``).
+
+        """
+        return crypto + '-' + fiat
 
     def __init__(self, path, crypto, span, fiat='USDT', form='xlsx'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'OKX', fiat, form
         )
-        self.pair = crypto + '-' + fiat
+        self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/OKX/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
@@ -138,6 +159,34 @@ class FromOKX(ImportDataCryptoCurrencies):
         } for e in text]
 
         return data
+
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://www.okx.com/api/v5/market/trades',
+            {'instId': self.pair, 'limit': 500},
+        )
+        return [{
+            'tid': int(e['tradeId']),
+            'timestamp': float(e['ts']) / 1000,
+            'price': float(e['px']),
+            'amount': float(e['sz']),
+            'type': e['side'],
+        } for e in r.json()['data']]
+
+    def _import_orderbook(self, depth: int = 50) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://www.okx.com/api/v5/market/books',
+            {'instId': self.pair, 'sz': depth},
+        )
+        book = r.json()['data'][0]
+        result = []
+        for bid in book['bids']:
+            count = int(bid[3]) if bid[3] else None
+            result.append({'side': 'bid', 'price': bid[0], 'amount': float(bid[1]), 'count': count})
+        for ask in book['asks']:
+            count = int(ask[3]) if ask[3] else None
+            result.append({'side': 'ask', 'price': ask[0], 'amount': float(ask[1]), 'count': count})
+        return result
 
     def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from OKX for a specific time interval.

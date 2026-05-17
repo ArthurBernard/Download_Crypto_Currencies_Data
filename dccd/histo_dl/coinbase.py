@@ -11,7 +11,7 @@
 .. currentmodule:: dccd.histo_dl.coinbase
 
 .. autoclass:: FromCoinbase
-   :members: import_data, save, get_data
+   :members: import_data, save, get_data, import_trades, save_trades, import_orderbook, save_orderbook
    :show-inheritance:
 
 """
@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 # Import built-in packages
+from datetime import datetime, timezone
 from typing import Any
 
 # Import third party packages
@@ -80,17 +81,38 @@ class FromCoinbase(ImportDataCryptoCurrencies):
     import_data
     save
     get_data
+    import_trades
+    save_trades
+    import_orderbook
+    save_orderbook
 
     """
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
-        """ Initialize object. """
+    @staticmethod
+    def format_pair(crypto: str, fiat: str) -> str:
+        """ Return the Coinbase pair symbol for *crypto* and *fiat*.
+
+        Parameters
+        ----------
+        crypto, fiat : str
+            Asset symbols (e.g. ``'BTC'``, ``'USD'``).
+
+        Returns
+        -------
+        str
+            Dash-separated pair (e.g. ``'BTC-USD'``).
+
+        """
         if crypto == 'XBT':
             crypto = 'BTC'
+        return crypto + '-' + fiat
+
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+        """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Coinbase', fiat, form
         )
-        self.pair = crypto + '-' + fiat
+        self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/Coinbase/Data/Clean_Data/'
         self.full_path += self.per + '/' + self.crypto + self.fiat
 
@@ -119,6 +141,47 @@ class FromCoinbase(ImportDataCryptoCurrencies):
         } for e in text]
 
         return data
+
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        """ Fetch recent trades from Coinbase (recent data only).
+
+        Notes
+        -----
+        The Coinbase Exchange public REST API returns up to 100 recent trades.
+        Deep historical trades are not available without authenticated
+        pagination.
+
+        """
+        r = self._fetch(
+            f'https://api.exchange.coinbase.com/products/{self.pair}/trades',
+            {'limit': 100},
+        )
+        result = []
+        for e in r.json():
+            ts = datetime.fromisoformat(
+                e['time'].replace('Z', '+00:00')
+            ).replace(tzinfo=timezone.utc).timestamp()
+            result.append({
+                'tid': int(e['trade_id']),
+                'timestamp': float(ts),
+                'price': float(e['price']),
+                'amount': float(e['size']),
+                'type': e['side'],
+            })
+        return result
+
+    def _import_orderbook(self, depth: int = 50) -> list[dict[str, Any]]:
+        r = self._fetch(
+            f'https://api.exchange.coinbase.com/products/{self.pair}/book',
+            {'level': 2},
+        )
+        book = r.json()
+        result = []
+        for bid in book['bids']:
+            result.append({'side': 'bid', 'price': bid[0], 'amount': float(bid[1]), 'count': int(bid[2]) if len(bid) > 2 else None})
+        for ask in book['asks']:
+            result.append({'side': 'ask', 'price': ask[0], 'amount': float(ask[1]), 'count': int(ask[2]) if len(ask) > 2 else None})
+        return result
 
     def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Coinbase for specific time interval.
