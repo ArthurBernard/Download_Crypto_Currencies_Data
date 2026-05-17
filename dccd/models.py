@@ -37,12 +37,13 @@ class OHLCBar(BaseModel):
 
 
 class Trade(BaseModel):
-    """ Individual trade returned by WebSocket streams.
+    """ Individual trade from WebSocket streams or REST history endpoints.
 
     Parameters
     ----------
-    tid : int
-        Trade ID.
+    tid : int or None
+        Trade ID.  ``None`` when the exchange does not provide an integer ID
+        (e.g. Kraken, Bybit).
     timestamp : float
         Unix timestamp (seconds).
     price : float
@@ -50,11 +51,11 @@ class Trade(BaseModel):
     amount : float
         Trade size (base asset).
     type : str, optional
-        'buy' or 'sell'.
+        ``'buy'`` or ``'sell'``.
 
     """
 
-    tid: int
+    tid: int | None = None
     timestamp: float
     price: float
     amount: float
@@ -62,19 +63,23 @@ class Trade(BaseModel):
 
 
 class OrderBookEntry(BaseModel):
-    """ Single order book entry from WebSocket streams.
+    """ Single order book level from REST snapshot or WebSocket streams.
 
     Parameters
     ----------
+    side : str
+        ``'bid'`` or ``'ask'``.
     price : str
-        Price level as string key.
-    count : int
-        Number of orders at this level.
+        Price level as a string (preserves precision).
     amount : float
-        Total size at this level.
+        Total quantity available at this level.
+    count : int or None
+        Number of open orders at this level.  ``None`` when the exchange does
+        not provide this information (e.g. Binance, Kraken).
 
     """
 
+    side: str
     price: str
-    count: int
     amount: float
+    count: int | None = None

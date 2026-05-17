@@ -146,6 +146,35 @@ class FromBinance(ImportDataCryptoCurrencies):
 
         return data
 
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        param = {
+            'symbol': self.pair,
+            'startTime': start * 1000,
+            'endTime': end * 1000,
+            'limit': 1000,
+        }
+        r = self._fetch('https://api.binance.com/api/v3/aggTrades', param)
+        return [{
+            'tid': int(e['a']),
+            'timestamp': float(e['T']) / 1000,
+            'price': float(e['p']),
+            'amount': float(e['q']),
+            'type': 'sell' if e['m'] else 'buy',
+        } for e in r.json()]
+
+    def _import_orderbook(self, depth: int = 50) -> list[dict[str, Any]]:
+        r = self._fetch(
+            'https://api.binance.com/api/v3/depth',
+            {'symbol': self.pair, 'limit': depth},
+        )
+        book = r.json()
+        result = []
+        for bid in book['bids']:
+            result.append({'side': 'bid', 'price': bid[0], 'amount': float(bid[1]), 'count': None})
+        for ask in book['asks']:
+            result.append({'side': 'ask', 'price': ask[0], 'amount': float(ask[1]), 'count': None})
+        return result
+
     def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
         """ Download data from Binance for specific time interval.
 

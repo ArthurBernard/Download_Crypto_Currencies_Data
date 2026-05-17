@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/histo_dl/exchange.py` — `import_trades(start, end)` and `import_orderbook(depth)` public methods on `ImportDataCryptoCurrencies`; `_sort_trades` and `_sort_orderbook` helpers validate via Pydantic, sort and deduplicate; `trades_df` / `orderbook_df` attributes; `save_trades` and `save_orderbook` helpers
+- `dccd/histo_dl/{binance,kraken,bybit,okx,coinbase}.py` — `_import_trades(start, end)` and `_import_orderbook(depth)` implemented for all five exchanges (Binance/Kraken full history; Bybit/Coinbase recent-only snapshot)
+- `dccd/models.py` — `Trade.tid` made optional (`int | None`); `OrderBookEntry` gains required `side` field and `count` made optional (`int | None`)
+- Tests: 15 new test cases across 5 exchange test files (trades keys, order-book sides, HTTP 500 path) + `test_orderbookentry_count_optional` in `test_models.py`
+
 - `dccd/daemon/health.py` — `HealthMonitor`: rotating log handler (10 MB × 5 files at `{local_path}/.dccd/dccd.log`), per-job metrics JSON (`metrics.json`), and optional Slack/Discord webhook alerts on consecutive failures; `JobMetrics` dataclass tracks `last_run_at`, `last_success_at`, `rows_collected`, `errors_count` (#30)
 - `dccd/daemon/cli.py` — `dccd` CLI (`validate`, `run`, `start`, `status`, `add` commands) via typer; `[project.scripts]` entrypoint added to `pyproject.toml`; `typer>=0.12` added to the `daemon` optional extra (#30)
 

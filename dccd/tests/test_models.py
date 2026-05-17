@@ -43,5 +43,11 @@ def test_trade_type_optional():
 
 
 def test_orderbookentry_valid():
-    e = OrderBookEntry(price='50000', count=3, amount=1.5)
+    e = OrderBookEntry(side='bid', price='50000', count=3, amount=1.5)
     assert e.price == '50000'
+    assert e.side == 'bid'
+
+
+def test_orderbookentry_count_optional():
+    e = OrderBookEntry(side='ask', price='50100', amount=0.5)
+    assert e.count is None

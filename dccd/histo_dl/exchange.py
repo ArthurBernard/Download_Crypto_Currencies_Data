@@ -31,7 +31,7 @@ import requests
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 # Import local packages
-from dccd.models import OHLCBar
+from dccd.models import OHLCBar, OrderBookEntry, Trade
 from dccd.tools.date_time import TS_to_date, date_to_TS, span_to_str, str_to_span
 
 if TYPE_CHECKING:
@@ -105,7 +105,11 @@ class ImportDataCryptoCurrencies(ABC):
         self.pair = str(crypto + fiat)
         self.full_path = self.path + '/' + platform + '/Data/Clean_Data/'
         self.full_path += str(self.per) + '/' + self.pair
+        self.trades_path = self.path + '/' + platform + '/Data/Trades/' + self.pair
+        self.orderbook_path = self.path + '/' + platform + '/Data/OrderBook/' + self.pair
         self.last_df = pd.DataFrame()
+        self.trades_df: pd.DataFrame = pd.DataFrame()
+        self.orderbook_df: pd.DataFrame = pd.DataFrame()
         self.form = form
         self.start: int = 0
         self.end: int = 0
@@ -385,6 +389,256 @@ class ImportDataCryptoCurrencies(ABC):
     @abstractmethod
     def _import_data(self, start: int | str, end: int | str) -> list[dict[str, Any]]:
         """ Fetch raw data from the exchange (implemented by subclasses). """
+
+    # ------------------------------------------------------------------
+    # Trades — public API
+    # ------------------------------------------------------------------
+
+    def import_trades(
+        self, start: int | str = 0, end: int | str = 'now'
+    ) -> ImportDataCryptoCurrencies:
+        """ Fetch individual trades for a time window.
+
+        Downloads executed trades from the exchange REST API, validates each
+        record, and stores the result in :attr:`trades_df`.  Use
+        :meth:`save_trades` to persist to disk.
+
+        Parameters
+        ----------
+        start : int or str, optional
+            Start of the time window.  Accepts a Unix timestamp (int), a date
+            string ``'yyyy-mm-dd hh:mm:ss'``, or ``0`` (default, meaning "as
+            far back as the API allows").
+        end : int or str, optional
+            End of the time window.  ``'now'`` (default) resolves to the
+            current UTC time.  Accepts a Unix timestamp or date string.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` for method chaining.
+
+        Notes
+        -----
+        Exchanges vary in how much history they expose:
+
+        - **Binance** and **Kraken** provide full paginated history.
+        - **OKX** exposes several months of history via cursor pagination.
+        - **Bybit** returns the ~1 000 most recent trades regardless of
+          ``start``/``end``.
+        - **Coinbase** returns up to 100 recent trades (cursor-based,
+          no deep history).
+
+        """
+        _start: int | float = date_to_TS(start) if isinstance(start, str) else start
+        if end == 'now':
+            _end: int | float = time.time()
+        elif isinstance(end, str):
+            _end = date_to_TS(end)
+        else:
+            _end = end
+        data = self._import_trades(int(_start), int(_end))
+        return self._sort_trades(data)
+
+    def _import_trades(self, start: int, end: int) -> list[dict[str, Any]]:
+        """ Fetch raw trades from the exchange (override in subclasses).
+
+        Parameters
+        ----------
+        start : int
+            Start Unix timestamp (seconds).
+        end : int
+            End Unix timestamp (seconds).
+
+        Returns
+        -------
+        list of dict
+            Each dict must contain: ``tid``, ``timestamp``, ``price``,
+            ``amount``, ``type``.
+
+        Raises
+        ------
+        NotImplementedError
+            If the subclass has not implemented this method.
+
+        """
+        raise NotImplementedError(
+            f'{type(self).__name__} does not implement _import_trades'
+        )
+
+    def _sort_trades(self, data: list[dict[str, Any]]) -> ImportDataCryptoCurrencies:
+        """ Validate, sort, and deduplicate raw trade records.
+
+        Parameters
+        ----------
+        data : list of dict
+            Raw trade records as returned by :meth:`_import_trades`.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` to allow method chaining.
+
+        """
+        validated = [Trade(**d).model_dump() for d in data]
+        df = pd.DataFrame(validated).rename(columns={'timestamp': 'TS'})
+        df = df.sort_values('TS').reset_index(drop=True)
+        if not df.empty and df['tid'].notna().any():
+            df = df.drop_duplicates(subset='tid', keep='last').reset_index(drop=True)
+        self.trades_df = df
+        return self
+
+    def save_trades(
+        self, form: str = 'csv', by_period: str = 'M'
+    ) -> ImportDataCryptoCurrencies:
+        """ Save :attr:`trades_df` grouped by period to :attr:`trades_path`.
+
+        Files are named ``trades_{crypto}{fiat}_{period}.{form}``.  No
+        forward-fill is applied — trades are sparse event data.
+
+        Parameters
+        ----------
+        form : {'csv', 'parquet'}, optional
+            Output format, default ``'csv'``.
+        by_period : {'Y', 'M', 'D'}, optional
+            Period label for file grouping, default ``'M'``.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` to allow method chaining.
+
+        """
+        if self.trades_df.empty:
+            return self
+        pathlib.Path(self.trades_path).mkdir(parents=True, exist_ok=True)
+
+        def _period_label(ts: float) -> str:
+            return TS_to_date(int(ts), form='%' + by_period)
+
+        grouped = self.trades_df.groupby(
+            self.trades_df['TS'].map(_period_label)
+        )
+        for name, group in grouped:
+            fname = (
+                f'{self.trades_path}/trades_{self.crypto}{self.fiat}_{name}.{form}'
+            )
+            if form == 'parquet':
+                group.to_parquet(fname, index=False)
+            else:
+                group.to_csv(fname, index=False)
+        return self
+
+    # ------------------------------------------------------------------
+    # Order book — public API
+    # ------------------------------------------------------------------
+
+    def import_orderbook(self, depth: int = 50) -> ImportDataCryptoCurrencies:
+        """ Fetch the current order book snapshot at a given depth.
+
+        Downloads the bid/ask ladder from the exchange REST API, validates
+        each level, and stores the result in :attr:`orderbook_df`.  Use
+        :meth:`save_orderbook` to persist to disk.
+
+        Parameters
+        ----------
+        depth : int, optional
+            Number of price levels to fetch per side (bids + asks), default
+            50.  Maximum varies by exchange.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` for method chaining.
+
+        Notes
+        -----
+        Order book REST endpoints return a **current snapshot** only.
+        Historical order book data is not available via public APIs.
+
+        """
+        data = self._import_orderbook(depth)
+        return self._sort_orderbook(data)
+
+    def _import_orderbook(self, depth: int) -> list[dict[str, Any]]:
+        """ Fetch the raw order book from the exchange (override in subclasses).
+
+        Parameters
+        ----------
+        depth : int
+            Number of price levels per side.
+
+        Returns
+        -------
+        list of dict
+            Each dict must contain: ``side``, ``price``, ``amount``, ``count``.
+
+        Raises
+        ------
+        NotImplementedError
+            If the subclass has not implemented this method.
+
+        """
+        raise NotImplementedError(
+            f'{type(self).__name__} does not implement _import_orderbook'
+        )
+
+    def _sort_orderbook(self, data: list[dict[str, Any]]) -> ImportDataCryptoCurrencies:
+        """ Validate and sort raw order book levels.
+
+        Bids are sorted descending by price; asks ascending.
+
+        Parameters
+        ----------
+        data : list of dict
+            Raw order book levels as returned by :meth:`_import_orderbook`.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` to allow method chaining.
+
+        """
+        validated = [OrderBookEntry(**d).model_dump() for d in data]
+        df = pd.DataFrame(validated)
+        df['_p'] = df['price'].astype(float)
+        bids = df[df['side'] == 'bid'].sort_values('_p', ascending=False)
+        asks = df[df['side'] == 'ask'].sort_values('_p', ascending=True)
+        self.orderbook_df = (
+            pd.concat([bids, asks]).drop('_p', axis=1).reset_index(drop=True)
+        )
+        return self
+
+    def save_orderbook(self, form: str = 'csv') -> ImportDataCryptoCurrencies:
+        """ Save :attr:`orderbook_df` as a timestamped snapshot file.
+
+        Files are named ``orderbook_{crypto}{fiat}_{unix_ts}.{form}``.
+
+        Parameters
+        ----------
+        form : {'csv', 'parquet'}, optional
+            Output format, default ``'csv'``.
+
+        Returns
+        -------
+        ImportDataCryptoCurrencies
+            Returns ``self`` to allow method chaining.
+
+        """
+        if self.orderbook_df.empty:
+            return self
+        pathlib.Path(self.orderbook_path).mkdir(parents=True, exist_ok=True)
+        ts = int(time.time())
+        fname = (
+            f'{self.orderbook_path}/orderbook_{self.crypto}{self.fiat}_{ts}.{form}'
+        )
+        if form == 'parquet':
+            self.orderbook_df.to_parquet(fname, index=False)
+        else:
+            self.orderbook_df.to_csv(fname, index=False)
+        return self
+
+    # ------------------------------------------------------------------
 
     def set_hierarchy(self, liste: list[str]) -> None:
         """ Override the default save path with a custom directory hierarchy.
