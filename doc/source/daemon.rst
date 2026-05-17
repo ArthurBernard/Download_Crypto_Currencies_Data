@@ -167,7 +167,11 @@ Storage
 CLI
 ---
 
-.. autosummary::
-   :toctree: generated/
+The ``dccd`` command is a `typer <https://typer.tiangolo.com/>`_ application
+installed as a console script by ``pip install "dccd[daemon]"``.
+Its commands are documented in the *Quick start* section above.
 
-   cli.app -- typer application (``dccd`` entrypoint)
+.. automodule:: dccd.daemon.cli
+   :no-members:
+   :no-inherited-members:
+   :no-special-members:

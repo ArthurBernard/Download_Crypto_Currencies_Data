@@ -121,6 +121,27 @@ autodoc_inherit_docstrings = False
 autodoc_typehints = 'none'
 
 # --------------------------------------------------------------------------- #
+#                         Autodoc skip-member hook                            #
+# --------------------------------------------------------------------------- #
+
+import pydantic as _pydantic
+
+_PYDANTIC_BASE_MEMBERS = frozenset(dir(_pydantic.BaseModel))
+
+
+def _skip_pydantic_member(app, what, name, obj, skip, options):
+    """ Skip Pydantic BaseModel methods — their docstrings contain broken RST. """
+    if skip:
+        return True
+    if name in _PYDANTIC_BASE_MEMBERS and name not in ('__init__', '__doc__'):
+        return True
+    return skip
+
+
+def setup(app):
+    app.connect('autodoc-skip-member', _skip_pydantic_member)
+
+# --------------------------------------------------------------------------- #
 #                              Numpydoc config                                #
 # --------------------------------------------------------------------------- #
 
