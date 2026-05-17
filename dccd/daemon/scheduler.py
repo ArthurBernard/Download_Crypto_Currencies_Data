@@ -24,6 +24,7 @@ from dccd.histo_dl.okx import FromOKX
 
 if TYPE_CHECKING:
     from dccd.daemon.config import CollectorConfig, HistoJob
+    from dccd.daemon.health import HealthMonitor
 
 __all__ = ['build_histo_scheduler', 'run_histo_job', 'run_once']
 
@@ -38,7 +39,8 @@ _HISTO_CLASSES: dict[str, type[ImportDataCryptoCurrencies]] = {
 }
 
 
-def run_histo_job(job: HistoJob, pair: str, base_path: str) -> None:
+def run_histo_job(job: HistoJob, pair: str, base_path: str,
+                  health: HealthMonitor | None = None) -> None:
     """ Download and save one (exchange, pair) candle job locally.
 
     Data is saved to ``base_path`` on the daemon host.  Remote sync is
@@ -52,16 +54,28 @@ def run_histo_job(job: HistoJob, pair: str, base_path: str) -> None:
         Trading pair in ``'CRYPTO/FIAT'`` format (e.g. ``'BTC/USDT'``).
     base_path : str
         Root directory for local storage (``CollectorConfig.storage.local_path``).
+    health : HealthMonitor or None, optional
+        Health monitor to record success/failure metrics.
 
     """
     crypto, fiat = pair.split('/', 1)
     cls = _HISTO_CLASSES[job.exchange]
-    obj = cls(base_path, crypto, job.span, fiat, form=job.format)
-    obj.import_data('last', 'now').save(form=job.format, by_period=job.by_period)
-    logger.info('histo job done: %s %s span=%s', job.exchange, pair, job.span)
+    try:
+        obj = cls(base_path, crypto, job.span, fiat, form=job.format)
+        obj.import_data('last', 'now').save(form=job.format, by_period=job.by_period)
+        _data = getattr(obj, 'data', None)
+        rows = len(_data) if _data is not None else 0
+        logger.info('histo job done: %s %s span=%s', job.exchange, pair, job.span)
+        if health:
+            health.record_success(job.exchange, pair, rows)
+    except Exception:
+        if health:
+            health.record_failure(job.exchange, pair)
+        raise
 
 
-def build_histo_scheduler(config: CollectorConfig) -> BackgroundScheduler:
+def build_histo_scheduler(config: CollectorConfig,
+                          health: HealthMonitor | None = None) -> BackgroundScheduler:
     """ Build an APScheduler BackgroundScheduler from a CollectorConfig.
 
     One interval job is registered per ``(exchange, pair)`` combination in
@@ -72,6 +86,8 @@ def build_histo_scheduler(config: CollectorConfig) -> BackgroundScheduler:
     ----------
     config : CollectorConfig
         Daemon configuration.
+    health : HealthMonitor or None, optional
+        Health monitor forwarded to each scheduled job.
 
     Returns
     -------
@@ -96,7 +112,12 @@ def build_histo_scheduler(config: CollectorConfig) -> BackgroundScheduler:
                 run_histo_job,
                 trigger='interval',
                 seconds=job.span,
-                args=[job, pair, config.storage.local_path],
+                kwargs={
+                    'job': job,
+                    'pair': pair,
+                    'base_path': config.storage.local_path,
+                    'health': health,
+                },
                 id=job_id,
                 name=f'{job.exchange} {pair} {job.span}s',
                 coalesce=True,
@@ -107,7 +128,8 @@ def build_histo_scheduler(config: CollectorConfig) -> BackgroundScheduler:
     return scheduler
 
 
-def run_once(config: CollectorConfig) -> None:
+def run_once(config: CollectorConfig,
+             health: HealthMonitor | None = None) -> None:
     """ Execute all histo_jobs once and return.
 
     Each ``(exchange, pair)`` combination is run sequentially.  A job
@@ -117,12 +139,14 @@ def run_once(config: CollectorConfig) -> None:
     ----------
     config : CollectorConfig
         Daemon configuration.
+    health : HealthMonitor or None, optional
+        Health monitor forwarded to each job call.
 
     """
     for job in config.histo_jobs:
         for pair in job.pairs:
             try:
-                run_histo_job(job, pair, config.storage.local_path)
+                run_histo_job(job, pair, config.storage.local_path, health=health)
             except Exception:
                 logger.exception(
                     'histo job failed: %s %s', job.exchange, pair
