@@ -8,24 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `dccd/storage.py` — `DataStore.is_period_complete(year)`: checks whether an annual parquet file contains all expected candles; `DataStore.missing_intervals(start, end)`: real gap-detection replacing the 3.1 stub — complete past years are skipped, incomplete years resume from the last saved row (#41)
+- `dccd/storage.py` — `DataStore.is_period_complete(year)`: checks whether an annual parquet file contains all expected candles; `DataStore.missing_intervals(start, end)`: gap-detection — complete past years are skipped, incomplete years resume from the last saved row (#41)
 - `dccd/daemon/backfill.py` — `_BackfillBase.run()` now iterates over `DataStore.missing_intervals()` instead of a single sliding window from `last_saved`; complete years are never re-downloaded (#41)
-
-### Changed
-
-- `dccd daemon collect` (formerly `dccd run`) — renamed to clarify the distinction: `collect` = one incremental batch, `backfill` = full historical download with gap detection, `start` = continuous daemon (#41)
-
-### Added
-
-- `dccd/storage.py` — new `DataStore` class: unified read/write interface for OHLC, trades, and orderbook; `save(df)` (merge-on-TS, annual OHLC / daily trades+orderbook), `load(start, end)`, `existing_periods()`, `last_timestamp()`, `missing_intervals()` (stub for 3.2) (#39)
+- `dccd/storage.py` — new `DataStore` class: unified read/write interface for OHLC, trades, and orderbook; `save(df)` (merge-on-TS, annual OHLC / daily trades+orderbook), `load(start, end)`, `existing_periods()`, `last_timestamp()` (#39)
 - `dccd/tools/date_time.py` — `span_label(span)` converts seconds to short directory labels (``'1m'``, ``'1h'``, ``'1d'``…); `_SPAN_LABEL` mapping exported (#39)
-- `dccd/tests/test_storage.py` — 23 unit tests for `DataStore` (save/load/merge/missing_intervals/corrupted file recovery) (#39)
 - `doc/source/storage.rst` — Sphinx page for `DataStore` with directory layout examples (#39)
 
 ### Changed
 
+- `dccd collect` (formerly `dccd run`) — renamed to clarify the distinction: `collect` = one incremental batch, `backfill` = full historical download with gap detection, `start` = continuous daemon (#41)
 - New storage arborescence: ``{data_path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet``, ``…/trades/{pair}/YYYY-MM-DD.parquet``, ``…/orderbook/{pair}/YYYY-MM-DD.parquet`` — replaces the old ``{Exchange}/Data/Clean_Data/{per}/{pair}/`` layout (#39)
-- `dccd/histo_dl/exchange.py` — `save()`, `_get_last_date()`, `save_trades()`, `save_orderbook()` now delegate to `DataStore`; removed `last_df`, `_set_by_period`, `_name_file`, `_excel_format` (#39)
+- `dccd/histo_dl/exchange.py` — `save()`, `_get_last_date()`, `save_trades()`, `save_orderbook()` now delegate to `DataStore`; removed `last_df`, `_set_by_period`, `_name_file`, `_excel_format`; removed unused `set_hierarchy()` (#39, #41)
 - `dccd/histo_dl/{binance,bybit,coinbase,okx}.py` — removed `full_path` overrides (base class sets the correct path via `DataStore`) (#39)
 - `dccd/daemon/backfill.py`, `scheduler.py` — removed `by_period` parameter; `save()` call simplified (#39)
 - `dccd/daemon/stream_manager.py` — WebSocket save path now built from `DataStore.directory` (#39)

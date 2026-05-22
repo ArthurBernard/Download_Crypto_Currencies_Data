@@ -19,7 +19,6 @@ from __future__ import annotations
 
 # Import built-in packages
 import logging
-import pathlib
 import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
@@ -541,23 +540,3 @@ class ImportDataCryptoCurrencies(ABC):
         store.save(df)
         return self
 
-    # ------------------------------------------------------------------
-
-    def set_hierarchy(self, liste: list[str]) -> None:
-        """ Override the default save path with a custom directory hierarchy.
-
-        Rebuilds :attr:`full_path` by joining :attr:`path` with each element
-        in ``liste``.  Call this before :meth:`import_data` if you want to
-        store files in a non-standard directory layout.
-
-        Parameters
-        ----------
-        liste : list of str
-            Path components to append to :attr:`path`.
-
-        """
-        self.full_path = self.path
-        for elt in liste:
-            self.full_path += '/' + elt
-        # Reset the store directory cache so the next save uses full_path.
-        self._store._dir = pathlib.Path(self.full_path)
