@@ -133,6 +133,7 @@ class FromBinance(ImportDataCryptoCurrencies):
             'startTime': self.start * 1000,
             'endTime': self.end * 1000,
             'interval': binance_interval(self.span),
+            'limit': 1000,
         }
 
         r = self._fetch('https://api.binance.com/api/v3/klines', param)
