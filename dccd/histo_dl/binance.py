@@ -73,9 +73,8 @@ class FromBinance(ImportDataCryptoCurrencies):
     span : int
         Number of seconds between observations.
     full_path : str
-        Path to save data.
-    form : str
-        Format to save data.
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/binance/ohlc/{pair}/{span}/``.
 
     Methods
     -------
@@ -108,7 +107,7 @@ class FromBinance(ImportDataCryptoCurrencies):
             crypto = 'BTC'
         return crypto + fiat
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
         """ Initialize object. """
         if fiat in ['EUR', 'USD']:
             _logger.warning(
@@ -118,12 +117,10 @@ class FromBinance(ImportDataCryptoCurrencies):
             self.fiat = fiat = 'USDT'
 
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Binance', fiat, form
+            self, path, crypto, span, 'Binance', fiat, form, tz=tz
         )
 
         self.pair = self.format_pair(crypto, fiat)
-        self.full_path = self.path + '/Binance/Data/Clean_Data/'
-        self.full_path += self.per + '/' + self.crypto + self.fiat
 
     def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)
@@ -133,6 +130,7 @@ class FromBinance(ImportDataCryptoCurrencies):
             'startTime': self.start * 1000,
             'endTime': self.end * 1000,
             'interval': binance_interval(self.span),
+            'limit': 1000,
         }
 
         r = self._fetch('https://api.binance.com/api/v3/klines', param)

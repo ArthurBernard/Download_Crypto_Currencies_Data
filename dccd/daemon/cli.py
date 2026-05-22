@@ -22,14 +22,20 @@ Commands
         Exit 0 on success, 1 on any error (file not found, bad YAML,
         Pydantic validation failure).
 
-    dccd run --config PATH
-        Execute every histo_job once in order, then exit.
-        Metrics (success/failure counts) are printed on completion.
-        Useful for cron-based one-shot collection or smoke-testing a config.
+    dccd backfill --config PATH [--exchange X] [--pairs A B] [--start DATE]
+                  [--parallel] [--dry-run]
+        Download the full OHLC history for every histo_job defined in the
+        config, resuming from the last saved timestamp.  Runs in the
+        foreground; use --parallel to run all jobs simultaneously.
+
+    dccd collect --config PATH
+        Fetch one incremental batch per histo_job, then exit.
+        Downloads candles from the last saved timestamp to now.
+        Designed for cron scheduling or as a single daemon tick.
 
     dccd start --config PATH
         Start the continuous daemon in the foreground:
-        - APScheduler BackgroundScheduler for all histo_jobs
+        - APScheduler BackgroundScheduler for all histo_jobs (calls collect)
         - StreamManager (one thread per WebSocket pair)
         - SyncService (periodic rclone push to remotes)
         Block until SIGINT (Ctrl-C) or SIGTERM; shuts down cleanly on signal.
@@ -55,6 +61,7 @@ import signal
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Optional
 
 import typer
 
@@ -93,7 +100,8 @@ def validate(
     """
     cfg = _load(config)
     typer.echo(f'Config: {config}')
-    typer.echo(f'  storage.local_path : {cfg.storage.local_path}')  # type: ignore[attr-defined]
+    typer.echo(f'  data_path          : {cfg.settings.data_path}')  # type: ignore[attr-defined]
+    typer.echo(f'  timezone           : {cfg.settings.timezone}')  # type: ignore[attr-defined]
     typer.echo(f'  remotes            : {len(cfg.storage.remotes)}')  # type: ignore[attr-defined]
     typer.echo(f'  histo_jobs         : {len(cfg.histo_jobs)}')  # type: ignore[attr-defined]
     typer.echo(f'  stream_jobs        : {len(cfg.stream_jobs)}')  # type: ignore[attr-defined]
@@ -101,17 +109,68 @@ def validate(
 
 
 @app.command()
-def run(
+def backfill(
+    config: str = typer.Option(
+        _DEFAULT_CONFIG, '--config', '-c', help='Path to the YAML config file.',
+    ),
+    exchange: Optional[str] = typer.Option(
+        None, '--exchange', '-e',
+        help='Restrict to one exchange (e.g. binance, kraken, bybit).',
+    ),
+    pairs: Optional[List[str]] = typer.Option(
+        None, '--pairs', '-p',
+        help='Restrict to specific pairs, e.g. --pairs BTC/USDT ETH/USDT.',
+    ),
+    start: str = typer.Option(
+        '2020-01-01 00:00:00', '--start',
+        help='Earliest date to backfill (YYYY-MM-DD HH:MM:SS).',
+    ),
+    parallel: bool = typer.Option(
+        False, '--parallel', help='Run all jobs in parallel threads.',
+    ),
+    dry_run: bool = typer.Option(
+        False, '--dry-run', help='Estimate windows and time without downloading.',
+    ),
+) -> None:
+    """ Download the full OHLC history for all histo_jobs in the config.
+
+    Reads exchanges, pairs, span, and format from the config file.
+    Resumes from the last saved timestamp for each pair so the command is
+    safe to run repeatedly.
+
+    Kraken uses a trades-based strategy (Kraken's OHLC endpoint does not
+    support arbitrary historical windows); all other exchanges use the
+    standard OHLC endpoint.
+
+    """
+    from dccd.daemon.backfill import run_backfill
+
+    cfg = _load(config)
+    run_backfill(cfg, exchange=exchange, pairs=list(pairs) if pairs else None,  # type: ignore[arg-type]
+                 start=start, parallel=parallel, dry_run=dry_run)
+
+
+@app.command()
+def collect(
     config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
                                help='Path to the YAML config file.'),
 ) -> None:
-    """ Run every histo_job once sequentially, then exit.
+    """ Fetch one incremental batch per histo_job, then exit.
 
-    Downloads and saves one candle batch per ``(exchange, pair)`` in
-    ``histo_jobs``.  A :class:`~dccd.daemon.health.HealthMonitor` is
-    instantiated so metrics are persisted even for this one-shot run.
-    Failed jobs are logged and skipped; remaining jobs continue.
+    Downloads candles from the last saved timestamp to now for each
+    ``(exchange, pair)`` in ``histo_jobs``.  Intended for cron-based
+    scheduling or as a single tick of the continuous daemon
+    (``dccd start`` calls this logic in a loop).
+
+    A :class:`~dccd.daemon.health.HealthMonitor` is instantiated so
+    metrics are persisted even for this one-shot run.  Failed jobs are
+    logged and skipped; remaining jobs continue.
     Prints ``successes=N failures=M`` on completion.
+
+    See Also
+    --------
+    backfill : full historical download with gap detection.
+    start    : continuous daemon that calls collect in a loop.
 
     """
     from dccd.daemon.health import HealthMonitor

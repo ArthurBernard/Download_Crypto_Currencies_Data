@@ -87,9 +87,9 @@ def test_run_histo_job_calls_chain(tmp_path):
     finally:
         sched_mod._HISTO_CLASSES.update(original)
 
-    mock_cls.assert_called_once_with(str(tmp_path), 'BTC', 3600, 'USDT', form='parquet')
+    mock_cls.assert_called_once_with(str(tmp_path), 'BTC', 3600, 'USDT', form='parquet', tz='local')
     mock_obj.import_data.assert_called_once_with('last', 'now')
-    mock_obj.save.assert_called_once_with(form='parquet', by_period='Y')
+    mock_obj.save.assert_called_once_with()
 
 
 def test_run_histo_job_splits_pair_correctly(tmp_path):
@@ -106,7 +106,7 @@ def test_run_histo_job_splits_pair_correctly(tmp_path):
     finally:
         sched_mod._HISTO_CLASSES.update(original)
 
-    mock_cls.assert_called_once_with(str(tmp_path), 'ETH', 3600, 'USDT', form='parquet')
+    mock_cls.assert_called_once_with(str(tmp_path), 'ETH', 3600, 'USDT', form='parquet', tz='local')
 
 
 # ---------------------------------------------------------------------------

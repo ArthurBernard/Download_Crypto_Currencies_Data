@@ -6,6 +6,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-05-22
+
+### Added
+
+- `dccd/storage.py` — `DataStore.is_period_complete(year)`: checks whether an annual parquet file contains all expected candles; `DataStore.missing_intervals(start, end)`: gap-detection — complete past years are skipped, incomplete years resume from the last saved row (#41)
+- `dccd/daemon/backfill.py` — `_BackfillBase.run()` now iterates over `DataStore.missing_intervals()` instead of a single sliding window from `last_saved`; complete years are never re-downloaded (#41)
+- `dccd/storage.py` — new `DataStore` class: unified read/write interface for OHLC, trades, and orderbook; `save(df)` (merge-on-TS, annual OHLC / daily trades+orderbook), `load(start, end)`, `existing_periods()`, `last_timestamp()` (#39)
+- `dccd/tools/date_time.py` — `span_label(span)` converts seconds to short directory labels (``'1m'``, ``'1h'``, ``'1d'``…); `_SPAN_LABEL` mapping exported (#39)
+- `doc/source/storage.rst` — Sphinx page for `DataStore` with directory layout examples (#39)
+
+### Changed
+
+- `dccd collect` (formerly `dccd run`) — renamed to clarify the distinction: `collect` = one incremental batch, `backfill` = full historical download with gap detection, `start` = continuous daemon (#41)
+- New storage arborescence: ``{data_path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet``, ``…/trades/{pair}/YYYY-MM-DD.parquet``, ``…/orderbook/{pair}/YYYY-MM-DD.parquet`` — replaces the old ``{Exchange}/Data/Clean_Data/{per}/{pair}/`` layout (#39)
+- `dccd/histo_dl/exchange.py` — `save()`, `_get_last_date()`, `save_trades()`, `save_orderbook()` now delegate to `DataStore`; removed `last_df`, `_set_by_period`, `_name_file`, `_excel_format`; removed unused `set_hierarchy()` (#39, #41)
+- `dccd/histo_dl/{binance,bybit,coinbase,okx}.py` — removed `full_path` overrides (base class sets the correct path via `DataStore`) (#39)
+- `dccd/daemon/backfill.py`, `scheduler.py` — removed `by_period` parameter; `save()` call simplified (#39)
+- `dccd/daemon/stream_manager.py` — WebSocket save path now built from `DataStore.directory` (#39)
+- `dccd/daemon/config.py` — `HistoJob.by_period` field removed; granularity is automatic (#39)
+
+- `dccd/histo_dl/exchange.py` — `save()` now supports `form='parquet'`; previously only `'xlsx'` and `'csv'` were handled (#35)
+- `config.yml` — ready-to-use daemon config for minutely OHLC + real-time orderbook/trades on Binance, Kraken, and Bybit (#35)
+- `dccd/daemon/backfill.py` — `OHLCBackfill` and `KrakenBackfill` strategy classes with shared retry/progress/save loop; `make_job()` factory; `run_backfill()` orchestrator; tqdm progress bars and optional `--parallel` execution (#38)
+- `dccd/daemon/cli.py` — `dccd backfill` command: reads all job definitions from config, supports `--exchange` / `--pairs` filters, `--start`, `--parallel`, and `--dry-run` flags (#38)
+- `dccd/daemon/config.py` — `SettingsConfig` with `data_path` and `timezone` fields; `CollectorConfig.settings` propagates `data_path` to `StorageConfig.local_path` when not set explicitly (#38)
+
+### Removed
+
+- `scripts/backfill.py` — replaced by `dccd backfill` CLI command and `dccd.daemon.backfill` module (#38)
+
+### Fixed
+
+- `dccd/histo_dl/exchange.py` — `save(form='parquet')` was silently ignored (logged a warning instead of writing the file) (#35)
+- `dccd/histo_dl/exchange.py` — `_sort_data()` crashed with a ValueError when the API returned fewer candles than the expected window size; index is now derived from actual data (#36)
+- `dccd/histo_dl/exchange.py` — `by_period='M'` produced minute-level file names (strftime `%M`) instead of year-month; added `_PERIOD_FMT` mapping so `'M'` → `'%Y-%m'` (#36)
+- `dccd/histo_dl/exchange.py` — `self.end` now reflects the last candle timestamp so window-loop callers advance correctly (was stuck at `now` for Kraken) (#36)
+- `dccd/histo_dl/binance.py` — missing `limit=1000` parameter caused Binance to return only 500 candles per request (#36)
+- `dccd/histo_dl/bybit.py` — `limit` was 200; raised to 1 000 to match the API maximum (#36)
+- `dccd/histo_dl/exchange.py` — `_sort_data()` dropped the minute just before a window boundary when the last trade arrived ≥2 spans early; grid now uses `self.end` directly as the exclusive stop (#36)
+
 ## [2.2.0] - 2026-05-17
 
 ### Added

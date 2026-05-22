@@ -11,6 +11,8 @@
 """
 
 # Built-in packages
+import calendar
+import datetime
 import logging
 import time
 
@@ -22,63 +24,87 @@ _logger = logging.getLogger(__name__)
 
 __all__ = [
     'TS_to_date', 'date_to_TS', 'str_to_span', 'span_to_str',
-    'binance_interval',
+    'span_label', 'binance_interval',
 ]
 
+_SPAN_LABEL: dict[int, str] = {
+    60: '1m', 180: '3m', 300: '5m', 900: '15m', 1800: '30m',
+    3600: '1h', 7200: '2h', 14400: '4h', 21600: '6h', 28800: '8h',
+    43200: '12h', 86400: '1d', 604800: '1w',
+}
 
-def TS_to_date(TS: int, form: str = '%Y-%m-%d %H:%M:%S', local: bool = True) -> str:
+
+def TS_to_date(TS: int, form: str = '%Y-%m-%d %H:%M:%S', tz: str = 'local') -> str:
     """ Convert timestamp to date in specified format.
 
     Parameters
     ----------
     TS : int
         A timestamp to convert.
-    form : str (default '%Y-%m-%d %H:%M:%S')
-        Time format.
-    local : bool (default is True)
-        Local time is used if true else return UTC time.
+    form : str, optional
+        strftime format string.  Default ``'%Y-%m-%d %H:%M:%S'``.
+    tz : str, optional
+        Timezone to use.  ``'local'`` (default) uses the system timezone,
+        ``'UTC'`` uses UTC, any other value is interpreted as an IANA
+        timezone name (e.g. ``'Europe/Paris'``).
 
     Returns
     -------
-    date : str
-        Date as specified format.
+    str
+        Date formatted according to *form*.
 
     Examples
     --------
-    >>> TS_to_date(1548432099, form='%y-%m-%d %H:%M:%S', local=False)
+    >>> TS_to_date(1548432099, form='%y-%m-%d %H:%M:%S', tz='UTC')
     '19-01-25 16:01:39'
 
     """
-    if local:
-        date = time.localtime(TS)
+    if tz.upper() == 'LOCAL':
+        return time.strftime(form, time.localtime(TS))
+    elif tz.upper() == 'UTC':
+        return time.strftime(form, time.gmtime(TS))
     else:
-        date = time.gmtime(TS)
-    return time.strftime(form, date)
+        from zoneinfo import ZoneInfo
+        dt = datetime.datetime.fromtimestamp(TS, tz=ZoneInfo(tz))
+        return dt.strftime(form)
 
 
-def date_to_TS(date: str, form: str = '%Y-%m-%d %H:%M:%S') -> int:
-    """ Use your local time-zone to convert date in specific format to
-    timestamp.
+def date_to_TS(date: str, form: str = '%Y-%m-%d %H:%M:%S', tz: str = 'local') -> int:
+    """ Convert a date string to a Unix timestamp.
 
     Parameters
     ----------
     date : str
-        A date to convert.
-    form : str (default '%Y-%m-%d %H:%M:%S')
-        Time format.
+        Date string to convert.
+    form : str, optional
+        strftime format string.  Default ``'%Y-%m-%d %H:%M:%S'``.
+    tz : str, optional
+        Timezone used to interpret *date*.  ``'local'`` (default) uses the
+        system timezone, ``'UTC'`` treats the string as UTC, any other value
+        is an IANA timezone name (e.g. ``'Europe/Paris'``).
 
     Returns
     -------
-    TS : int
-        Timestamp of specified date.
+    int
+        Unix timestamp.
 
     Examples
     --------
-    # >>> date_to_TS('19-01-25 16:01:39', form='%y-%m-%d %H:%M:%S')
-    # 1548428499
+    >>> date_to_TS('2019-01-25 16:01:39', tz='UTC')
+    1548432099
 
     """
-    return int(time.mktime(time.strptime(date, form)))
+    if form == '%Y-%m-%d %H:%M:%S' and len(date) == 10:
+        form = '%Y-%m-%d'
+    t = time.strptime(date, form)
+    if tz.upper() == 'LOCAL':
+        return int(time.mktime(t))
+    elif tz.upper() == 'UTC':
+        return int(calendar.timegm(t))
+    else:
+        from zoneinfo import ZoneInfo
+        dt = datetime.datetime(*t[:6], tzinfo=ZoneInfo(tz))
+        return int(dt.timestamp())
 
 
 # def TS_to_YMD(TS):
@@ -193,6 +219,33 @@ def span_to_str(span: int) -> str | None:
     if label is None:
         _logger.warning('Error, no string correspond to this time in seconds.')
     return label
+
+
+def span_label(span: int) -> str:
+    """ Return a short directory-safe label for *span* seconds.
+
+    Parameters
+    ----------
+    span : int
+        Candle interval in seconds.
+
+    Returns
+    -------
+    str
+        Short label (e.g. ``'1m'``, ``'1h'``, ``'1d'``).
+        Falls back to ``'{span}s'`` for unknown spans.
+
+    Examples
+    --------
+    >>> span_label(3600)
+    '1h'
+    >>> span_label(86400)
+    '1d'
+    >>> span_label(7777)
+    '7777s'
+
+    """
+    return _SPAN_LABEL.get(span, f'{span}s')
 
 
 def binance_interval(interval: int) -> str | None:

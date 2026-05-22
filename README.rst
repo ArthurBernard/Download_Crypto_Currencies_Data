@@ -180,8 +180,11 @@ Daemon (autonomous collector) — ``config.yml``:
 
 .. code-block:: yaml
 
+    settings:
+      data_path: /data/crypto/
+      timezone: UTC
+
     storage:
-      local_path: /data/crypto/
       remotes:
         - provider: rclone
           remote: "mynas:crypto/"
@@ -192,13 +195,36 @@ Daemon (autonomous collector) — ``config.yml``:
         pairs: [BTC/USDT, ETH/USDT]
         span: 3600
         format: parquet
-        by_period: Y
 
     stream_jobs:
       - exchange: binance
         pairs: [BTC/USDT]
         channels: [trades, book]
         time_step: 60
+
+CLI quick start:
+
+.. code-block:: bash
+
+    # Validate the config
+    dccd validate --config config.yml
+
+    # Backfill all OHLC history defined in config (resumable)
+    dccd backfill --config config.yml --start "2020-01-01 00:00:00"
+
+    # Dry run — estimate windows and time without downloading
+    dccd backfill --config config.yml --dry-run
+
+    # Backfill only one exchange
+    dccd backfill --config config.yml --exchange kraken
+
+    # One incremental batch per job, then exit (for cron)
+    dccd collect --config config.yml
+
+    # Continuous daemon (Ctrl-C to stop)
+    dccd start --config config.yml
+
+Python API:
 
 .. code-block:: python
 

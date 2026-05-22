@@ -37,36 +37,36 @@ Supported exchanges
      - WS Order Book
    * - Binance
      - ✓
-     -
-     -
+     - ✓
+     - ✓
      -
      - ✓
      - ✓
    * - Coinbase
      - ✓
-     -
-     -
+     - ✓ †
+     - ✓
      -
      -
      -
    * - Kraken
      - ✓
-     -
-     -
+     - ✓
+     - ✓
      - ✓
      - ✓
      - ✓
    * - Bybit
      - ✓
-     -
-     -
+     - ✓ †
+     - ✓
      -
      - ✓
      - ✓
    * - OKX
      - ✓
-     -
-     -
+     - ✓
+     - ✓
      - ✓
      - ✓
      - ✓
@@ -86,6 +86,8 @@ Supported exchanges
      - ✓
 
 \* Bitfinex WS OHLCV is aggregated from the trades stream via :func:`~dccd.continuous_dl.bitfinex.get_ohlc_bitfinex`.
+
+† Recent trades only (Bybit ≤ 1 000, Coinbase ≤ 100) — no deep historical pagination via the public REST API.
 
 Presentation
 ------------
@@ -123,5 +125,6 @@ Contents
    histo_dl.bybit
    histo_dl.okx
    daemon
+   storage
    process_data
    tools

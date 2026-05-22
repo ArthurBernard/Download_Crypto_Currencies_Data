@@ -69,9 +69,8 @@ class FromKraken(ImportDataCryptoCurrencies):
     span : int
         Number of seconds between observations.
     full_path : str
-        Path to save data.
-    form : str
-        Format to save data.
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/kraken/ohlc/{pair}/{span}/``.
 
     Methods
     -------
@@ -119,10 +118,10 @@ class FromKraken(ImportDataCryptoCurrencies):
             return 'X' + crypto + 'X' + fiat
         return 'X' + crypto + 'Z' + fiat
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Kraken', fiat=fiat, form=form
+            self, path, crypto, span, 'Kraken', fiat=fiat, form=form, tz=tz
         )
         self.pair = self.format_pair(crypto, fiat)
 

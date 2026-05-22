@@ -30,6 +30,7 @@ from dccd.continuous_dl.kraken import DownloadKrakenData
 from dccd.continuous_dl.okx import DownloadOKXData
 from dccd.daemon.storage import RemoteStorage
 from dccd.process_data import set_marketdepth, set_orders, set_trades
+from dccd.storage import DataStore
 from dccd.tools.io import IODataBase
 
 if TYPE_CHECKING:
@@ -341,11 +342,21 @@ class StreamManager:
         key = f'{job.exchange}_{pair.replace("/", "_")}_{ch_tag}'
         self._downloaders[key] = downloader
 
-        xch = job.exchange.capitalize()
-        save_path = (
-            f'{self.config.storage.local_path.rstrip("/")}'
-            f'/{xch}/Data/WS_Data/{job.time_step}s/{pair.replace("/", "_")}'
-        )
+        has_trades = 'trades' in channels
+        has_book   = 'book'   in channels
+        if has_trades and has_book:
+            data_type = 'trades'
+        elif has_trades:
+            data_type = 'trades'
+        else:
+            data_type = 'orderbook'
+        save_path = str(DataStore(
+            self.config.storage.local_path,
+            job.exchange,
+            pair,
+            None,
+            data_type,
+        ).directory)
 
         downloader.set_process_data(_process_fn(channels))
         downloader.set_saver(IODataBase(save_path, method='csv'))

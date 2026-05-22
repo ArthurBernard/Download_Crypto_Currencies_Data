@@ -94,6 +94,9 @@ class FromBybit(ImportDataCryptoCurrencies):
         Timestamps bounding the download.
     span : int
         Seconds between observations.
+    full_path : str
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/bybit/ohlc/{pair}/{span}/``.
 
     Methods
     -------
@@ -124,14 +127,12 @@ class FromBybit(ImportDataCryptoCurrencies):
         """
         return crypto + fiat
 
-    def __init__(self, path, crypto, span, fiat='USDT', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USDT', form='xlsx', tz='local'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Bybit', fiat, form
+            self, path, crypto, span, 'Bybit', fiat, form, tz=tz
         )
         self.pair = self.format_pair(crypto, fiat)
-        self.full_path = self.path + '/Bybit/Data/Clean_Data/'
-        self.full_path += self.per + '/' + self.crypto + self.fiat
 
     def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)
@@ -142,7 +143,7 @@ class FromBybit(ImportDataCryptoCurrencies):
             'interval': bybit_interval(self.span),
             'start': self.start * 1000,
             'end': self.end * 1000,
-            'limit': 200,
+            'limit': 1000,
         }
 
         r = self._fetch('https://api.bybit.com/v5/market/kline', param)

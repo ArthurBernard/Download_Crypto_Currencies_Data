@@ -23,7 +23,6 @@ _VALID_HISTO_JOB = {
     'pairs': ['BTC/USDT', 'ETH/USDT'],
     'span': 3600,
     'format': 'parquet',
-    'by_period': 'Y',
 }
 
 _VALID_CONFIG = {
@@ -57,7 +56,6 @@ def test_default_values_applied():
     assert cfg.alerts.webhook_url is None
     assert cfg.alerts.max_consecutive_errors == 3
     assert cfg.histo_jobs[0].format == 'parquet'
-    assert cfg.histo_jobs[0].by_period == 'Y'
 
 
 def test_remote_config_parsed():
@@ -132,11 +130,6 @@ def test_empty_pairs_raises():
     with pytest.raises(ValidationError, match="must not be empty"):
         CollectorConfig.model_validate(data)
 
-
-def test_invalid_by_period_raises():
-    data = {**_VALID_CONFIG, 'histo_jobs': [{**_VALID_HISTO_JOB, 'by_period': 'W'}]}
-    with pytest.raises(ValidationError, match='Unknown by_period'):
-        CollectorConfig.model_validate(data)
 
 
 def test_no_jobs_raises():
