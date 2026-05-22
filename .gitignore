@@ -25,6 +25,8 @@ CLAUDE.md
 TODO.md
 todo/
 done/
+config.yml
+scripts/
 
 # Coverage
 .coverage

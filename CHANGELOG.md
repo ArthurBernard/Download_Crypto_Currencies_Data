@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dccd/histo_dl/exchange.py` — `save()` now supports `form='parquet'`; previously only `'xlsx'` and `'csv'` were handled (#35)
+- `scripts/backfill.py` — windowed backfill script for Binance, Kraken, and Bybit; loops in API-limit-sized windows and resumes from last saved timestamp (#35)
+- `config.yml` — ready-to-use daemon config for minutely OHLC + real-time orderbook/trades on Binance, Kraken, and Bybit (#35)
+
+### Fixed
+
+- `dccd/histo_dl/exchange.py` — `save(form='parquet')` was silently ignored (logged a warning instead of writing the file) (#35)
+
 ## [2.2.0] - 2026-05-17
 
 ### Added
