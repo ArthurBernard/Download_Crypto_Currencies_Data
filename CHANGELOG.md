@@ -8,12 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `dccd/storage.py` — `DataStore.is_period_complete(year)`: checks whether an annual parquet file contains all expected candles; `DataStore.missing_intervals(start, end)`: real gap-detection replacing the 3.1 stub — complete past years are skipped, incomplete years resume from the last saved row (#XX)
-- `dccd/daemon/backfill.py` — `_BackfillBase.run()` now iterates over `DataStore.missing_intervals()` instead of a single sliding window from `last_saved`; complete years are never re-downloaded (#XX)
+- `dccd/storage.py` — `DataStore.is_period_complete(year)`: checks whether an annual parquet file contains all expected candles; `DataStore.missing_intervals(start, end)`: real gap-detection replacing the 3.1 stub — complete past years are skipped, incomplete years resume from the last saved row (#41)
+- `dccd/daemon/backfill.py` — `_BackfillBase.run()` now iterates over `DataStore.missing_intervals()` instead of a single sliding window from `last_saved`; complete years are never re-downloaded (#41)
 
 ### Changed
 
-- `dccd daemon collect` (formerly `dccd run`) — renamed to clarify the distinction: `collect` = one incremental batch, `backfill` = full historical download with gap detection, `start` = continuous daemon (#XX)
+- `dccd daemon collect` (formerly `dccd run`) — renamed to clarify the distinction: `collect` = one incremental batch, `backfill` = full historical download with gap detection, `start` = continuous daemon (#41)
 
 ### Added
 
