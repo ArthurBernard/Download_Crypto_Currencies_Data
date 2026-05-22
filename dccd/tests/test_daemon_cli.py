@@ -51,11 +51,11 @@ def test_validate_bad_config(tmp_path: Path) -> None:
     assert result.exit_code == 1
 
 
-def test_run_calls_run_once(config_file: Path) -> None:
+def test_collect_calls_run_once(config_file: Path) -> None:
     with patch('dccd.daemon.health.HealthMonitor') as MockHealth, \
          patch('dccd.daemon.scheduler.run_once') as mock_run_once:
         MockHealth.return_value.get_metrics.return_value = {}
-        result = runner.invoke(app, ['run', '--config', str(config_file)])
+        result = runner.invoke(app, ['collect', '--config', str(config_file)])
     assert result.exit_code == 0
     mock_run_once.assert_called_once()
 

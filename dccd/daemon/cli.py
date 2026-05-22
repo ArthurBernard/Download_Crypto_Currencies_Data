@@ -28,14 +28,14 @@ Commands
         config, resuming from the last saved timestamp.  Runs in the
         foreground; use --parallel to run all jobs simultaneously.
 
-    dccd run --config PATH
-        Execute every histo_job once in order, then exit.
-        Metrics (success/failure counts) are printed on completion.
-        Useful for cron-based one-shot collection or smoke-testing a config.
+    dccd collect --config PATH
+        Fetch one incremental batch per histo_job, then exit.
+        Downloads candles from the last saved timestamp to now.
+        Designed for cron scheduling or as a single daemon tick.
 
     dccd start --config PATH
         Start the continuous daemon in the foreground:
-        - APScheduler BackgroundScheduler for all histo_jobs
+        - APScheduler BackgroundScheduler for all histo_jobs (calls collect)
         - StreamManager (one thread per WebSocket pair)
         - SyncService (periodic rclone push to remotes)
         Block until SIGINT (Ctrl-C) or SIGTERM; shuts down cleanly on signal.
@@ -151,17 +151,26 @@ def backfill(
 
 
 @app.command()
-def run(
+def collect(
     config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
                                help='Path to the YAML config file.'),
 ) -> None:
-    """ Run every histo_job once sequentially, then exit.
+    """ Fetch one incremental batch per histo_job, then exit.
 
-    Downloads and saves one candle batch per ``(exchange, pair)`` in
-    ``histo_jobs``.  A :class:`~dccd.daemon.health.HealthMonitor` is
-    instantiated so metrics are persisted even for this one-shot run.
-    Failed jobs are logged and skipped; remaining jobs continue.
+    Downloads candles from the last saved timestamp to now for each
+    ``(exchange, pair)`` in ``histo_jobs``.  Intended for cron-based
+    scheduling or as a single tick of the continuous daemon
+    (``dccd start`` calls this logic in a loop).
+
+    A :class:`~dccd.daemon.health.HealthMonitor` is instantiated so
+    metrics are persisted even for this one-shot run.  Failed jobs are
+    logged and skipped; remaining jobs continue.
     Prints ``successes=N failures=M`` on completion.
+
+    See Also
+    --------
+    backfill : full historical download with gap detection.
+    start    : continuous daemon that calls collect in a loop.
 
     """
     from dccd.daemon.health import HealthMonitor

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -243,12 +244,45 @@ class DataStore:
 
         return None
 
-    def missing_intervals(self, start: int, end: int) -> list[tuple[int, int]]:
-        """Return intervals within ``[start, end]`` that need to be downloaded.
+    def is_period_complete(self, year: int) -> bool:
+        """Return True if the parquet file for *year* contains all expected rows.
 
-        In 3.1 this is a stub that always returns ``[(start, end)]`` (current
-        behaviour — resume from last saved point, no gap detection).  Full
-        gap-filling logic is implemented in section 3.2.
+        Parameters
+        ----------
+        year : int
+            Calendar year to check (e.g. ``2024``).
+
+        Returns
+        -------
+        bool
+            ``False`` for non-OHLC stores, missing files, or when the row
+            count is below the expected number of candles for that year.
+
+        """
+        if self.data_type != 'ohlc' or self.span is None:
+            return False
+        file_path = self.directory / f'{year}.parquet'
+        if not file_path.exists():
+            return False
+        df = pd.read_parquet(file_path, columns=['TS'])
+        year_start = datetime(year,     1, 1, tzinfo=timezone.utc)
+        year_end   = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        expected = int((year_end - year_start).total_seconds()) // self.span
+        return len(df) >= expected
+
+    def missing_intervals(self, start: int, end: int) -> list[tuple[int, int]]:
+        """Return the list of ``(start, end)`` intervals within ``[start, end]``
+        that still need to be downloaded.
+
+        For OHLC stores the method inspects existing annual parquet files:
+        complete past years are skipped entirely; incomplete or absent years
+        yield an interval from the last saved timestamp (``+ span``) to the
+        end of that year.  The current calendar year always extends from the
+        last saved row to *end*.
+
+        For trades / orderbook stores (no ``span``) the method falls back to a
+        simple resume: one interval from ``last_timestamp + span`` (or
+        *start* if no data) to *end*.
 
         Parameters
         ----------
@@ -260,11 +294,45 @@ class DataStore:
         Returns
         -------
         list of (int, int)
-            List of ``(start, end)`` pairs to download.
+            Ordered list of ``(ivl_start, ivl_end)`` pairs to download.
+            Empty list means all data is already present.
 
         """
-        last = self.last_timestamp()
-        effective_start = max(start, last) if last is not None else start
-        if effective_start >= end:
-            return []
-        return [(effective_start, end)]
+        if self.data_type != 'ohlc' or self.span is None:
+            last = self.last_timestamp()
+            effective = max(start, last) if last is not None else start
+            return [(effective, end)] if effective < end else []
+
+        current_year = datetime.now(tz=timezone.utc).year
+        start_year   = datetime.fromtimestamp(start, tz=timezone.utc).year
+        end_year     = datetime.fromtimestamp(end,   tz=timezone.utc).year
+        intervals: list[tuple[int, int]] = []
+
+        for year in range(start_year, end_year + 1):
+            year_start_ts = int(datetime(year,     1, 1, tzinfo=timezone.utc).timestamp())
+            year_end_ts   = int(datetime(year + 1, 1, 1, tzinfo=timezone.utc).timestamp())
+
+            ivl_start = max(start, year_start_ts)
+            ivl_end   = min(end,   year_end_ts)
+            if ivl_start >= ivl_end:
+                continue
+
+            file_path = self.directory / f'{year}.parquet'
+
+            if year < current_year and file_path.exists():
+                if self.is_period_complete(year):
+                    continue  # full year already on disk — skip
+                # incomplete past year: resume from last saved row
+                df = pd.read_parquet(file_path, columns=['TS'])
+                if not df.empty:
+                    ivl_start = int(df['TS'].max()) + self.span
+            elif file_path.exists():
+                # current year: always extend from the last saved row
+                df = pd.read_parquet(file_path, columns=['TS'])
+                if not df.empty:
+                    ivl_start = int(df['TS'].max()) + self.span
+
+            if ivl_start < ivl_end:
+                intervals.append((ivl_start, ivl_end))
+
+        return intervals

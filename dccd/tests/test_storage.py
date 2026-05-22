@@ -217,26 +217,129 @@ def test_last_timestamp_removes_corrupted_and_falls_back(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# DataStore.missing_intervals (3.1 stub)
+# Helpers for gap-detection tests
 # ---------------------------------------------------------------------------
+
+def _complete_year_df(year: int, span: int) -> pd.DataFrame:
+    from datetime import datetime, timezone
+    t0 = int(datetime(year,     1, 1, tzinfo=timezone.utc).timestamp())
+    t1 = int(datetime(year + 1, 1, 1, tzinfo=timezone.utc).timestamp())
+    return _ohlc_df(list(range(t0, t1, span)))
+
+
+# ---------------------------------------------------------------------------
+# DataStore.is_period_complete
+# ---------------------------------------------------------------------------
+
+def test_is_period_complete_true(tmp_path):
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    store.save(_complete_year_df(2023, span))
+    assert store.is_period_complete(2023) is True
+
+
+def test_is_period_complete_false_missing_file(tmp_path):
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
+    assert store.is_period_complete(2023) is False
+
+
+def test_is_period_complete_false_partial(tmp_path):
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
+    store.save(_ohlc_df([1672531200]))  # one row only
+    assert store.is_period_complete(2023) is False
+
+
+def test_is_period_complete_false_for_trades(tmp_path):
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', None, 'trades')
+    assert store.is_period_complete(2023) is False
+
+
+# ---------------------------------------------------------------------------
+# DataStore.missing_intervals
+# ---------------------------------------------------------------------------
+
+# Boundaries used in tests:
+#   2023-01-01 00:00:00 UTC = 1672531200
+#   2024-01-01 00:00:00 UTC = 1704067200
+#   2025-01-01 00:00:00 UTC = 1735689600
+
+_Y2023 = 1672531200
+_Y2024 = 1704067200
+_Y2025 = 1735689600
+
 
 def test_missing_intervals_no_data(tmp_path):
     store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
-    intervals = store.missing_intervals(1672531200, 1704067200)
-    assert intervals == [(1672531200, 1704067200)]
+    intervals = store.missing_intervals(_Y2023, _Y2024)
+    assert intervals == [(_Y2023, _Y2024)]
 
 
-def test_missing_intervals_with_existing_data(tmp_path):
-    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
-    store.save(_ohlc_df([1672531200]))  # last TS = 1672531200
-    intervals = store.missing_intervals(1672524000, 1704067200)
+def test_missing_intervals_complete_past_year(tmp_path):
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    store.save(_complete_year_df(2023, span))
+    intervals = store.missing_intervals(_Y2023, _Y2024)
+    assert intervals == []
+
+
+def test_missing_intervals_incomplete_past_year(tmp_path):
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    last_ts = _Y2023 + 10 * span
+    store.save(_ohlc_df(list(range(_Y2023, last_ts + span, span))))
+    intervals = store.missing_intervals(_Y2023, _Y2024)
     assert len(intervals) == 1
-    assert intervals[0][0] == 1672531200  # resume from last saved
-    assert intervals[0][1] == 1704067200
+    assert intervals[0][0] == last_ts + span
+    assert intervals[0][1] == _Y2024
+
+
+def test_missing_intervals_absent_past_year(tmp_path):
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
+    # 2023 file absent: full year should be included
+    intervals = store.missing_intervals(_Y2023, _Y2024)
+    assert intervals == [(_Y2023, _Y2024)]
+
+
+def test_missing_intervals_current_year_extends_from_last(tmp_path):
+    from datetime import datetime, timezone
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    current_year = datetime.now(tz=timezone.utc).year
+    year_start = int(datetime(current_year, 1, 1, tzinfo=timezone.utc).timestamp())
+    last_ts = year_start + 5 * span
+    store.save(_ohlc_df(list(range(year_start, last_ts + span, span))))
+    end_ts = last_ts + 100 * span
+    intervals = store.missing_intervals(year_start, end_ts)
+    assert len(intervals) == 1
+    assert intervals[0][0] == last_ts + span
+    assert intervals[0][1] == end_ts
+
+
+def test_missing_intervals_multi_year(tmp_path):
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    # 2023 complete → skip; 2024 partial → resume
+    store.save(_complete_year_df(2023, span))
+    last_2024 = _Y2024 + 10 * span
+    store.save(_ohlc_df(list(range(_Y2024, last_2024 + span, span))))
+    intervals = store.missing_intervals(_Y2023, _Y2025)
+    # only one interval: the tail of 2024 through end of 2025
+    assert len(intervals) == 1
+    assert intervals[0][0] == last_2024 + span
 
 
 def test_missing_intervals_already_up_to_date(tmp_path):
-    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
-    store.save(_ohlc_df([1704067200]))  # last = 2024-01-01
-    intervals = store.missing_intervals(1672531200, 1704067200)
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    store.save(_complete_year_df(2023, span))
+    intervals = store.missing_intervals(_Y2023, _Y2024)
     assert intervals == []
+
+
+def test_missing_intervals_non_ohlc_simple_resume(tmp_path):
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', None, 'trades')
+    store.save(_trades_df([1672531200]))
+    intervals = store.missing_intervals(1672531200, 1704067200)
+    assert len(intervals) == 1
+    # no span for trades — stub returns from last_timestamp (no +span)
+    assert intervals[0][1] == 1704067200
