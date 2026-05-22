@@ -3,6 +3,7 @@
 
 
 import logging
+import pathlib
 
 import pandas as pd
 
@@ -58,3 +59,23 @@ def test_get_last_date_unsupported_format(tmp_path):
     (tmp_path / 'data.json').write_text('{}')
     obj = _make_obj(str(tmp_path))
     assert obj._get_last_date() == _FALLBACK_TS
+
+
+def test_save_parquet(tmp_path):
+    from dccd.histo_dl.binance import FromBinance
+
+    obj = FromBinance(str(tmp_path), 'BTC', 60, fiat='USDT')
+    obj.last_df = pd.DataFrame()
+    data = [{
+        'date': 1700000000.0, 'open': 37000.0, 'high': 37010.0,
+        'low': 36990.0, 'close': 37005.0, 'volume': 1.5,
+        'quoteVolume': 55507.5,
+    }]
+    obj._sort_data(data)
+    obj.save(form='parquet', by_period='Y')
+
+    files = list(pathlib.Path(obj.full_path).glob('*.parquet'))
+    assert len(files) == 1
+    df = pd.read_parquet(files[0])
+    assert 'TS' in df.columns
+    assert len(df) >= 1

@@ -241,11 +241,9 @@ class ImportDataCryptoCurrencies(ABC):
         """ Save data by period (default is year) in the corresponding format
         and file.
 
-        TODO : to finish
-
         Parameters
         ----------
-        form : {'xlsx', 'csv'}
+        form : {'xlsx', 'csv', 'parquet'}
             Format to save data.
         by_period : {'Y', 'M', 'D'}
             - If 'Y' group data by year.
@@ -265,14 +263,15 @@ class ImportDataCryptoCurrencies(ABC):
         self.by_period = by_period
         grouped = df.set_index('TS', drop=False).groupby(self._set_by_period)
         for name, group in grouped:
+            path = self.full_path + '/' + self._name_file(name) + '.' + form
             if form == 'xlsx':
                 self._excel_format(name, form, group)
             elif form == 'csv':
-                group.to_csv(
-                    self.full_path + '/' + self._name_file(name) + '.' + form
-                )
+                group.to_csv(path)
+            elif form == 'parquet':
+                group.reset_index(drop=True).to_parquet(path, index=False)
             else:
-                self.logger.warning('Not allowing format')
+                self.logger.warning('Not allowing format: %s', form)
         return self
 
     def _excel_format(self, name: str, form: str, group: pd.DataFrame) -> ImportDataCryptoCurrencies:
