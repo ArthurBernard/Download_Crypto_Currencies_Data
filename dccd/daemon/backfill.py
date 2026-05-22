@@ -587,6 +587,7 @@ def run_backfill(
     tz = cfg.settings.timezone
 
     jobs: list[tuple[_BackfillBase, int]] = []
+    seen_paths: set[str] = set()
     for histo_job in cfg.histo_jobs:
         if exchange and histo_job.exchange != exchange:
             continue
@@ -599,6 +600,14 @@ def run_backfill(
                 histo_job.exchange, crypto, fiat, histo_job.span,
                 path, tz, histo_job.format, histo_job.by_period,
             )
+            if job.obj.full_path in seen_paths:
+                tqdm.write(
+                    f'[{histo_job.exchange} {pair}] skipped — resolves to the '
+                    f'same data path as a previous job '
+                    f'({job.obj.pair})'
+                )
+                continue
+            seen_paths.add(job.obj.full_path)
             jobs.append((job, len(jobs)))
 
     if not jobs:
