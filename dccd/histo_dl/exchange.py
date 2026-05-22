@@ -51,24 +51,29 @@ class ImportDataCryptoCurrencies(ABC):
     Parameters
     ----------
     path : str
-        The path where data will be saved.
+        Root directory where data files are stored.  Data is organised under
+        ``{path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet`` via
+        :class:`~dccd.storage.DataStore`.
     crypto : str
-        The abbreviation of the crypto-currency.
-    span : {int, 'weekly', 'daily', 'hourly'}
-        - If str, periodicity of observation.
-        - If int, number of the seconds between each observation, minimal span\
-            is 60 seconds.
+        The abbreviation of the crypto-currency (e.g. ``'BTC'``).
+    span : int or str
+        Candle interval: if str, a periodicity label (e.g. ``'hourly'``,
+        ``'1h'``); if int, number of seconds (minimum 60).
     platform : str
-        The platform of your choice: 'Binance', 'Kraken', 'Coinbase',
-        'Bybit', 'OKX'.
-    fiat : str
-        A fiat currency or a crypto-currency.
-    form : {'xlsx', 'csv'}
-        Your favorite format. Only 'xlsx' and 'csv' at the moment.
+        Exchange name used for the storage path: ``'Binance'``, ``'Kraken'``,
+        ``'Coinbase'``, ``'Bybit'``, or ``'OKX'``.
+    fiat : str, optional
+        Quote currency (e.g. ``'USDT'``, ``'USD'``).  Default ``'EUR'``.
+    form : str, optional
+        Accepted for backward compatibility; storage format is always Parquet
+        via :class:`~dccd.storage.DataStore`.
+    tz : str, optional
+        Timezone for date parsing.  ``'local'`` (default), ``'UTC'``, or any
+        IANA name.
 
     Notes
     -----
-    Don't use directly this class, use the respective class for each exchange.
+    Do not instantiate this class directly; use the exchange-specific subclass.
 
     See Also
     --------
@@ -77,15 +82,13 @@ class ImportDataCryptoCurrencies(ABC):
     Attributes
     ----------
     pair : str
-        Pair symbol, `crypto + fiat`.
+        Exchange-specific pair string (e.g. ``'BTCUSDT'`` for Binance).
     start, end : int
-        Timestamp to starting and ending download data.
+        Timestamps bounding the last downloaded window.
     span : int
         Number of seconds between observations.
     full_path : str
-        Path to save data.
-    form : str
-        Format to save data.
+        Absolute directory path managed by :class:`~dccd.storage.DataStore`.
     trades_df : pd.DataFrame
         Trades data after calling :meth:`import_trades`.
     orderbook_df : pd.DataFrame
@@ -204,7 +207,7 @@ class ImportDataCryptoCurrencies(ABC):
         return self
 
     def _sort_data(self, data: list[dict[str, Any]]) -> ImportDataCryptoCurrencies:
-        """ Validate, merge, and sort raw OHLCV data against :attr:`last_df`.
+        """ Validate and sort raw OHLCV data into a uniform timestamp grid.
 
         Validates each record through :class:`~dccd.models.OHLCBar`, builds a
         complete timestamp grid from ``self.start`` to ``self.end``, outer-merges

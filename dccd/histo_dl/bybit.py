@@ -94,6 +94,9 @@ class FromBybit(ImportDataCryptoCurrencies):
         Timestamps bounding the download.
     span : int
         Seconds between observations.
+    full_path : str
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/bybit/ohlc/{pair}/{span}/``.
 
     Methods
     -------

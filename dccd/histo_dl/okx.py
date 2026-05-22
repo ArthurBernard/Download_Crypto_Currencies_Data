@@ -94,6 +94,9 @@ class FromOKX(ImportDataCryptoCurrencies):
         Timestamps bounding the download.
     span : int
         Seconds between observations.
+    full_path : str
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/okx/ohlc/{pair}/{span}/``.
 
     Methods
     -------
