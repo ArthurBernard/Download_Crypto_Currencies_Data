@@ -40,6 +40,7 @@ _HISTO_CLASSES: dict[str, type[ImportDataCryptoCurrencies]] = {
 
 
 def run_histo_job(job: HistoJob, pair: str, base_path: str,
+                  tz: str = 'local',
                   health: HealthMonitor | None = None) -> None:
     """ Download and save one (exchange, pair) candle job locally.
 
@@ -54,6 +55,8 @@ def run_histo_job(job: HistoJob, pair: str, base_path: str,
         Trading pair in ``'CRYPTO/FIAT'`` format (e.g. ``'BTC/USDT'``).
     base_path : str
         Root directory for local storage (``CollectorConfig.storage.local_path``).
+    tz : str, optional
+        Timezone for file labelling (``CollectorConfig.settings.timezone``).
     health : HealthMonitor or None, optional
         Health monitor to record success/failure metrics.
 
@@ -61,7 +64,7 @@ def run_histo_job(job: HistoJob, pair: str, base_path: str,
     crypto, fiat = pair.split('/', 1)
     cls = _HISTO_CLASSES[job.exchange]
     try:
-        obj = cls(base_path, crypto, job.span, fiat, form=job.format)
+        obj = cls(base_path, crypto, job.span, fiat, form=job.format, tz=tz)
         obj.import_data('last', 'now').save(form=job.format, by_period=job.by_period)
         _data = getattr(obj, 'data', None)
         rows = len(_data) if _data is not None else 0
@@ -116,6 +119,7 @@ def build_histo_scheduler(config: CollectorConfig,
                     'job': job,
                     'pair': pair,
                     'base_path': config.storage.local_path,
+                    'tz': config.settings.timezone,
                     'health': health,
                 },
                 id=job_id,
@@ -146,7 +150,8 @@ def run_once(config: CollectorConfig,
     for job in config.histo_jobs:
         for pair in job.pairs:
             try:
-                run_histo_job(job, pair, config.storage.local_path, health=health)
+                run_histo_job(job, pair, config.storage.local_path,
+                              tz=config.settings.timezone, health=health)
             except Exception:
                 logger.exception(
                     'histo job failed: %s %s', job.exchange, pair

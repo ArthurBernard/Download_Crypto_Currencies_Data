@@ -107,10 +107,10 @@ class FromCoinbase(ImportDataCryptoCurrencies):
             crypto = 'BTC'
         return crypto + '-' + fiat
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Coinbase', fiat, form
+            self, path, crypto, span, 'Coinbase', fiat, form, tz=tz
         )
         self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/Coinbase/Data/Clean_Data/'

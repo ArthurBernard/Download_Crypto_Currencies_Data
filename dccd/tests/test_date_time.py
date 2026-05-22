@@ -13,7 +13,12 @@ from dccd.tools.date_time import (
 def test_date_to_TS_roundtrip():
     ts = date_to_TS('2019-01-25 16:01:39')
     assert isinstance(ts, int)
-    assert TS_to_date(ts, local=True) == '2019-01-25 16:01:39'
+    assert TS_to_date(ts) == '2019-01-25 16:01:39'
+
+
+def test_date_to_TS_utc():
+    assert date_to_TS('2019-01-25 16:01:39', tz='UTC') == 1548432099
+    assert TS_to_date(1548432099, tz='UTC') == '2019-01-25 16:01:39'
 
 
 def test_str_to_span_aliases():

@@ -124,10 +124,10 @@ class FromOKX(ImportDataCryptoCurrencies):
         """
         return crypto + '-' + fiat
 
-    def __init__(self, path, crypto, span, fiat='USDT', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USDT', form='xlsx', tz='local'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'OKX', fiat, form
+            self, path, crypto, span, 'OKX', fiat, form, tz=tz
         )
         self.pair = self.format_pair(crypto, fiat)
         self.full_path = self.path + '/OKX/Data/Clean_Data/'
