@@ -170,7 +170,7 @@ class _BackfillBase(ABC):
             tqdm bar position (use distinct values for parallel runs).
 
         """
-        now_ts = int(time_mod.time())
+        now_ts     = int(time_mod.time())
         user_start = int(date_to_TS(start_str, tz=self.obj.tz))
 
         if dry_run:
@@ -178,59 +178,59 @@ class _BackfillBase(ABC):
             tqdm.write(f'[{self.label}] {self._dry_run_summary(total)}')
             return
 
-        last_saved = self.obj._get_last_date()
-        current = max(user_start, last_saved)
+        intervals = self.obj._store.missing_intervals(user_start, now_ts)
 
-        if current >= now_ts:
+        if not intervals:
             tqdm.write(f'[{self.label}] already up to date')
             return
 
-        total = max(1, (now_ts - current) // self.window_size + 1)
+        total = sum(max(1, (e - s) // self.window_size + 1) for s, e in intervals)
         bar = tqdm(
             total=total, desc=self.label, unit='win',
             position=position, leave=True, dynamic_ncols=True,
         )
 
         n_candles = 0
-        skipped = 0
+        skipped   = 0
 
-        while current < now_ts:
-            end = min(current + self.window_size, now_ts)
-            self.obj._get_last_date()
+        for ivl_start, ivl_end in intervals:
+            current = ivl_start
+            while current < ivl_end:
+                end = min(current + self.window_size, ivl_end)
 
-            last_exc: Exception | None = None
-            n = 0
-            for attempt in range(1, _MAX_RETRIES + 1):
-                try:
-                    n = self._fetch_window(current, end)
-                    break
-                except Exception as exc:
-                    last_exc = exc
-                    if attempt < _MAX_RETRIES:
-                        tqdm.write(
-                            f'[{self.label}] attempt {attempt}/{_MAX_RETRIES} '
-                            f'failed: {exc} — retrying in 2s'
-                        )
-                        time_mod.sleep(2)
-            else:
-                tqdm.write(
-                    f'[{self.label}] window {current} failed after '
-                    f'{_MAX_RETRIES} attempts: {last_exc} — skipping'
-                )
-                skipped += 1
-                current += self.window_size
+                last_exc: Exception | None = None
+                n = 0
+                for attempt in range(1, _MAX_RETRIES + 1):
+                    try:
+                        n = self._fetch_window(current, end)
+                        break
+                    except Exception as exc:
+                        last_exc = exc
+                        if attempt < _MAX_RETRIES:
+                            tqdm.write(
+                                f'[{self.label}] attempt {attempt}/{_MAX_RETRIES} '
+                                f'failed: {exc} — retrying in 2s'
+                            )
+                            time_mod.sleep(2)
+                else:
+                    tqdm.write(
+                        f'[{self.label}] window {current} failed after '
+                        f'{_MAX_RETRIES} attempts: {last_exc} — skipping'
+                    )
+                    skipped += 1
+                    current += self.window_size
+                    bar.update(1)
+                    time_mod.sleep(self.sleep)
+                    continue
+
+                if n > 0:
+                    self.obj.save()
+                    n_candles += n
+
+                current = self._advance(current, end)
                 bar.update(1)
+                bar.set_postfix(candles=n_candles, skipped=skipped)
                 time_mod.sleep(self.sleep)
-                continue
-
-            if n > 0:
-                self.obj.save()
-                n_candles += n
-
-            current = self._advance(current, end)
-            bar.update(1)
-            bar.set_postfix(candles=n_candles, skipped=skipped)
-            time_mod.sleep(self.sleep)
 
         bar.close()
         tqdm.write(

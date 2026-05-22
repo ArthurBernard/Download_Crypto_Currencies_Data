@@ -55,7 +55,7 @@ Quick start (CLI)
          webhook_url: "https://hooks.slack.com/services/..."
          max_consecutive_errors: 3
 
-3. Validate, backfill, run once, or start the daemon:
+3. Validate, backfill, collect, or start the daemon:
 
    .. code-block:: bash
 
@@ -82,8 +82,8 @@ Quick start (CLI)
        # Run all jobs in parallel threads
        dccd backfill --config config.yml --parallel
 
-       # One-shot: run all histo jobs once and exit
-       dccd run --config config.yml
+       # One incremental batch per histo job, then exit (for cron)
+       dccd collect --config config.yml
        # Done. successes=2 failures=0
 
        # Continuous daemon (block until Ctrl-C / SIGTERM)

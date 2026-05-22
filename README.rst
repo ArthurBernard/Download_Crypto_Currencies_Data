@@ -218,8 +218,8 @@ CLI quick start:
     # Backfill only one exchange
     dccd backfill --config config.yml --exchange kraken
 
-    # One-shot scheduled run, then exit
-    dccd run --config config.yml
+    # One incremental batch per job, then exit (for cron)
+    dccd collect --config config.yml
 
     # Continuous daemon (Ctrl-C to stop)
     dccd start --config config.yml

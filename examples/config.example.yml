@@ -2,7 +2,7 @@
 #
 # Copy this file, adapt it to your setup, and pass it to the daemon:
 #   dccd validate --config config.yml    # check without running
-#   dccd run --once --config config.yml  # run all jobs once and exit
+#   dccd collect --config config.yml     # one incremental batch, then exit
 #   dccd start --config config.yml       # run as a daemon
 
 # ---------------------------------------------------------------------------

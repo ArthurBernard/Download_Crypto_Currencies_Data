@@ -220,3 +220,66 @@ def test_cli_backfill_missing_config(tmp_path):
         ['backfill', '--config', str(tmp_path / 'missing.yml')],
     )
     assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# _BackfillBase.run — gap-aware loop
+# ---------------------------------------------------------------------------
+
+def test_run_skips_when_up_to_date():
+    obj = _mock_obj()
+    obj._store.missing_intervals.return_value = []
+    job = OHLCBackfill(obj, max_candles=990, sleep=0.0, form='parquet')
+    with patch('dccd.daemon.backfill.time_mod'):
+        job.run('2020-01-01 00:00:00')
+    obj._store.missing_intervals.assert_called_once()
+    obj.import_data.assert_not_called()
+    obj.save.assert_not_called()
+
+
+def test_run_iterates_intervals():
+    # window_size = max_candles * span = 2 * 60 = 120 s
+    obj = _mock_obj(span=60)
+    obj._store.missing_intervals.return_value = [
+        (1_000, 1_240),   # 2 windows: [1000,1120) + [1120,1240)
+        (2_000, 2_120),   # 1 window:  [2000,2120)
+    ]
+    job = OHLCBackfill(obj, max_candles=2, sleep=0.0, form='parquet')
+
+    fetched: list[tuple[int, int]] = []
+
+    def _fake_fetch(current: int, end: int) -> int:
+        fetched.append((current, end))
+        return 1
+
+    job._fetch_window = _fake_fetch  # type: ignore[method-assign]
+    job._advance      = lambda current, end: end  # type: ignore[method-assign]
+
+    with patch('dccd.daemon.backfill.time_mod'):
+        job.run('2020-01-01 00:00:00')
+
+    assert fetched == [(1_000, 1_120), (1_120, 1_240), (2_000, 2_120)]
+    assert obj.save.call_count == 3
+
+
+def test_run_retries_on_fetch_error():
+    obj = _mock_obj(span=60)
+    obj._store.missing_intervals.return_value = [(1_000, 1_120)]
+    job = OHLCBackfill(obj, max_candles=2, sleep=0.0, form='parquet')
+
+    calls = {'n': 0}
+
+    def _flaky_fetch(current: int, end: int) -> int:
+        calls['n'] += 1
+        if calls['n'] < 3:
+            raise RuntimeError('transient error')
+        return 1
+
+    job._fetch_window = _flaky_fetch  # type: ignore[method-assign]
+    job._advance      = lambda current, end: end  # type: ignore[method-assign]
+
+    with patch('dccd.daemon.backfill.time_mod'):
+        job.run('2020-01-01 00:00:00')
+
+    assert calls['n'] == 3   # 2 failures + 1 success
+    obj.save.assert_called_once()
