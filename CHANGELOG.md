@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `dccd/histo_dl/exchange.py` — `save(form='parquet')` was silently ignored (logged a warning instead of writing the file) (#35)
+- `dccd/histo_dl/exchange.py` — `_sort_data()` crashed with a ValueError when the API returned fewer candles than the expected window size; index is now derived from actual data (#36)
+- `dccd/histo_dl/exchange.py` — `by_period='M'` produced minute-level file names (strftime `%M`) instead of year-month; added `_PERIOD_FMT` mapping so `'M'` → `'%Y-%m'` (#36)
+- `dccd/histo_dl/exchange.py` — `self.end` now reflects the last candle timestamp so window-loop callers advance correctly (was stuck at `now` for Kraken) (#36)
+- `dccd/histo_dl/binance.py` — missing `limit=1000` parameter caused Binance to return only 500 candles per request (#36)
+- `dccd/histo_dl/bybit.py` — `limit` was 200; raised to 1 000 to match the API maximum (#36)
 
 ## [2.2.0] - 2026-05-17
 
