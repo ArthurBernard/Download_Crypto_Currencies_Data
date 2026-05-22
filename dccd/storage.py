@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from dccd.tools.date_time import TS_to_date, span_label
+from dccd.tools.date_time import span_label
 
 if TYPE_CHECKING:
     pass
@@ -131,18 +131,14 @@ class DataStore:
             self._save_grouped(df, fmt='%Y-%m-%d')
 
     def _save_grouped(self, df: pd.DataFrame, fmt: str) -> None:
-        groups: dict[str, pd.DataFrame] = {}
-        for ts, row in zip(df['TS'], df.itertuples(index=False)):
-            label = TS_to_date(int(ts), form=fmt, tz='UTC')
-            groups.setdefault(label, []).append(row._asdict())  # type: ignore[attr-defined]
-
-        for label, rows in groups.items():
+        labels = pd.to_datetime(df['TS'], unit='s', utc=True).dt.strftime(fmt)
+        for label, group_df in df.groupby(labels, sort=False):
             file_path = self.directory / f'{label}.parquet'
-            new = pd.DataFrame(rows)
+            new = group_df.reset_index(drop=True)
             if file_path.exists():
                 try:
                     existing = pd.read_parquet(file_path)
-                    merged = (
+                    new = (
                         pd.concat([existing, new], ignore_index=True)
                         .drop_duplicates(subset='TS', keep='last')
                         .sort_values('TS')
@@ -150,10 +146,10 @@ class DataStore:
                     )
                 except Exception:
                     logger.warning('Corrupted file %s — overwriting.', file_path)
-                    merged = new.drop_duplicates(subset='TS', keep='last').sort_values('TS').reset_index(drop=True)
+                    new = new.drop_duplicates(subset='TS', keep='last').sort_values('TS').reset_index(drop=True)
             else:
-                merged = new.drop_duplicates(subset='TS', keep='last').sort_values('TS').reset_index(drop=True)
-            merged.to_parquet(file_path, index=False)
+                new = new.drop_duplicates(subset='TS', keep='last').sort_values('TS').reset_index(drop=True)
+            new.to_parquet(file_path, index=False)
 
     # ------------------------------------------------------------------
     # Read
