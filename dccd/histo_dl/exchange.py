@@ -157,17 +157,25 @@ class ImportDataCryptoCurrencies(ABC):
         ext = last_file.rsplit('.', 1)[-1]
         full = os.path.join(self.full_path, last_file)
 
-        if ext == 'xlsx':
-            self.last_df = pd.read_excel(full)
-        elif ext == 'csv':
-            self.last_df = pd.read_csv(full)
-        elif ext == 'parquet':
-            self.last_df = pd.read_parquet(full)
-        else:
+        try:
+            if ext == 'xlsx':
+                self.last_df = pd.read_excel(full)
+            elif ext == 'csv':
+                self.last_df = pd.read_csv(full)
+            elif ext == 'parquet':
+                self.last_df = pd.read_parquet(full)
+            else:
+                self.logger.warning(
+                    'Unsupported file format %s. Starting at 2012-01-01.', ext
+                )
+                return 1325376000
+        except Exception:
             self.logger.warning(
-                'Unsupported file format %s. Starting at 2012-01-01.', ext
+                'Corrupted file %s — removing and restarting from previous '
+                'checkpoint.', full
             )
-            return 1325376000
+            os.remove(full)
+            return self._get_last_date()
 
         if 'TS' in self.last_df.columns:
             return int(self.last_df['TS'].iloc[-1])

@@ -22,6 +22,12 @@ Commands
         Exit 0 on success, 1 on any error (file not found, bad YAML,
         Pydantic validation failure).
 
+    dccd backfill --config PATH [--exchange X] [--pairs A B] [--start DATE]
+                  [--parallel] [--dry-run]
+        Download the full OHLC history for every histo_job defined in the
+        config, resuming from the last saved timestamp.  Runs in the
+        foreground; use --parallel to run all jobs simultaneously.
+
     dccd run --config PATH
         Execute every histo_job once in order, then exit.
         Metrics (success/failure counts) are printed on completion.
@@ -55,6 +61,7 @@ import signal
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Optional
 
 import typer
 
@@ -93,11 +100,54 @@ def validate(
     """
     cfg = _load(config)
     typer.echo(f'Config: {config}')
-    typer.echo(f'  storage.local_path : {cfg.storage.local_path}')  # type: ignore[attr-defined]
+    typer.echo(f'  data_path          : {cfg.settings.data_path}')  # type: ignore[attr-defined]
+    typer.echo(f'  timezone           : {cfg.settings.timezone}')  # type: ignore[attr-defined]
     typer.echo(f'  remotes            : {len(cfg.storage.remotes)}')  # type: ignore[attr-defined]
     typer.echo(f'  histo_jobs         : {len(cfg.histo_jobs)}')  # type: ignore[attr-defined]
     typer.echo(f'  stream_jobs        : {len(cfg.stream_jobs)}')  # type: ignore[attr-defined]
     typer.echo('Config is valid.')
+
+
+@app.command()
+def backfill(
+    config: str = typer.Option(
+        _DEFAULT_CONFIG, '--config', '-c', help='Path to the YAML config file.',
+    ),
+    exchange: Optional[str] = typer.Option(
+        None, '--exchange', '-e',
+        help='Restrict to one exchange (e.g. binance, kraken, bybit).',
+    ),
+    pairs: Optional[List[str]] = typer.Option(
+        None, '--pairs', '-p',
+        help='Restrict to specific pairs, e.g. --pairs BTC/USDT ETH/USDT.',
+    ),
+    start: str = typer.Option(
+        '2020-01-01 00:00:00', '--start',
+        help='Earliest date to backfill (YYYY-MM-DD HH:MM:SS).',
+    ),
+    parallel: bool = typer.Option(
+        False, '--parallel', help='Run all jobs in parallel threads.',
+    ),
+    dry_run: bool = typer.Option(
+        False, '--dry-run', help='Estimate windows and time without downloading.',
+    ),
+) -> None:
+    """ Download the full OHLC history for all histo_jobs in the config.
+
+    Reads exchanges, pairs, span, format, and by_period from the config
+    file.  Resumes from the last saved timestamp for each pair so the
+    command is safe to run repeatedly.
+
+    Kraken uses a trades-based strategy (Kraken's OHLC endpoint does not
+    support arbitrary historical windows); all other exchanges use the
+    standard OHLC endpoint.
+
+    """
+    from dccd.daemon.backfill import run_backfill
+
+    cfg = _load(config)
+    run_backfill(cfg, exchange=exchange, pairs=list(pairs) if pairs else None,  # type: ignore[arg-type]
+                 start=start, parallel=parallel, dry_run=dry_run)
 
 
 @app.command()
