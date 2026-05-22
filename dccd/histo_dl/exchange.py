@@ -204,6 +204,9 @@ class ImportDataCryptoCurrencies(ABC):
         return int((_start // self.span) * self.span), \
             int((_end // self.span) * self.span)
 
+    # Maps the public by_period values to unambiguous strftime formats.
+    _PERIOD_FMT: dict[str, str] = {'Y': '%Y', 'M': '%Y-%m', 'D': '%Y-%m-%d'}
+
     def _set_by_period(self, TS: int) -> str:
         """ Convert a timestamp to a period label for grouping files.
 
@@ -216,10 +219,12 @@ class ImportDataCryptoCurrencies(ABC):
         -------
         str
             Date string formatted according to :attr:`by_period`
-            (e.g. ``'2024'`` for ``by_period='Y'``).
+            (e.g. ``'2024'`` for ``by_period='Y'``,
+            ``'2024-03'`` for ``by_period='M'``).
 
         """
-        return TS_to_date(TS, form='%' + self.by_period)
+        fmt = self._PERIOD_FMT.get(self.by_period, '%' + self.by_period)
+        return TS_to_date(TS, form=fmt)
 
     def _name_file(self, date: str) -> str:
         """ Build the file stem for a given period label.
@@ -322,12 +327,14 @@ class ImportDataCryptoCurrencies(ABC):
 
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
-        df = pd.DataFrame(
-            data,
-            index=range((self.end - self.start) // self.span + 1),
-        ).rename(columns={'date': 'TS'})
+        df = pd.DataFrame(data).rename(columns={'date': 'TS'})
+        # Cap grid end to actual data max so Kraken (which sets self.end=now
+        # regardless of the requested window) doesn't produce a grid of
+        # millions of rows for old windows.
+        grid_end = (int(df['TS'].max()) + self.span) if not df.empty else self.end
+        grid_end = min(grid_end, self.end)
         TS = pd.DataFrame(
-            list(range(self.start, self.end, self.span)),
+            list(range(self.start, grid_end, self.span)),
             columns=['TS']
         )
         df = (df.merge(TS, on='TS', how='outer', sort=False)
@@ -336,6 +343,10 @@ class ImportDataCryptoCurrencies(ABC):
               .ffill())
         df = df.assign(Date=pd.to_datetime(df.TS, unit='s'))
         self.df = df.assign(date=df.Date.dt.date, time=df.Date.dt.time)
+        # Update self.end to the actual last candle so callers can advance
+        # their window pointer correctly (critical for Kraken).
+        if not df.empty:
+            self.end = int(self.df['TS'].max())
         return self
 
     def import_data(self, start: int | str = 'last', end: int | str = 'now') -> ImportDataCryptoCurrencies:
@@ -521,7 +532,8 @@ class ImportDataCryptoCurrencies(ABC):
         pathlib.Path(self.trades_path).mkdir(parents=True, exist_ok=True)
 
         def _period_label(ts: float) -> str:
-            return TS_to_date(int(ts), form='%' + by_period)
+            fmt = ImportDataCryptoCurrencies._PERIOD_FMT.get(by_period, '%' + by_period)
+            return TS_to_date(int(ts), form=fmt)
 
         grouped = self.trades_df.groupby(
             self.trades_df['TS'].map(_period_label)

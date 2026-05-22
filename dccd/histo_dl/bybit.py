@@ -142,7 +142,7 @@ class FromBybit(ImportDataCryptoCurrencies):
             'interval': bybit_interval(self.span),
             'start': self.start * 1000,
             'end': self.end * 1000,
-            'limit': 200,
+            'limit': 1000,
         }
 
         r = self._fetch('https://api.bybit.com/v5/market/kline', param)
