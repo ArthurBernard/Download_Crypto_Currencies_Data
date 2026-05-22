@@ -53,6 +53,11 @@ class SettingsConfig(BaseModel):
     data_path: str = './data/crypto'
     timezone: str = 'local'
 
+    @field_validator('data_path')
+    @classmethod
+    def _expand_path(cls, v: str) -> str:
+        return str(pathlib.Path(v).expanduser())
+
     @field_validator('timezone')
     @classmethod
     def _validate_timezone(cls, v: str) -> str:
