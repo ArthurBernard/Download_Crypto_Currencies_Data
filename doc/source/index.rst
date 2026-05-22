@@ -123,5 +123,6 @@ Contents
    histo_dl.bybit
    histo_dl.okx
    daemon
+   storage
    process_data
    tools

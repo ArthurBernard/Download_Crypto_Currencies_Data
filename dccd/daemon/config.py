@@ -16,8 +16,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 __all__ = [
-    'CollectorConfig',
     'AlertConfig',
+    'CollectorConfig',
     'HistoJob',
     'RemoteConfig',
     'SettingsConfig',
@@ -33,7 +33,6 @@ SUPPORTED_STREAM_EXCHANGES: frozenset[str] = frozenset(
     {'binance', 'kraken', 'bybit', 'okx', 'bitfinex', 'bitmex'}
 )
 SUPPORTED_FORMATS: frozenset[str] = frozenset({'xlsx', 'csv', 'parquet'})
-SUPPORTED_BY_PERIOD: frozenset[str] = frozenset({'Y', 'M', 'D'})
 
 
 class SettingsConfig(BaseModel):
@@ -125,8 +124,6 @@ class HistoJob(BaseModel):
         Candle interval in seconds. Must be >= 60.
     format : str
         Output format: ``'xlsx'``, ``'csv'``, or ``'parquet'``.
-    by_period : str
-        File grouping period: ``'Y'`` (year), ``'M'`` (month), ``'D'`` (day).
 
     """
 
@@ -134,7 +131,6 @@ class HistoJob(BaseModel):
     pairs: list[str]
     span: int
     format: str = 'parquet'
-    by_period: str = 'Y'
 
     @field_validator('exchange')
     @classmethod
@@ -171,15 +167,6 @@ class HistoJob(BaseModel):
         if v not in SUPPORTED_FORMATS:
             raise ValueError(
                 f"Unknown format {v!r}. Supported: {sorted(SUPPORTED_FORMATS)}"
-            )
-        return v
-
-    @field_validator('by_period')
-    @classmethod
-    def _validate_by_period(cls, v: str) -> str:
-        if v not in SUPPORTED_BY_PERIOD:
-            raise ValueError(
-                f"Unknown by_period {v!r}. Supported: {sorted(SUPPORTED_BY_PERIOD)}"
             )
         return v
 

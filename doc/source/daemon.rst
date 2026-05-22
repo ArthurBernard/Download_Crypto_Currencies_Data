@@ -41,15 +41,14 @@ Quick start (CLI)
          - exchange: binance
            pairs: [BTC/USDT, ETH/USDT]
            span: 3600          # candle interval in seconds
-           format: parquet
-           by_period: Y        # one file per year
+           format: parquet     # stored as annual Parquet: binance/ohlc/BTC-USDT/1h/YYYY.parquet
 
        # Optional real-time streams
        stream_jobs:
          - exchange: binance
            pairs: [BTC/USDT]
            channels: [trades, book]
-           time_step: 60
+           time_step: 60       # stored daily: binance/trades/BTC-USDT/YYYY-MM-DD.parquet
 
        # Optional webhook alerts on consecutive failures
        alerts:
@@ -83,7 +82,7 @@ Quick start (CLI)
        # Run all jobs in parallel threads
        dccd backfill --config config.yml --parallel
 
-       # One-shot: download all histo jobs once and exit
+       # One-shot: run all histo jobs once and exit
        dccd run --config config.yml
        # Done. successes=2 failures=0
 
@@ -192,6 +191,12 @@ Storage
    :toctree: generated/
 
    storage.RemoteStorage -- push local data directories to remote destinations via rclone
+
+Data Store
+----------
+
+The :class:`~dccd.storage.DataStore` class provides the unified storage
+layer.  See :doc:`storage` for the full API reference.
 
 CLI
 ---
