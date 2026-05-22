@@ -26,7 +26,6 @@ from typing import Any
 from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 # Import local packages
-from dccd.tools.date_time import TS_to_date
 
 __all__ = ['FromCoinbase']
 
@@ -116,8 +115,8 @@ class FromCoinbase(ImportDataCryptoCurrencies):
     def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)
         param = {
-            'start': TS_to_date(self.start - self.span),
-            'end': TS_to_date(self.end),
+            'start': datetime.fromtimestamp(self.start, tz=timezone.utc).isoformat(),
+            'end':   datetime.fromtimestamp(self.end,   tz=timezone.utc).isoformat(),
             'granularity': self.span,
         }
         r = self._fetch(

@@ -128,10 +128,9 @@ class ImportDataCryptoCurrencies(ABC):
            wait=wait_exponential(multiplier=1, min=1, max=60),
            stop=stop_after_attempt(5))
     def _fetch(self, url: str, params: dict[str, Any]) -> requests.Response:
-        """ Fetch URL with automatic retry on HTTP 429. """
+        """ Fetch URL and raise on any HTTP error. """
         r = requests.get(url, params)
-        if r.status_code == 429:
-            r.raise_for_status()
+        r.raise_for_status()
         return r
 
     def _get_last_date(self) -> int:
