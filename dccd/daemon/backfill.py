@@ -45,7 +45,7 @@ from tqdm import tqdm
 from dccd.tools.date_time import date_to_TS
 
 if TYPE_CHECKING:
-    from dccd.daemon.config import CollectorConfig, HistoJob, SettingsConfig
+    from dccd.daemon.config import CollectorConfig
     from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
 
 __all__ = ['OHLCBackfill', 'KrakenBackfill', 'make_job', 'run_backfill']

@@ -7,19 +7,17 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
 from dccd.daemon.backfill import (
+    _EXCHANGE_DEFAULTS,
     KrakenBackfill,
     OHLCBackfill,
-    _EXCHANGE_DEFAULTS,
     make_job,
     run_backfill,
 )
 from dccd.daemon.cli import app
-
 
 # ---------------------------------------------------------------------------
 # _trades_to_ohlc
