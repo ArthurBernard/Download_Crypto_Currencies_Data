@@ -20,6 +20,7 @@ __all__ = [
     'AlertConfig',
     'HistoJob',
     'RemoteConfig',
+    'SettingsConfig',
     'StorageConfig',
     'StreamJob',
     'load_config',
@@ -33,6 +34,39 @@ SUPPORTED_STREAM_EXCHANGES: frozenset[str] = frozenset(
 )
 SUPPORTED_FORMATS: frozenset[str] = frozenset({'xlsx', 'csv', 'parquet'})
 SUPPORTED_BY_PERIOD: frozenset[str] = frozenset({'Y', 'M', 'D'})
+
+
+class SettingsConfig(BaseModel):
+    """ Global local settings shared by the daemon and the backfill command.
+
+    Parameters
+    ----------
+    data_path : str
+        Root directory for all local data files.  Default ``'./data/crypto'``.
+    timezone : str
+        Timezone used to interpret date strings and label output files.
+        ``'local'`` (default) uses the system timezone, ``'UTC'`` uses UTC,
+        any other value is an IANA name (e.g. ``'Europe/Paris'``).
+
+    """
+
+    data_path: str = './data/crypto'
+    timezone: str = 'local'
+
+    @field_validator('timezone')
+    @classmethod
+    def _validate_timezone(cls, v: str) -> str:
+        if v.upper() in ('LOCAL', 'UTC'):
+            return v
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(v)
+        except KeyError:
+            raise ValueError(
+                f"Unknown timezone {v!r}. "
+                "Use 'local', 'UTC', or an IANA name like 'Europe/Paris'."
+            )
+        return v
 
 
 class RemoteConfig(BaseModel):
@@ -56,8 +90,9 @@ class StorageConfig(BaseModel):
 
     Parameters
     ----------
-    local_path : str
-        Absolute path where data is stored on the daemon host.
+    local_path : str, optional
+        Root data directory.  When omitted, :attr:`SettingsConfig.data_path`
+        is used (propagated by :class:`CollectorConfig`'s validator).
     remotes : list of RemoteConfig
         Remote destinations.  Empty list (default) keeps data locally only.
         Multiple entries are all synced by :class:`SyncService`.
@@ -67,7 +102,7 @@ class StorageConfig(BaseModel):
 
     """
 
-    local_path: str
+    local_path: str = ''
     remotes: list[RemoteConfig] = Field(default_factory=list)
     sync_interval: int = 3600
 
@@ -204,8 +239,11 @@ class CollectorConfig(BaseModel):
 
     Parameters
     ----------
+    settings : SettingsConfig
+        Global local settings (data path, timezone).
     storage : StorageConfig
-        Local (and optional remote) storage settings.
+        Remote storage configuration.  ``local_path`` defaults to
+        ``settings.data_path`` when not set explicitly.
     histo_jobs : list of HistoJob
         REST API polling jobs.
     stream_jobs : list of StreamJob
@@ -215,10 +253,17 @@ class CollectorConfig(BaseModel):
 
     """
 
-    storage: StorageConfig
+    settings: SettingsConfig = Field(default_factory=SettingsConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
     histo_jobs: list[HistoJob] = Field(default_factory=list)
     stream_jobs: list[StreamJob] = Field(default_factory=list)
     alerts: AlertConfig = Field(default_factory=AlertConfig)
+
+    @model_validator(mode='after')
+    def _propagate_data_path(self) -> 'CollectorConfig':
+        if not self.storage.local_path:
+            self.storage.local_path = self.settings.data_path
+        return self
 
     @model_validator(mode='after')
     def _at_least_one_job(self) -> 'CollectorConfig':

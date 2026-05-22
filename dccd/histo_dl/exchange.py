@@ -103,13 +103,14 @@ class ImportDataCryptoCurrencies(ABC):
 
     """
 
-    def __init__(self, path: str, crypto: str, span: int | str, platform: str, fiat: str = 'EUR', form: str = 'xlsx') -> None:
+    def __init__(self, path: str, crypto: str, span: int | str, platform: str, fiat: str = 'EUR', form: str = 'xlsx', tz: str = 'local') -> None:
         """ Initialize object. """
         self.logger = logging.getLogger(__name__)
         self.path = path
         self.crypto = crypto
         self.span, self.per = self._period(span)
         self.fiat = fiat
+        self.tz = tz
         self.pair = str(crypto + fiat)
         self.full_path = self.path + '/' + platform + '/Data/Clean_Data/'
         self.full_path += str(self.per) + '/' + self.pair
@@ -224,7 +225,7 @@ class ImportDataCryptoCurrencies(ABC):
 
         """
         fmt = self._PERIOD_FMT.get(self.by_period, '%' + self.by_period)
-        return TS_to_date(TS, form=fmt)
+        return TS_to_date(TS, form=fmt, tz=self.tz)
 
     def _name_file(self, date: str) -> str:
         """ Build the file stem for a given period label.
@@ -532,7 +533,7 @@ class ImportDataCryptoCurrencies(ABC):
 
         def _period_label(ts: float) -> str:
             fmt = ImportDataCryptoCurrencies._PERIOD_FMT.get(by_period, '%' + by_period)
-            return TS_to_date(int(ts), form=fmt)
+            return TS_to_date(int(ts), form=fmt, tz=self.tz)
 
         grouped = self.trades_df.groupby(
             self.trades_df['TS'].map(_period_label)

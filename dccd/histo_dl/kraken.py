@@ -119,10 +119,10 @@ class FromKraken(ImportDataCryptoCurrencies):
             return 'X' + crypto + 'X' + fiat
         return 'X' + crypto + 'Z' + fiat
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
         """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Kraken', fiat=fiat, form=form
+            self, path, crypto, span, 'Kraken', fiat=fiat, form=form, tz=tz
         )
         self.pair = self.format_pair(crypto, fiat)
 

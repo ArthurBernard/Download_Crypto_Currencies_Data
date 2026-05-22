@@ -108,7 +108,7 @@ class FromBinance(ImportDataCryptoCurrencies):
             crypto = 'BTC'
         return crypto + fiat
 
-    def __init__(self, path, crypto, span, fiat='USD', form='xlsx'):
+    def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
         """ Initialize object. """
         if fiat in ['EUR', 'USD']:
             _logger.warning(
@@ -118,7 +118,7 @@ class FromBinance(ImportDataCryptoCurrencies):
             self.fiat = fiat = 'USDT'
 
         ImportDataCryptoCurrencies.__init__(
-            self, path, crypto, span, 'Binance', fiat, form
+            self, path, crypto, span, 'Binance', fiat, form, tz=tz
         )
 
         self.pair = self.format_pair(crypto, fiat)
