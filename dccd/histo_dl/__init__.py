@@ -6,49 +6,41 @@
 # @Last modified by: ArthurBernard
 # @Last modified time: 2026-05-12
 
-""" Module to download historical data.
+""" Module to download historical OHLCV, trades, and order book data.
 
-Module to download historical data (ohlc, trades, etc.) and automatically
-update the database. *Currently supports Binance, Coinbase, and Kraken.*
+Supports five exchanges via REST APIs: Binance, Bybit, Coinbase, Kraken,
+and OKX.  All exchange classes inherit from
+:class:`~dccd.histo_dl.exchange.ImportDataCryptoCurrencies` and expose
+the same interface:
 
-The 'histo_dl' module contains a base class and three exchange classes to
-download and update data.
+.. code-block:: python
 
-The three classes are ``FromBinance``, ``FromCoinbase``, and ``FromKraken``.
-All have the same methods and almost the same parameters:
+    from dccd.histo_dl import FromBinance
 
-- __init__(path, crypto, span, fiat(optional), form(optional)):
-    Initialisation with path is the path where save the data (string), crypto
-    is a crypto currency (string) and span is the interval time between each
-    observation in seconds (integer) or can be a string as 'hourly', 'daily',
-    etc. The optional parameters are fiat the second currency (default is
-    'USD') and form the format to save the data (default is 'xlsx').
+    obj = FromBinance('/path/to/data/', 'BTC', 3600, fiat='USDT')
 
-- import_data(start, end):
-    Download data with start and end the timestamp (integer) or the date and
-    time (string as 'yyyy-mm-dd hh:mm:ss'), respectively of the first
-    observation and the last observation (default are special parameters
-    start='last' and end='now'). Note: Kraken does not support the end
-    parameter and returns only the last thousand observations.
+    # OHLCV — download and save as annual Parquet
+    obj.import_data(start='2024-01-01 00:00:00', end='now').save(form='parquet')
+    df = obj.get_data()                   # pandas DataFrame
 
-- save(form(optional), by(optional)):
-    Save the data with form the format of the saved data (default is 'xlsx')
-    and by is the "size" of each saved file (default is 'Y' as an entire year).
+    # Incremental update (resume from last saved timestamp)
+    obj.import_data(start='last', end='now').save(form='parquet')
 
-- get_data():
-    returns the data frame without any parameter.
+    # Trades (Binance/Kraken support full history; Bybit/Coinbase recent only)
+    obj.import_trades(start='2024-01-01', end='2024-01-02').save_trades()
+    df_trades = obj.trades_df             # columns: tid, timestamp, price, amount, type
 
-Method chaining is available for these classes.
+    # Order book snapshot
+    obj.import_orderbook(depth=50).save_orderbook()
+    df_book = obj.orderbook_df            # columns: side, price, amount, count
+
+Data are stored via :class:`~dccd.storage.DataStore` under::
+
+    {data_path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet
+    {data_path}/{exchange}/trades/{pair}/YYYY-MM-DD.parquet
+    {data_path}/{exchange}/orderbook/{pair}/YYYY-MM-DD.parquet
 
 .. currentmodule:: dccd.histo_dl
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Contents
-
-   histo_dl.binance
-   histo_dl.coinbase
-   histo_dl.kraken
 
 """
 
