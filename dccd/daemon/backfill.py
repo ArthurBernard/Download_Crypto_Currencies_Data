@@ -90,9 +90,8 @@ class _BackfillBase(ABC):
     sleep : float
         Minimum seconds to wait between API calls.
     form : str
-        Output format (``'parquet'``, ``'csv'``, ``'xlsx'``).
-    by_period : str
-        File grouping (``'Y'``, ``'M'``, ``'D'``).
+        Output format (accepted for backward compatibility; storage is
+        always Parquet via :class:`~dccd.storage.DataStore`).
 
     """
 
@@ -101,12 +100,10 @@ class _BackfillBase(ABC):
         obj: ImportDataCryptoCurrencies,
         sleep: float,
         form: str,
-        by_period: str,
     ) -> None:
         self.obj = obj
         self.sleep = sleep
         self.form = form
-        self.by_period = by_period
         cls_name = type(obj).__name__[4:]  # strip leading 'From'
         self.label = f'{cls_name:8s} {obj.crypto}/{obj.fiat}'
 
@@ -227,7 +224,7 @@ class _BackfillBase(ABC):
                 continue
 
             if n > 0:
-                self.obj.save(form=self.form, by_period=self.by_period)
+                self.obj.save()
                 n_candles += n
 
             current = self._advance(current, end)
@@ -258,9 +255,7 @@ class OHLCBackfill(_BackfillBase):
     sleep : float
         Seconds to wait between requests.
     form : str
-        Output format.
-    by_period : str
-        File grouping period.
+        Output format (accepted for backward compatibility).
 
     """
 
@@ -270,9 +265,8 @@ class OHLCBackfill(_BackfillBase):
         max_candles: int,
         sleep: float,
         form: str,
-        by_period: str,
     ) -> None:
-        super().__init__(obj, sleep, form, by_period)
+        super().__init__(obj, sleep, form)
         self.max_candles = max_candles
 
     @property
@@ -320,9 +314,7 @@ class KrakenBackfill(_BackfillBase):
     sleep : float
         Seconds to wait between paginated API calls.
     form : str
-        Output format.
-    by_period : str
-        File grouping period.
+        Output format (accepted for backward compatibility).
 
     """
 
@@ -494,7 +486,6 @@ def make_job(
     path: str,
     tz: str,
     form: str,
-    by_period: str,
 ) -> _BackfillBase:
     """Build the appropriate backfill strategy for an (exchange, pair).
 
@@ -511,9 +502,7 @@ def make_job(
     tz : str
         Timezone for date parsing and file labelling.
     form : str
-        Output format.
-    by_period : str
-        File grouping period.
+        Output format (accepted for backward compatibility).
 
     Returns
     -------
@@ -543,14 +532,13 @@ def make_job(
     obj = cls(path, crypto, span, fiat, form=form, tz=tz)
 
     if exchange == _KRAKEN_EXCHANGE:
-        return KrakenBackfill(obj, sleep=sleep, form=form, by_period=by_period)
+        return KrakenBackfill(obj, sleep=sleep, form=form)
 
     return OHLCBackfill(
         obj,
         max_candles=defaults['max_candles'],
         sleep=sleep,
         form=form,
-        by_period=by_period,
     )
 
 
@@ -598,7 +586,7 @@ def run_backfill(
             crypto, fiat = pair.split('/', 1)
             job = make_job(
                 histo_job.exchange, crypto, fiat, histo_job.span,
-                path, tz, histo_job.format, histo_job.by_period,
+                path, tz, histo_job.format,
             )
             if job.obj.full_path in seen_paths:
                 tqdm.write(

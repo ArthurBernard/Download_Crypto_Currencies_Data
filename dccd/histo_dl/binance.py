@@ -73,9 +73,8 @@ class FromBinance(ImportDataCryptoCurrencies):
     span : int
         Number of seconds between observations.
     full_path : str
-        Path to save data.
-    form : str
-        Format to save data.
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/binance/ohlc/{pair}/{span}/``.
 
     Methods
     -------
@@ -122,8 +121,6 @@ class FromBinance(ImportDataCryptoCurrencies):
         )
 
         self.pair = self.format_pair(crypto, fiat)
-        self.full_path = self.path + '/Binance/Data/Clean_Data/'
-        self.full_path += self.per + '/' + self.crypto + self.fiat
 
     def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)

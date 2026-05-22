@@ -195,7 +195,6 @@ Daemon (autonomous collector) — ``config.yml``:
         pairs: [BTC/USDT, ETH/USDT]
         span: 3600
         format: parquet
-        by_period: Y
 
     stream_jobs:
       - exchange: binance

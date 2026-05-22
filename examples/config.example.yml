@@ -37,9 +37,9 @@ storage:
 # ---------------------------------------------------------------------------
 # Historical (REST API) jobs
 # ---------------------------------------------------------------------------
-# Each job polls one exchange at a fixed interval and saves OHLCV candles.
-# One file per period (by_period) is created under:
-#   {local_path}/{Exchange}/Data/Clean_Data/{span_label}/{pair}/
+# Each job polls one exchange at a fixed interval and saves OHLCV candles
+# as annual Parquet files under:
+#   {local_path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet
 histo_jobs:
 
   - exchange: binance          # one of: binance, kraken, bybit, okx, coinbase
@@ -48,7 +48,6 @@ histo_jobs:
       - ETH/USDT
     span: 3600                 # candle interval in seconds (>= 60)
     format: parquet            # one of: parquet, csv, xlsx
-    by_period: Y               # file grouping: Y (year), M (month), D (day)
 
   - exchange: kraken
     pairs:
@@ -56,14 +55,12 @@ histo_jobs:
       - ETH/USD
     span: 86400                # daily candles
     format: parquet
-    by_period: Y
 
   - exchange: bybit
     pairs:
       - BTC/USDT
     span: 900                  # 15-minute candles
-    format: csv
-    by_period: M               # one file per month
+    format: parquet
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +68,8 @@ histo_jobs:
 # ---------------------------------------------------------------------------
 # Each job opens one WebSocket connection per pair (or per pair+channel for
 # Bitfinex/Bitmex) and saves snapshots every time_step seconds under:
-#   {local_path}/{Exchange}/Data/WS_Data/{time_step}s/{pair}/
+#   {local_path}/{exchange}/trades/{pair}/YYYY-MM-DD.parquet
+#   {local_path}/{exchange}/orderbook/{pair}/YYYY-MM-DD.parquet
 #
 # stream_jobs:
 #   - exchange: binance        # one of: binance, kraken, bybit, okx, bitfinex, bitmex

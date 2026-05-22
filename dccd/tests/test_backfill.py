@@ -32,7 +32,7 @@ def _make_kraken_job(tmp_path) -> KrakenBackfill:
     obj.fiat = 'USD'
     obj.pair = 'XBTUSD'
     obj.df = None
-    return KrakenBackfill(obj, sleep=0.0, form='parquet', by_period='M')
+    return KrakenBackfill(obj, sleep=0.0, form='parquet')
 
 
 def test_trades_to_ohlc_basic():
@@ -85,7 +85,7 @@ def test_make_job_binance_returns_ohlc(tmp_path):
     mock_obj.fiat = 'USDT'
     with patch('dccd.daemon.scheduler._HISTO_CLASSES',
                {'binance': lambda *a, **kw: mock_obj}):
-        job = make_job('binance', 'BTC', 'USDT', 60, str(tmp_path), 'UTC', 'parquet', 'M')
+        job = make_job('binance', 'BTC', 'USDT', 60, str(tmp_path), 'UTC', 'parquet')
     assert isinstance(job, OHLCBackfill)
     assert job.max_candles == _EXCHANGE_DEFAULTS['binance']['max_candles']
 
@@ -97,13 +97,13 @@ def test_make_job_kraken_returns_kraken_backfill(tmp_path):
     mock_obj.fiat = 'USD'
     with patch('dccd.daemon.scheduler._HISTO_CLASSES',
                {'kraken': lambda *a, **kw: mock_obj}):
-        job = make_job('kraken', 'BTC', 'USD', 60, str(tmp_path), 'UTC', 'parquet', 'M')
+        job = make_job('kraken', 'BTC', 'USD', 60, str(tmp_path), 'UTC', 'parquet')
     assert isinstance(job, KrakenBackfill)
 
 
 def test_make_job_unsupported_exchange(tmp_path):
     with pytest.raises(ValueError, match='Unsupported exchange'):
-        make_job('fakex', 'BTC', 'USD', 60, str(tmp_path), 'UTC', 'parquet', 'M')
+        make_job('fakex', 'BTC', 'USD', 60, str(tmp_path), 'UTC', 'parquet')
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ def _mock_obj(span=60):
 
 def test_ohlc_backfill_dry_run_no_network():
     obj = _mock_obj()
-    job = OHLCBackfill(obj, max_candles=990, sleep=0.0, form='parquet', by_period='M')
+    job = OHLCBackfill(obj, max_candles=990, sleep=0.0, form='parquet')
     job.run('2026-01-01 00:00:00', dry_run=True)
     obj._get_last_date.assert_not_called()
     obj.import_data.assert_not_called()
@@ -131,7 +131,7 @@ def test_ohlc_backfill_dry_run_no_network():
 
 def test_kraken_backfill_dry_run_no_network():
     obj = _mock_obj()
-    job = KrakenBackfill(obj, sleep=0.0, form='parquet', by_period='M')
+    job = KrakenBackfill(obj, sleep=0.0, form='parquet')
     job.run('2026-01-01 00:00:00', dry_run=True)
     obj._get_last_date.assert_not_called()
     obj._fetch.assert_not_called()

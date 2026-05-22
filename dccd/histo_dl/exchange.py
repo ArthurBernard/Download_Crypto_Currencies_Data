@@ -19,7 +19,6 @@ from __future__ import annotations
 
 # Import built-in packages
 import logging
-import os
 import pathlib
 import time
 from abc import ABC, abstractmethod
@@ -32,7 +31,8 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 
 # Import local packages
 from dccd.models import OHLCBar, OrderBookEntry, Trade
-from dccd.tools.date_time import TS_to_date, date_to_TS, span_to_str, str_to_span
+from dccd.storage import DataStore
+from dccd.tools.date_time import date_to_TS, span_to_str, str_to_span
 
 if TYPE_CHECKING:
     import polars as pl
@@ -51,24 +51,29 @@ class ImportDataCryptoCurrencies(ABC):
     Parameters
     ----------
     path : str
-        The path where data will be saved.
+        Root directory where data files are stored.  Data is organised under
+        ``{path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet`` via
+        :class:`~dccd.storage.DataStore`.
     crypto : str
-        The abbreviation of the crypto-currency.
-    span : {int, 'weekly', 'daily', 'hourly'}
-        - If str, periodicity of observation.
-        - If int, number of the seconds between each observation, minimal span\
-            is 60 seconds.
+        The abbreviation of the crypto-currency (e.g. ``'BTC'``).
+    span : int or str
+        Candle interval: if str, a periodicity label (e.g. ``'hourly'``,
+        ``'1h'``); if int, number of seconds (minimum 60).
     platform : str
-        The platform of your choice: 'Binance', 'Kraken', 'Coinbase',
-        'Bybit', 'OKX'.
-    fiat : str
-        A fiat currency or a crypto-currency.
-    form : {'xlsx', 'csv'}
-        Your favorite format. Only 'xlsx' and 'csv' at the moment.
+        Exchange name used for the storage path: ``'Binance'``, ``'Kraken'``,
+        ``'Coinbase'``, ``'Bybit'``, or ``'OKX'``.
+    fiat : str, optional
+        Quote currency (e.g. ``'USDT'``, ``'USD'``).  Default ``'EUR'``.
+    form : str, optional
+        Accepted for backward compatibility; storage format is always Parquet
+        via :class:`~dccd.storage.DataStore`.
+    tz : str, optional
+        Timezone for date parsing.  ``'local'`` (default), ``'UTC'``, or any
+        IANA name.
 
     Notes
     -----
-    Don't use directly this class, use the respective class for each exchange.
+    Do not instantiate this class directly; use the exchange-specific subclass.
 
     See Also
     --------
@@ -77,15 +82,13 @@ class ImportDataCryptoCurrencies(ABC):
     Attributes
     ----------
     pair : str
-        Pair symbol, `crypto + fiat`.
+        Exchange-specific pair string (e.g. ``'BTCUSDT'`` for Binance).
     start, end : int
-        Timestamp to starting and ending download data.
+        Timestamps bounding the last downloaded window.
     span : int
         Number of seconds between observations.
     full_path : str
-        Path to save data.
-    form : str
-        Format to save data.
+        Absolute directory path managed by :class:`~dccd.storage.DataStore`.
     trades_df : pd.DataFrame
         Trades data after calling :meth:`import_trades`.
     orderbook_df : pd.DataFrame
@@ -112,11 +115,10 @@ class ImportDataCryptoCurrencies(ABC):
         self.fiat = fiat
         self.tz = tz
         self.pair = str(crypto + fiat)
-        self.full_path = self.path + '/' + platform + '/Data/Clean_Data/'
-        self.full_path += str(self.per) + '/' + self.pair
-        self.trades_path = self.path + '/' + platform + '/Data/Trades/' + self.pair
-        self.orderbook_path = self.path + '/' + platform + '/Data/OrderBook/' + self.pair
-        self.last_df = pd.DataFrame()
+        self._exchange_name = platform.lower()
+        self._canonical_pair = f'{crypto}/{fiat}'
+        self._store = DataStore(path, self._exchange_name, self._canonical_pair, self.span, 'ohlc')
+        self.full_path = str(self._store.directory)
         self.trades_df: pd.DataFrame = pd.DataFrame()
         self.orderbook_df: pd.DataFrame = pd.DataFrame()
         self.form = form
@@ -136,51 +138,19 @@ class ImportDataCryptoCurrencies(ABC):
     def _get_last_date(self) -> int:
         """ Find the timestamp of the last imported observation.
 
-        Scans :attr:`full_path` for saved files and reads the last row of the
-        most-recent file.  Supports ``.xlsx``, ``.csv``, and ``.parquet``
-        formats.  Falls back to ``1325376000`` (2012-01-01 00:00:00 UTC) when
-        the directory is empty or the file extension is not recognised.
+        Delegates to :meth:`~dccd.storage.DataStore.last_timestamp`.
+        Falls back to ``1325376000`` (2012-01-01 00:00:00 UTC) when no data
+        has been saved yet.
 
         Returns
         -------
         int
-            Unix timestamp of the last row in the latest saved file, or
-            ``1325376000`` if no file is found or the format is unsupported.
+            Unix timestamp of the last saved row, or ``1325376000`` if no
+            file is found.
 
         """
-        pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
-
-        if not os.listdir(self.full_path):
-            return 1325376000
-
-        last_file = sorted(os.listdir(self.full_path), reverse=True)[0]
-        ext = last_file.rsplit('.', 1)[-1]
-        full = os.path.join(self.full_path, last_file)
-
-        try:
-            if ext == 'xlsx':
-                self.last_df = pd.read_excel(full)
-            elif ext == 'csv':
-                self.last_df = pd.read_csv(full)
-            elif ext == 'parquet':
-                self.last_df = pd.read_parquet(full)
-            else:
-                self.logger.warning(
-                    'Unsupported file format %s. Starting at 2012-01-01.', ext
-                )
-                return 1325376000
-        except Exception:
-            self.logger.warning(
-                'Corrupted file %s — removing and restarting from previous '
-                'checkpoint.', full
-            )
-            os.remove(full)
-            return self._get_last_date()
-
-        if 'TS' in self.last_df.columns:
-            return int(self.last_df['TS'].iloc[-1])
-
-        return int(self.last_df.index[-1])
+        ts = self._store.last_timestamp()
+        return ts if ts is not None else 1325376000
 
     def _set_time(self, start: int | str, end: int | str) -> tuple[int, int]:
         """ Set the end and start in timestamp if is not yet.
@@ -213,109 +183,31 @@ class ImportDataCryptoCurrencies(ABC):
         return int((_start // self.span) * self.span), \
             int((_end // self.span) * self.span)
 
-    # Maps the public by_period values to unambiguous strftime formats.
-    _PERIOD_FMT: dict[str, str] = {'Y': '%Y', 'M': '%Y-%m', 'D': '%Y-%m-%d'}
+    def save(self, form: str = 'parquet', by_period: str = 'Y') -> ImportDataCryptoCurrencies:
+        """ Save :attr:`df` to disk via :class:`~dccd.storage.DataStore`.
 
-    def _set_by_period(self, TS: int) -> str:
-        """ Convert a timestamp to a period label for grouping files.
-
-        Parameters
-        ----------
-        TS : int
-            Unix timestamp.
-
-        Returns
-        -------
-        str
-            Date string formatted according to :attr:`by_period`
-            (e.g. ``'2024'`` for ``by_period='Y'``,
-            ``'2024-03'`` for ``by_period='M'``).
-
-        """
-        fmt = self._PERIOD_FMT.get(self.by_period, '%' + self.by_period)
-        return TS_to_date(TS, form=fmt, tz=self.tz)
-
-    def _name_file(self, date: str) -> str:
-        """ Build the file stem for a given period label.
+        Data is always written as Parquet, grouped annually.  The *form* and
+        *by_period* parameters are accepted for backward compatibility but
+        ignored — storage format and period granularity are managed by
+        :class:`~dccd.storage.DataStore`.
 
         Parameters
         ----------
-        date : str
-            Period label returned by :meth:`_set_by_period`.
-
-        Returns
-        -------
-        str
-            File stem of the form ``{per}_of_{crypto}{fiat}_in_{date}``.
+        form : str, optional
+            Ignored.  Kept for backward-compatibility.
+        by_period : str, optional
+            Ignored.  Kept for backward-compatibility.
 
         """
-        return self.per + '_of_' + self.crypto + self.fiat + '_in_' + date
-
-    def save(self, form: str = 'xlsx', by_period: str = 'Y') -> ImportDataCryptoCurrencies:
-        """ Save data by period (default is year) in the corresponding format
-        and file.
-
-        Parameters
-        ----------
-        form : {'xlsx', 'csv', 'parquet'}
-            Format to save data.
-        by_period : {'Y', 'M', 'D'}
-            - If 'Y' group data by year.
-            - If 'M' group data by month.
-            - If 'D' group data by day.
-
-        """
-        df = (pd.concat([self.last_df, self.df], sort=True)
-              .drop_duplicates(subset='TS', keep='last')
-              .reset_index(drop=True)
-              .drop('Date', axis=1)
-              .reindex(columns=[
-                  'TS', 'date', 'time', 'close', 'high', 'low', 'open',
-                  'quoteVolume', 'volume', 'weightedAverage'
-              ]))
-        pathlib.Path(self.full_path).mkdir(parents=True, exist_ok=True)
-        self.by_period = by_period
-        grouped = df.set_index('TS', drop=False).groupby(self._set_by_period)
-        for name, group in grouped:
-            path = self.full_path + '/' + self._name_file(name) + '.' + form
-            if form == 'xlsx':
-                self._excel_format(name, form, group)
-            elif form == 'csv':
-                group.to_csv(path)
-            elif form == 'parquet':
-                group.reset_index(drop=True).to_parquet(path, index=False)
-            else:
-                self.logger.warning('Not allowing format: %s', form)
-        return self
-
-    def _excel_format(self, name: str, form: str, group: pd.DataFrame) -> ImportDataCryptoCurrencies:
-        """ Save a grouped DataFrame slice to an Excel file.
-
-        Parameters
-        ----------
-        name : str
-            Period label used to build the file name via :meth:`_name_file`.
-        form : str
-            File extension (e.g. ``'xlsx'``).
-        group : pd.DataFrame
-            Slice of data for the period ``name``.
-
-        Returns
-        -------
-        ImportDataCryptoCurrencies
-            Returns ``self`` to allow method chaining.
-
-        """
-        path = self.full_path + '/' + self._name_file(name) + '.' + form
-        df_group = group.reset_index(drop=True)
-        with pd.ExcelWriter(path, engine='openpyxl') as writer:
-            df_group.to_excel(
-                writer, header=True, index=False, sheet_name='Sheet1'
-            )
+        df = self.df.copy()
+        if 'Date' in df.columns:
+            df = df.drop('Date', axis=1)
+        self._store.save(df)
+        self.full_path = str(self._store.directory)
         return self
 
     def _sort_data(self, data: list[dict[str, Any]]) -> ImportDataCryptoCurrencies:
-        """ Validate, merge, and sort raw OHLCV data against :attr:`last_df`.
+        """ Validate and sort raw OHLCV data into a uniform timestamp grid.
 
         Validates each record through :class:`~dccd.models.OHLCBar`, builds a
         complete timestamp grid from ``self.start`` to ``self.end``, outer-merges
@@ -515,19 +407,20 @@ class ImportDataCryptoCurrencies(ABC):
         return self
 
     def save_trades(
-        self, form: str = 'csv', by_period: str = 'M'
+        self, form: str = 'parquet', by_period: str = 'D'
     ) -> ImportDataCryptoCurrencies:
-        """ Save :attr:`trades_df` grouped by period to :attr:`trades_path`.
+        """ Save :attr:`trades_df` via :class:`~dccd.storage.DataStore`.
 
-        Files are named ``trades_{crypto}{fiat}_{period}.{form}``.  No
-        forward-fill is applied — trades are sparse event data.
+        Trades are grouped by calendar day and written as Parquet.  The *form*
+        and *by_period* parameters are accepted for backward compatibility but
+        ignored.
 
         Parameters
         ----------
-        form : {'csv', 'parquet'}, optional
-            Output format, default ``'csv'``.
-        by_period : {'Y', 'M', 'D'}, optional
-            Period label for file grouping, default ``'M'``.
+        form : str, optional
+            Ignored.  Kept for backward-compatibility.
+        by_period : str, optional
+            Ignored.  Kept for backward-compatibility.
 
         Returns
         -------
@@ -537,23 +430,8 @@ class ImportDataCryptoCurrencies(ABC):
         """
         if self.trades_df.empty:
             return self
-        pathlib.Path(self.trades_path).mkdir(parents=True, exist_ok=True)
-
-        def _period_label(ts: float) -> str:
-            fmt = ImportDataCryptoCurrencies._PERIOD_FMT.get(by_period, '%' + by_period)
-            return TS_to_date(int(ts), form=fmt, tz=self.tz)
-
-        grouped = self.trades_df.groupby(
-            self.trades_df['TS'].map(_period_label)
-        )
-        for name, group in grouped:
-            fname = (
-                f'{self.trades_path}/trades_{self.crypto}{self.fiat}_{name}.{form}'
-            )
-            if form == 'parquet':
-                group.to_parquet(fname, index=False)
-            else:
-                group.to_csv(fname, index=False)
+        store = DataStore(self.path, self._exchange_name, self._canonical_pair, None, 'trades')
+        store.save(self.trades_df)
         return self
 
     # ------------------------------------------------------------------
@@ -636,15 +514,17 @@ class ImportDataCryptoCurrencies(ABC):
         )
         return self
 
-    def save_orderbook(self, form: str = 'csv') -> ImportDataCryptoCurrencies:
-        """ Save :attr:`orderbook_df` as a timestamped snapshot file.
+    def save_orderbook(self, form: str = 'parquet') -> ImportDataCryptoCurrencies:
+        """ Save :attr:`orderbook_df` via :class:`~dccd.storage.DataStore`.
 
-        Files are named ``orderbook_{crypto}{fiat}_{unix_ts}.{form}``.
+        The snapshot is timestamped with the current UTC time and written into
+        the daily orderbook file.  The *form* parameter is accepted for
+        backward compatibility but ignored.
 
         Parameters
         ----------
-        form : {'csv', 'parquet'}, optional
-            Output format, default ``'csv'``.
+        form : str, optional
+            Ignored.  Kept for backward-compatibility.
 
         Returns
         -------
@@ -654,15 +534,11 @@ class ImportDataCryptoCurrencies(ABC):
         """
         if self.orderbook_df.empty:
             return self
-        pathlib.Path(self.orderbook_path).mkdir(parents=True, exist_ok=True)
-        ts = int(time.time())
-        fname = (
-            f'{self.orderbook_path}/orderbook_{self.crypto}{self.fiat}_{ts}.{form}'
-        )
-        if form == 'parquet':
-            self.orderbook_df.to_parquet(fname, index=False)
-        else:
-            self.orderbook_df.to_csv(fname, index=False)
+        df = self.orderbook_df.copy()
+        if 'TS' not in df.columns:
+            df.insert(0, 'TS', int(time.time()))
+        store = DataStore(self.path, self._exchange_name, self._canonical_pair, None, 'orderbook')
+        store.save(df)
         return self
 
     # ------------------------------------------------------------------
@@ -683,3 +559,5 @@ class ImportDataCryptoCurrencies(ABC):
         self.full_path = self.path
         for elt in liste:
             self.full_path += '/' + elt
+        # Reset the store directory cache so the next save uses full_path.
+        self._store._dir = pathlib.Path(self.full_path)

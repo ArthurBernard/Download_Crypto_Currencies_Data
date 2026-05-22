@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dccd/storage.py` — new `DataStore` class: unified read/write interface for OHLC, trades, and orderbook; `save(df)` (merge-on-TS, annual OHLC / daily trades+orderbook), `load(start, end)`, `existing_periods()`, `last_timestamp()`, `missing_intervals()` (stub for 3.2) (#39)
+- `dccd/tools/date_time.py` — `span_label(span)` converts seconds to short directory labels (``'1m'``, ``'1h'``, ``'1d'``…); `_SPAN_LABEL` mapping exported (#39)
+- `dccd/tests/test_storage.py` — 23 unit tests for `DataStore` (save/load/merge/missing_intervals/corrupted file recovery) (#39)
+- `doc/source/storage.rst` — Sphinx page for `DataStore` with directory layout examples (#39)
+
+### Changed
+
+- New storage arborescence: ``{data_path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet``, ``…/trades/{pair}/YYYY-MM-DD.parquet``, ``…/orderbook/{pair}/YYYY-MM-DD.parquet`` — replaces the old ``{Exchange}/Data/Clean_Data/{per}/{pair}/`` layout (#39)
+- `dccd/histo_dl/exchange.py` — `save()`, `_get_last_date()`, `save_trades()`, `save_orderbook()` now delegate to `DataStore`; removed `last_df`, `_set_by_period`, `_name_file`, `_excel_format` (#39)
+- `dccd/histo_dl/{binance,bybit,coinbase,okx}.py` — removed `full_path` overrides (base class sets the correct path via `DataStore`) (#39)
+- `dccd/daemon/backfill.py`, `scheduler.py` — removed `by_period` parameter; `save()` call simplified (#39)
+- `dccd/daemon/stream_manager.py` — WebSocket save path now built from `DataStore.directory` (#39)
+- `dccd/daemon/config.py` — `HistoJob.by_period` field removed; granularity is automatic (#39)
+
 - `dccd/histo_dl/exchange.py` — `save()` now supports `form='parquet'`; previously only `'xlsx'` and `'csv'` were handled (#35)
 - `config.yml` — ready-to-use daemon config for minutely OHLC + real-time orderbook/trades on Binance, Kraken, and Bybit (#35)
 - `dccd/daemon/backfill.py` — `OHLCBackfill` and `KrakenBackfill` strategy classes with shared retry/progress/save loop; `make_job()` factory; `run_backfill()` orchestrator; tqdm progress bars and optional `--parallel` execution (#38)

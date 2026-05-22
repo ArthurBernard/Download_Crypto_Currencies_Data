@@ -94,6 +94,9 @@ class FromOKX(ImportDataCryptoCurrencies):
         Timestamps bounding the download.
     span : int
         Seconds between observations.
+    full_path : str
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/okx/ohlc/{pair}/{span}/``.
 
     Methods
     -------
@@ -130,8 +133,6 @@ class FromOKX(ImportDataCryptoCurrencies):
             self, path, crypto, span, 'OKX', fiat, form, tz=tz
         )
         self.pair = self.format_pair(crypto, fiat)
-        self.full_path = self.path + '/OKX/Data/Clean_Data/'
-        self.full_path += self.per + '/' + self.crypto + self.fiat
 
     def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)

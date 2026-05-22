@@ -69,9 +69,8 @@ class FromKraken(ImportDataCryptoCurrencies):
     span : int
         Number of seconds between observations.
     full_path : str
-        Path to save data.
-    form : str
-        Format to save data.
+        Directory managed by :class:`~dccd.storage.DataStore` —
+        ``{path}/kraken/ohlc/{pair}/{span}/``.
 
     Methods
     -------

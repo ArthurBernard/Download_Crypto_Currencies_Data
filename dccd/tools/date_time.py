@@ -24,8 +24,14 @@ _logger = logging.getLogger(__name__)
 
 __all__ = [
     'TS_to_date', 'date_to_TS', 'str_to_span', 'span_to_str',
-    'binance_interval',
+    'span_label', 'binance_interval',
 ]
+
+_SPAN_LABEL: dict[int, str] = {
+    60: '1m', 180: '3m', 300: '5m', 900: '15m', 1800: '30m',
+    3600: '1h', 7200: '2h', 14400: '4h', 21600: '6h', 28800: '8h',
+    43200: '12h', 86400: '1d', 604800: '1w',
+}
 
 
 def TS_to_date(TS: int, form: str = '%Y-%m-%d %H:%M:%S', tz: str = 'local') -> str:
@@ -213,6 +219,33 @@ def span_to_str(span: int) -> str | None:
     if label is None:
         _logger.warning('Error, no string correspond to this time in seconds.')
     return label
+
+
+def span_label(span: int) -> str:
+    """ Return a short directory-safe label for *span* seconds.
+
+    Parameters
+    ----------
+    span : int
+        Candle interval in seconds.
+
+    Returns
+    -------
+    str
+        Short label (e.g. ``'1m'``, ``'1h'``, ``'1d'``).
+        Falls back to ``'{span}s'`` for unknown spans.
+
+    Examples
+    --------
+    >>> span_label(3600)
+    '1h'
+    >>> span_label(86400)
+    '1d'
+    >>> span_label(7777)
+    '7777s'
+
+    """
+    return _SPAN_LABEL.get(span, f'{span}s')
 
 
 def binance_interval(interval: int) -> str | None:

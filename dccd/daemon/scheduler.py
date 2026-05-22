@@ -50,7 +50,7 @@ def run_histo_job(job: HistoJob, pair: str, base_path: str,
     Parameters
     ----------
     job : HistoJob
-        Job configuration (exchange, span, format, by_period).
+        Job configuration (exchange, span, format).
     pair : str
         Trading pair in ``'CRYPTO/FIAT'`` format (e.g. ``'BTC/USDT'``).
     base_path : str
@@ -65,7 +65,7 @@ def run_histo_job(job: HistoJob, pair: str, base_path: str,
     cls = _HISTO_CLASSES[job.exchange]
     try:
         obj = cls(base_path, crypto, job.span, fiat, form=job.format, tz=tz)
-        obj.import_data('last', 'now').save(form=job.format, by_period=job.by_period)
+        obj.import_data('last', 'now').save()
         _data = getattr(obj, 'data', None)
         rows = len(_data) if _data is not None else 0
         logger.info('histo job done: %s %s span=%s', job.exchange, pair, job.span)
@@ -116,11 +116,11 @@ def build_histo_scheduler(config: CollectorConfig,
                 trigger='interval',
                 seconds=job.span,
                 kwargs={
-                    'job': job,
-                    'pair': pair,
+                    'job':       job,
+                    'pair':      pair,
                     'base_path': config.storage.local_path,
-                    'tz': config.settings.timezone,
-                    'health': health,
+                    'tz':        config.settings.timezone,
+                    'health':    health,
                 },
                 id=job_id,
                 name=f'{job.exchange} {pair} {job.span}s',

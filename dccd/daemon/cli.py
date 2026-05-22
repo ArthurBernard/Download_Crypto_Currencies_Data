@@ -134,9 +134,9 @@ def backfill(
 ) -> None:
     """ Download the full OHLC history for all histo_jobs in the config.
 
-    Reads exchanges, pairs, span, format, and by_period from the config
-    file.  Resumes from the last saved timestamp for each pair so the
-    command is safe to run repeatedly.
+    Reads exchanges, pairs, span, and format from the config file.
+    Resumes from the last saved timestamp for each pair so the command is
+    safe to run repeatedly.
 
     Kraken uses a trades-based strategy (Kraken's OHLC endpoint does not
     support arbitrary historical windows); all other exchanges use the
