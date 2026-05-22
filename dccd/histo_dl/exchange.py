@@ -328,13 +328,12 @@ class ImportDataCryptoCurrencies(ABC):
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
         df = pd.DataFrame(data).rename(columns={'date': 'TS'})
-        # Cap grid end to actual data max so Kraken (which sets self.end=now
-        # regardless of the requested window) doesn't produce a grid of
-        # millions of rows for old windows.
-        grid_end = (int(df['TS'].max()) + self.span) if not df.empty else self.end
-        grid_end = min(grid_end, self.end)
+        # Use self.end as the exclusive grid boundary so the full window is
+        # covered even when the last trade arrives >span seconds before the
+        # window end.  Callers must set self.end to the correct window
+        # boundary before calling _sort_data (the backfill scripts do this).
         TS = pd.DataFrame(
-            list(range(self.start, grid_end, self.span)),
+            list(range(self.start, self.end, self.span)),
             columns=['TS']
         )
         df = (df.merge(TS, on='TS', how='outer', sort=False)
