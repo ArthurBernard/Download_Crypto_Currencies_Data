@@ -88,6 +88,8 @@ def date_to_TS(date: str, form: str = '%Y-%m-%d %H:%M:%S', tz: str = 'local') ->
     1548432099
 
     """
+    if form == '%Y-%m-%d %H:%M:%S' and len(date) == 10:
+        form = '%Y-%m-%d'
     t = time.strptime(date, form)
     if tz.upper() == 'LOCAL':
         return int(time.mktime(t))
