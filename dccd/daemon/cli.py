@@ -146,7 +146,7 @@ def backfill(
     from dccd.daemon.backfill import run_backfill
 
     cfg = _load(config)
-    run_backfill(
+    run_backfill(  # type: ignore[arg-type]
         cfg,
         exchange=exchange,
         pairs=list(pairs) if pairs else None,
