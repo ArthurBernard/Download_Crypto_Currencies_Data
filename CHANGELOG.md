@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dccd/histo_dl/exchange.py` — `self.end` now reflects the last candle timestamp so window-loop callers advance correctly (was stuck at `now` for Kraken) (#36)
 - `dccd/histo_dl/binance.py` — missing `limit=1000` parameter caused Binance to return only 500 candles per request (#36)
 - `dccd/histo_dl/bybit.py` — `limit` was 200; raised to 1 000 to match the API maximum (#36)
+- `dccd/histo_dl/exchange.py` — `_sort_data()` dropped the minute just before a window boundary when the last trade arrived ≥2 spans early; grid now uses `self.end` directly as the exclusive stop (#36)
 
 ## [2.2.0] - 2026-05-17
 
