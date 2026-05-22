@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `dccd/histo_dl/exchange.py` — `save()` now supports `form='parquet'`; previously only `'xlsx'` and `'csv'` were handled (#35)
 - `config.yml` — ready-to-use daemon config for minutely OHLC + real-time orderbook/trades on Binance, Kraken, and Bybit (#35)
-- `dccd/daemon/backfill.py` — `OHLCBackfill` and `KrakenBackfill` strategy classes with shared retry/progress/save loop; `make_job()` factory; `run_backfill()` orchestrator; tqdm progress bars and optional `--parallel` execution (#XX)
-- `dccd/daemon/cli.py` — `dccd backfill` command: reads all job definitions from config, supports `--exchange` / `--pairs` filters, `--start`, `--parallel`, and `--dry-run` flags (#XX)
-- `dccd/daemon/config.py` — `SettingsConfig` with `data_path` and `timezone` fields; `CollectorConfig.settings` propagates `data_path` to `StorageConfig.local_path` when not set explicitly (#XX)
+- `dccd/daemon/backfill.py` — `OHLCBackfill` and `KrakenBackfill` strategy classes with shared retry/progress/save loop; `make_job()` factory; `run_backfill()` orchestrator; tqdm progress bars and optional `--parallel` execution (#38)
+- `dccd/daemon/cli.py` — `dccd backfill` command: reads all job definitions from config, supports `--exchange` / `--pairs` filters, `--start`, `--parallel`, and `--dry-run` flags (#38)
+- `dccd/daemon/config.py` — `SettingsConfig` with `data_path` and `timezone` fields; `CollectorConfig.settings` propagates `data_path` to `StorageConfig.local_path` when not set explicitly (#38)
 
 ### Removed
 
-- `scripts/backfill.py` — replaced by `dccd backfill` CLI command and `dccd.daemon.backfill` module (#XX)
+- `scripts/backfill.py` — replaced by `dccd backfill` CLI command and `dccd.daemon.backfill` module (#38)
 
 ### Fixed
 
