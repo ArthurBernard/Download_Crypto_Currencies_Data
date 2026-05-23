@@ -126,8 +126,10 @@ class FromCoinbase(ImportDataCryptoCurrencies):
             param,
         )
         text = r.json()
-        if isinstance(text, dict):
-            raise RuntimeError(f"Coinbase API error: {text.get('message', text)}")
+        if not isinstance(text, list):
+            raise RuntimeError(f"Coinbase API error: {text!r:.200}")
+        if text and not isinstance(text[0], (list, tuple)):
+            raise RuntimeError(f"Coinbase unexpected response: {text[:3]!r:.200}")
         data = [{
             'date': float(e[0]),
             'open': float(e[3]),

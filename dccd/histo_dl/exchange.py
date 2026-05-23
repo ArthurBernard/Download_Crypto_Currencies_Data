@@ -230,6 +230,14 @@ class ImportDataCryptoCurrencies(ABC):
         if df.empty or 'TS' not in df.columns:
             self.df = df
             return self
+        # Discard any candle at or beyond self.end: those belong to the next
+        # window.  Without this filter, exchanges that return the endpoint
+        # candle (inclusive API boundary) would cause _advance to overshoot
+        # by one span, and the drift compounds over many windows.
+        # Guard: only filter when self.end is set (> 0); direct callers that
+        # bypass _set_time leave self.end = 0, so we skip the filter.
+        if self.end > 0:
+            df = df[df['TS'] < self.end]
         # Use self.end as the exclusive grid boundary so the full window is
         # covered even when the last trade arrives >span seconds before the
         # window end.  Callers must set self.end to the correct window
@@ -238,6 +246,9 @@ class ImportDataCryptoCurrencies(ABC):
             list(range(self.start, self.end, self.span)),
             columns=['TS']
         )
+        if df.empty or 'TS' not in df.columns:
+            self.df = df
+            return self
         df = (df.merge(TS, on='TS', how='outer', sort=False)
               .sort_values('TS')
               .reset_index(drop=True)
