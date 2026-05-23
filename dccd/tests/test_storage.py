@@ -336,6 +336,52 @@ def test_missing_intervals_already_up_to_date(tmp_path):
     assert intervals == []
 
 
+def test_missing_intervals_start_before_file_min_current_year(tmp_path):
+    """File starts mid-year; requested start is before file_min → beginning gap + trailing gap."""
+    from datetime import datetime, timezone
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    current_year = datetime.now(tz=timezone.utc).year
+    year_start = int(datetime(current_year, 1, 1, tzinfo=timezone.utc).timestamp())
+    # File covers mid-May onwards (simulates the user's real situation)
+    file_start = year_start + 100 * span
+    file_end   = year_start + 110 * span
+    store.save(_ohlc_df(list(range(file_start, file_end + span, span))))
+    end_ts = file_end + 50 * span
+
+    intervals = store.missing_intervals(year_start, end_ts)
+
+    # Expect two intervals: [year_start, file_start) and [file_end+span, end_ts)
+    assert len(intervals) == 2
+    assert intervals[0] == (year_start, file_start)
+    assert intervals[1] == (file_end + span, end_ts)
+
+
+def test_missing_intervals_start_before_file_min_past_year(tmp_path):
+    """Past incomplete year where file starts after requested start → beginning gap returned."""
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    file_start = _Y2023 + 100 * span
+    file_end   = _Y2023 + 200 * span
+    store.save(_ohlc_df(list(range(file_start, file_end + span, span))))
+
+    intervals = store.missing_intervals(_Y2023, _Y2024)
+
+    assert len(intervals) == 2
+    assert intervals[0] == (_Y2023, file_start)
+    assert intervals[1] == (file_end + span, _Y2024)
+
+
+def test_missing_intervals_file_already_covers_full_request(tmp_path):
+    """File already covers [start, end] exactly → no intervals."""
+    span = 3600
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', span, 'ohlc')
+    store.save(_ohlc_df(list(range(_Y2023, _Y2023 + 10 * span + span, span))))
+    end_ts = _Y2023 + 5 * span
+    intervals = store.missing_intervals(_Y2023, end_ts)
+    assert intervals == []
+
+
 def test_missing_intervals_non_ohlc_simple_resume(tmp_path):
     store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', None, 'trades')
     store.save(_trades_df([1672531200]))
