@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `dccd/histo_dl/coinbase.py` — raise `RuntimeError` when Coinbase returns HTTP 200 with a JSON dict (e.g. `{"message": "..."}` for near-future windows) instead of silently iterating dict keys and crashing with `ValueError` (#XX)
+- `dccd/histo_dl/exchange.py` — `_sort_data` no longer raises `KeyError: 'TS'` when the API returns empty data; returns early with an empty `self.df` so the backfill skips the window cleanly (#XX)
+- `dccd/histo_dl/okx.py` — raise `RuntimeError` when OKX response code is not `"0"`, letting the backfill retry/skip logic handle API-level errors (#XX)
+
 ## [2.3.0] - 2026-05-22
 
 ### Added
