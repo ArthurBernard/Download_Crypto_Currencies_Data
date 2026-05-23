@@ -47,7 +47,7 @@ def test_malformed_response_raises(loader, monkeypatch):
     m.status_code = 200
     m.json.return_value = {"error": "bad"}
     monkeypatch.setattr("requests.get", lambda *a, **kw: m)
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises((TypeError, ValueError, RuntimeError)):
         loader._import_data(start=0)
 
 

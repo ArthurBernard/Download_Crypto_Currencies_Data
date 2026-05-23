@@ -146,7 +146,10 @@ class FromOKX(ImportDataCryptoCurrencies):
         }
 
         r = self._fetch('https://www.okx.com/api/v5/market/candles', param)
-        text = r.json()['data']
+        body = r.json()
+        if body.get('code', '0') != '0':
+            raise RuntimeError(f"OKX API error {body['code']}: {body.get('msg', body)}")
+        text = body['data']
         text.reverse()
 
         data = [{

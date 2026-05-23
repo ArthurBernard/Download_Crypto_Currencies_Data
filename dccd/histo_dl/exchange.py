@@ -227,6 +227,9 @@ class ImportDataCryptoCurrencies(ABC):
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
         df = pd.DataFrame(data).rename(columns={'date': 'TS'})
+        if df.empty or 'TS' not in df.columns:
+            self.df = df
+            return self
         # Use self.end as the exclusive grid boundary so the full window is
         # covered even when the last trade arrives >span seconds before the
         # window end.  Callers must set self.end to the correct window
