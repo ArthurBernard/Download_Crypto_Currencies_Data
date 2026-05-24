@@ -224,6 +224,16 @@ CLI quick start:
     # Continuous daemon (Ctrl-C to stop)
     dccd start --config config.yml
 
+    # Add / remove a histo job in-place
+    dccd add --exchange kraken --pair ETH/USD --span 86400 --config config.yml
+    dccd remove --exchange kraken --pair ETH/USD --span 86400 --config config.yml
+
+    # Inspect all data on disk (OHLC, trades, orderbook)
+    dccd inventory --config config.yml
+
+Note: ``--config`` is optional — dccd searches ``./config.yml`` then
+``~/.config/dccd/config.yml`` when omitted.
+
 Python API:
 
 .. code-block:: python

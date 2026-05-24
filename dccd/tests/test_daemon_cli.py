@@ -108,6 +108,144 @@ def test_add_histo_job(config_file: Path) -> None:
     assert 'ETH/USD' in pairs_all
 
 
+# ---------------------------------------------------------------------------
+# dccd remove
+# ---------------------------------------------------------------------------
+
+def test_remove_pair(config_file: Path) -> None:
+    # Add a second pair first so removing BTC/USDT leaves the job alive
+    result = runner.invoke(app, [
+        'add', '--exchange', 'binance', '--pair', 'ETH/USDT', '--span', '3600',
+        '--config', str(config_file),
+    ])
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, [
+        'remove', '--exchange', 'binance', '--pair', 'BTC/USDT', '--span', '3600',
+        '--config', str(config_file),
+    ])
+    assert result.exit_code == 0
+    loaded = yaml.safe_load(config_file.read_text())
+    pairs_all = [p for job in loaded['histo_jobs'] for p in job['pairs']]
+    assert 'BTC/USDT' not in pairs_all
+    assert 'ETH/USDT' in pairs_all
+
+
+def test_remove_last_pair_removes_job(tmp_path: Path) -> None:
+    # Config with two jobs so removing one still leaves a valid config
+    cfg = {
+        'storage': {'local_path': '/tmp'},
+        'histo_jobs': [
+            {'exchange': 'binance', 'pairs': ['BTC/USDT'], 'span': 3600},
+            {'exchange': 'kraken', 'pairs': ['ETH/USD'], 'span': 3600},
+        ],
+    }
+    p = tmp_path / 'config.yml'
+    p.write_text(yaml.dump(cfg))
+
+    result = runner.invoke(app, [
+        'remove', '--exchange', 'binance', '--pair', 'BTC/USDT', '--span', '3600',
+        '--config', str(p),
+    ])
+    assert result.exit_code == 0
+    loaded = yaml.safe_load(p.read_text())
+    assert all(j['exchange'] != 'binance' for j in loaded['histo_jobs'])
+
+
+def test_remove_not_found(config_file: Path) -> None:
+    result = runner.invoke(app, [
+        'remove', '--exchange', 'binance', '--pair', 'XRP/USDT', '--span', '3600',
+        '--config', str(config_file),
+    ])
+    assert result.exit_code == 1
+    assert 'No matching job' in result.output
+
+
+def test_remove_last_job_fails(config_file: Path) -> None:
+    original = config_file.read_text()
+    result = runner.invoke(app, [
+        'remove', '--exchange', 'binance', '--pair', 'BTC/USDT', '--span', '3600',
+        '--config', str(config_file),
+    ])
+    assert result.exit_code == 1
+    assert config_file.read_text() == original  # file unchanged
+
+
+# ---------------------------------------------------------------------------
+# dccd inventory
+# ---------------------------------------------------------------------------
+
+def _write_ohlc_parquet(data_path: Path, exchange: str, pair: str, span: str, year: int,
+                         timestamps: list) -> None:
+    import pandas as pd
+    p = data_path / exchange / 'ohlc' / pair.replace('/', '-') / span / f'{year}.parquet'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({'TS': timestamps}).to_parquet(p)
+
+
+def _write_trades_parquet(data_path: Path, exchange: str, pair: str, day: str,
+                           timestamps: list) -> None:
+    import pandas as pd
+    p = data_path / exchange / 'trades' / pair.replace('/', '-') / f'{day}.parquet'
+    p.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({'TS': timestamps}).to_parquet(p)
+
+
+@pytest.fixture()
+def inventory_config(tmp_path: Path) -> tuple[Path, Path]:
+    data_path = tmp_path / 'data'
+    cfg = {
+        'storage': {'local_path': str(data_path)},
+        'histo_jobs': [{'exchange': 'binance', 'pairs': ['BTC/USDT'], 'span': 3600}],
+    }
+    cfg_file = tmp_path / 'config.yml'
+    cfg_file.write_text(yaml.dump(cfg))
+    return cfg_file, data_path
+
+
+def test_inventory_shows_ohlc(inventory_config: tuple) -> None:
+    cfg_file, data_path = inventory_config
+    _write_ohlc_parquet(data_path, 'binance', 'BTC/USDT', '1h', 2024,
+                         [1704067200, 1704070800])
+    result = runner.invoke(app, ['inventory', '--config', str(cfg_file)])
+    assert result.exit_code == 0
+    assert 'binance' in result.output
+    assert 'BTC/USDT' in result.output
+    assert 'ohlc' in result.output
+    assert '1h' in result.output
+
+
+def test_inventory_shows_trades(inventory_config: tuple) -> None:
+    cfg_file, data_path = inventory_config
+    _write_trades_parquet(data_path, 'binance', 'BTC/USDT', '2024-01-01',
+                           [1704067200, 1704067260])
+    result = runner.invoke(app, ['inventory', '--config', str(cfg_file)])
+    assert result.exit_code == 0
+    assert 'trades' in result.output
+
+
+def test_inventory_no_data(inventory_config: tuple) -> None:
+    cfg_file, data_path = inventory_config
+    data_path.mkdir(parents=True, exist_ok=True)
+    result = runner.invoke(app, ['inventory', '--config', str(cfg_file)])
+    assert result.exit_code == 0
+    assert 'No data found' in result.output
+
+
+def test_inventory_counts_gaps(inventory_config: tuple) -> None:
+    cfg_file, data_path = inventory_config
+    # Two annual files with a missing year in between → 1 gap
+    _write_ohlc_parquet(data_path, 'binance', 'BTC/USDT', '1h', 2022, [1641024000])
+    _write_ohlc_parquet(data_path, 'binance', 'BTC/USDT', '1h', 2024, [1704067200])
+    result = runner.invoke(app, ['inventory', '--config', str(cfg_file)])
+    assert result.exit_code == 0
+    assert '1' in result.output  # gaps column should show 1
+
+
+# ---------------------------------------------------------------------------
+# XDG fallback tests
+# ---------------------------------------------------------------------------
+
 def test_validate_no_config_uses_xdg(config_file: Path) -> None:
     with patch('dccd.daemon.config.resolve_config_path', return_value=config_file):
         result = runner.invoke(app, ['validate'])
