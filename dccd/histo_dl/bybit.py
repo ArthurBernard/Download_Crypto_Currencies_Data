@@ -209,7 +209,7 @@ class FromBybit(ImportDataCryptoCurrencies):
 
         Returns
         -------
-        data : pd.DataFrame
+        data : pl.DataFrame
             OHLCV data sorted and cleaned.
 
         """

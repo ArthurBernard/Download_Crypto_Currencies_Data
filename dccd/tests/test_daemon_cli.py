@@ -177,18 +177,18 @@ def test_remove_last_job_fails(config_file: Path) -> None:
 
 def _write_ohlc_parquet(data_path: Path, exchange: str, pair: str, span: str, year: int,
                          timestamps: list) -> None:
-    import pandas as pd
+    import polars as pl
     p = data_path / exchange / 'ohlc' / pair.replace('/', '-') / span / f'{year}.parquet'
     p.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({'TS': timestamps}).to_parquet(p)
+    pl.DataFrame({'TS': timestamps}).write_parquet(p)
 
 
 def _write_trades_parquet(data_path: Path, exchange: str, pair: str, day: str,
                            timestamps: list) -> None:
-    import pandas as pd
+    import polars as pl
     p = data_path / exchange / 'trades' / pair.replace('/', '-') / f'{day}.parquet'
     p.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({'TS': timestamps}).to_parquet(p)
+    pl.DataFrame({'TS': timestamps}).write_parquet(p)
 
 
 @pytest.fixture()

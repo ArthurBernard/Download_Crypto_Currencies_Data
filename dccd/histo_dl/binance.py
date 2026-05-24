@@ -191,7 +191,7 @@ class FromBinance(ImportDataCryptoCurrencies):
 
         Returns
         -------
-        data : pd.DataFrame
+        data : pl.DataFrame
             Data sorted and cleaned in a data frame.
 
         """
