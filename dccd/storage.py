@@ -319,18 +319,23 @@ class DataStore:
 
             file_path = self.directory / f'{year}.parquet'
 
-            if year < current_year and file_path.exists():
-                if self.is_period_complete(year):
+            if file_path.exists():
+                if year < current_year and self.is_period_complete(year):
                     continue  # full year already on disk — skip
-                # incomplete past year: resume from last saved row
                 df = pd.read_parquet(file_path, columns=['TS'])
                 if not df.empty:
-                    ivl_start = int(df['TS'].max()) + self.span
-            elif file_path.exists():
-                # current year: always extend from the last saved row
-                df = pd.read_parquet(file_path, columns=['TS'])
-                if not df.empty:
-                    ivl_start = int(df['TS'].max()) + self.span
+                    file_min = int(df['TS'].min())
+                    file_max = int(df['TS'].max())
+                    # Gap before the first saved row (e.g. backfill requested
+                    # from an earlier date than the file's first candle)
+                    if ivl_start < file_min:
+                        intervals.append((ivl_start, file_min))
+                    # Trailing gap after the last saved row
+                    trailing = file_max + self.span
+                    if trailing < ivl_end:
+                        intervals.append((trailing, ivl_end))
+                    continue
+                # file exists but is empty: fall through to full-interval append
 
             if ivl_start < ivl_end:
                 intervals.append((ivl_start, ivl_end))
