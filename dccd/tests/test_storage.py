@@ -112,6 +112,30 @@ def test_save_merges_with_existing(tmp_path):
     assert sorted(result['TS'].to_list()) == [1672531200, 1672534800, 1672538400]
 
 
+def test_save_merges_with_legacy_pandas_file(tmp_path):
+    """Old pandas files with extra date/time columns are read transparently."""
+    import pandas as pd
+    from datetime import datetime, timezone
+    store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
+    # Simulate a pandas-written file with extra date/time columns
+    ts = 1672531200
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    old_file = store.directory / '2023.parquet'
+    pd.DataFrame({
+        'TS': [ts],
+        'open': [100.0], 'high': [101.0], 'low': [99.0], 'close': [100.5], 'volume': [1.0],
+        'date': [dt.date()],
+        'time': [dt.time()],
+    }).to_parquet(old_file, index=False)
+
+    # Saving new polars data should merge correctly (not overwrite the old row)
+    store.save(_ohlc_df([1672534800]))  # next hour
+
+    result = pl.read_parquet(old_file)
+    assert 1672531200 in result['TS'].to_list()
+    assert 1672534800 in result['TS'].to_list()
+
+
 def test_save_empty_df_is_noop(tmp_path):
     store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
     store.save(pl.DataFrame())
