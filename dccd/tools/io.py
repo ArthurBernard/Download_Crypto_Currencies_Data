@@ -18,7 +18,13 @@ from pickle import Pickler, Unpickler
 from typing import Any, Literal
 
 # Third-party packages
-import pandas as pd
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    pd = None  # type: ignore[assignment]
+    HAS_PANDAS = False
+
 from sqlalchemy import URL, create_engine
 
 try:
