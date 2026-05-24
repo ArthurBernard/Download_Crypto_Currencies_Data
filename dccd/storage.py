@@ -36,32 +36,6 @@ __all__ = ['DataStore']
 
 logger = logging.getLogger(__name__)
 
-
-def _read_parquet_compat(
-    file_path: pathlib.Path, columns: list[str]
-) -> pl.DataFrame | None:
-    """Read *file_path* keeping only *columns*, with a pyarrow fallback.
-
-    Old files written by pandas may contain columns with types polars cannot
-    deserialise (e.g. ``date``/``time`` from ``datetime.date``/``datetime.time``
-    Python objects).  Requesting only the relevant columns avoids those.  If
-    even the targeted columns are unreadable, fall back to pyarrow to obtain the
-    schema, select the intersection, and convert.  Returns ``None`` on failure.
-    """
-    try:
-        return pl.read_parquet(file_path, columns=columns)
-    except Exception:
-        pass
-    try:
-        import pyarrow.parquet as pq
-        schema_names = pq.read_schema(str(file_path)).names
-        read_cols = [c for c in columns if c in schema_names]
-        if 'TS' not in read_cols:
-            return None
-        return pl.from_arrow(pq.read_table(str(file_path), columns=read_cols))
-    except Exception:
-        return None
-
 _DEFAULT_START_TS: int = 1325376000  # 2012-01-01 00:00:00 UTC
 
 
@@ -161,14 +135,14 @@ class DataStore:
             group = df_with_period.filter(pl.col('_period') == label).drop('_period')
             file_path = self.directory / f'{label}.parquet'
             if file_path.exists():
-                existing = _read_parquet_compat(file_path, group.columns)
-                if existing is not None:
+                try:
+                    existing = pl.read_parquet(file_path)
                     group = (
                         pl.concat([existing, group])
                         .unique(subset=['TS'], keep='last')
                         .sort('TS')
                     )
-                else:
+                except Exception:
                     logger.warning('Corrupted file %s — overwriting.', file_path)
                     group = group.unique(subset=['TS'], keep='last').sort('TS')
             else:
