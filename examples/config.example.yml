@@ -48,6 +48,8 @@ histo_jobs:
       - ETH/USDT
     span: 3600                 # candle interval in seconds (>= 60)
     format: parquet            # one of: parquet, csv, xlsx
+    # max_retries: 3           # attempts per window on transient errors (1–10, default 3)
+    # retry_delay: 2.0         # base delay in seconds; actual delay = retry_delay * 2^(attempt-1)
 
   - exchange: kraken
     pairs:

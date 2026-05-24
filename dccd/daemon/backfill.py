@@ -93,6 +93,12 @@ class _BackfillBase(ABC):
     form : str
         Output format (accepted for backward compatibility; storage is
         always Parquet via :class:`~dccd.storage.DataStore`).
+    max_retries : int, optional
+        Maximum fetch attempts per window before skipping it.  Default 3.
+    retry_delay : float, optional
+        Base delay in seconds between retries.  Actual delay is
+        ``retry_delay * 2 ** (attempt - 1)`` (exponential back-off).
+        Default 2.0.
 
     """
 
@@ -101,10 +107,14 @@ class _BackfillBase(ABC):
         obj: ImportDataCryptoCurrencies,
         sleep: float,
         form: str,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
     ) -> None:
         self.obj = obj
         self.sleep = sleep
         self.form = form
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         cls_name = type(obj).__name__[4:]  # strip leading 'From'
         self.label = f'{cls_name:8s} {obj.crypto}/{obj.fiat}'
 
@@ -207,22 +217,23 @@ class _BackfillBase(ABC):
 
                 last_exc: Exception | None = None
                 n = 0
-                for attempt in range(1, _MAX_RETRIES + 1):
+                for attempt in range(1, self.max_retries + 1):
                     try:
                         n = self._fetch_window(current, end)
                         break
                     except Exception as exc:
                         last_exc = exc
-                        if attempt < _MAX_RETRIES:
+                        if attempt < self.max_retries:
+                            delay = self.retry_delay * (2 ** (attempt - 1))
                             tqdm.write(
-                                f'[{self.label}] attempt {attempt}/{_MAX_RETRIES} '
-                                f'failed: {exc} — retrying in 2s'
+                                f'[{self.label}] attempt {attempt}/{self.max_retries} '
+                                f'failed: {exc} — retrying in {delay:.1f}s'
                             )
-                            time_mod.sleep(2)
+                            time_mod.sleep(delay)
                 else:
                     tqdm.write(
                         f'[{self.label}] window {current} failed after '
-                        f'{_MAX_RETRIES} attempts: {last_exc} — skipping'
+                        f'{self.max_retries} attempts: {last_exc} — skipping'
                     )
                     skipped += 1
                     current += self.window_size
@@ -265,6 +276,10 @@ class OHLCBackfill(_BackfillBase):
         Seconds to wait between requests.
     form : str
         Output format (accepted for backward compatibility).
+    max_retries : int, optional
+        See :class:`_BackfillBase`.  Default 3.
+    retry_delay : float, optional
+        See :class:`_BackfillBase`.  Default 2.0.
 
     """
 
@@ -274,8 +289,10 @@ class OHLCBackfill(_BackfillBase):
         max_candles: int,
         sleep: float,
         form: str,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
     ) -> None:
-        super().__init__(obj, sleep, form)
+        super().__init__(obj, sleep, form, max_retries=max_retries, retry_delay=retry_delay)
         self.max_candles = max_candles
 
     @property
@@ -496,6 +513,8 @@ def make_job(
     path: str,
     tz: str,
     form: str,
+    max_retries: int = 3,
+    retry_delay: float = 2.0,
 ) -> _BackfillBase:
     """Build the appropriate backfill strategy for an (exchange, pair).
 
@@ -542,13 +561,16 @@ def make_job(
     obj = cls(path, crypto, span, fiat, form=form, tz=tz)
 
     if exchange == _KRAKEN_EXCHANGE:
-        return KrakenBackfill(obj, sleep=sleep, form=form)
+        return KrakenBackfill(obj, sleep=sleep, form=form,
+                              max_retries=max_retries, retry_delay=retry_delay)
 
     return OHLCBackfill(
         obj,
         max_candles=defaults['max_candles'],
         sleep=sleep,
         form=form,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
     )
 
 
@@ -597,6 +619,8 @@ def run_backfill(
             job = make_job(
                 histo_job.exchange, crypto, fiat, histo_job.span,
                 path, tz, histo_job.format,
+                max_retries=histo_job.max_retries,
+                retry_delay=histo_job.retry_delay,
             )
             if job.obj.full_path in seen_paths:
                 tqdm.write(
