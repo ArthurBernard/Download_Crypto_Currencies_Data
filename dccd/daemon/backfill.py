@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import time as time_mod
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -184,9 +185,15 @@ class _BackfillBase(ABC):
             tqdm.write(f'[{self.label}] already up to date')
             return
 
-        total = sum(max(1, (e - s) // self.window_size + 1) for s, e in intervals)
+        def _iso(ts: int) -> str:
+            return datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d')
+
+        total        = sum(max(1, (e - s) // self.window_size + 1) for s, e in intervals)
+        end_date_str = _iso(intervals[-1][1])
         bar = tqdm(
-            total=total, desc=self.label, unit='win',
+            total=total,
+            desc=f'{self.label}  {_iso(intervals[0][0])} → {end_date_str}',
+            unit='',
             position=position, leave=True, dynamic_ncols=True,
         )
 
@@ -227,8 +234,10 @@ class _BackfillBase(ABC):
                     self.obj.save()
                     n_candles += n
 
+                current_date = _iso(current)
                 current = self._advance(current, end)
                 bar.update(1)
+                bar.set_description(f'{self.label}  {current_date} → {end_date_str}')
                 bar.set_postfix(candles=n_candles, skipped=skipped)
                 time_mod.sleep(self.sleep)
 
