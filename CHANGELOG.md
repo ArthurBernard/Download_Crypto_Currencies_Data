@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `dccd/storage.py`, `dccd/histo_dl/exchange.py`, `dccd/daemon/backfill.py`, `dccd/process_data.py`, `dccd/daemon/stream_manager.py` — replace pandas with polars throughout; `DataStore.save/load` accept/return `pl.DataFrame`; `get_data()` defaults to `format='polars'`; `set_marketdepth` returns a flat long-format `pl.DataFrame`; stream savers write parquet via `DataStore`; `pandas` removed from core dependencies (#XX)
+- `dccd/storage.py`, `dccd/histo_dl/exchange.py`, `dccd/daemon/backfill.py`, `dccd/process_data.py`, `dccd/daemon/stream_manager.py` — replace pandas with polars throughout; `DataStore.save/load` accept/return `pl.DataFrame`; `get_data()` defaults to `format='polars'`; `set_marketdepth` returns a flat long-format `pl.DataFrame`; stream savers write parquet via `DataStore`; `pandas` removed from core dependencies (#52)
 - `dccd/daemon/backfill.py` — backfill progress bar now shows the current window date (`YYYY-MM-DD → YYYY-MM-DD`) instead of a raw window count (`n win`); makes it easy to see which period is being downloaded at a glance (#48)
 
 ### Fixed
