@@ -128,10 +128,9 @@ class ImportDataCryptoCurrencies(ABC):
            wait=wait_exponential(multiplier=1, min=1, max=60),
            stop=stop_after_attempt(5))
     def _fetch(self, url: str, params: dict[str, Any]) -> requests.Response:
-        """ Fetch URL with automatic retry on HTTP 429. """
+        """ Fetch URL and raise on any HTTP error. """
         r = requests.get(url, params)
-        if r.status_code == 429:
-            r.raise_for_status()
+        r.raise_for_status()
         return r
 
     def _get_last_date(self) -> int:
@@ -228,6 +227,17 @@ class ImportDataCryptoCurrencies(ABC):
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
         df = pd.DataFrame(data).rename(columns={'date': 'TS'})
+        if df.empty or 'TS' not in df.columns:
+            self.df = df
+            return self
+        # Discard any candle at or beyond self.end: those belong to the next
+        # window.  Without this filter, exchanges that return the endpoint
+        # candle (inclusive API boundary) would cause _advance to overshoot
+        # by one span, and the drift compounds over many windows.
+        # Guard: only filter when self.end is set (> 0); direct callers that
+        # bypass _set_time leave self.end = 0, so we skip the filter.
+        if self.end > 0:
+            df = df[df['TS'] < self.end]
         # Use self.end as the exclusive grid boundary so the full window is
         # covered even when the last trade arrives >span seconds before the
         # window end.  Callers must set self.end to the correct window
@@ -236,6 +246,9 @@ class ImportDataCryptoCurrencies(ABC):
             list(range(self.start, self.end, self.span)),
             columns=['TS']
         )
+        if df.empty or 'TS' not in df.columns:
+            self.df = df
+            return self
         df = (df.merge(TS, on='TS', how='outer', sort=False)
               .sort_values('TS')
               .reset_index(drop=True)
