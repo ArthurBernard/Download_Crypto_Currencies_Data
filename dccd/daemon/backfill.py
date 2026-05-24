@@ -284,7 +284,7 @@ class OHLCBackfill(_BackfillBase):
 
     def _fetch_window(self, current: int, end: int) -> int:
         self.obj.import_data(start=current, end=end)
-        if self.obj.df is None or self.obj.df.empty:
+        if self.obj.df is None or len(self.obj.df) == 0:
             return 0
         self._warn_if_suspicious(current, end)
         return len(self.obj.df)
