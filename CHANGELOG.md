@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `dccd/daemon/backfill.py` — backfill progress bar now shows the current window date (`YYYY-MM-DD → YYYY-MM-DD`) instead of a raw window count (`n win`); makes it easy to see which period is being downloaded at a glance (#48)
+
 ### Fixed
 
 - `dccd/storage.py` — `DataStore.missing_intervals` now detects the gap **before** the first saved row when the requested `start` predates `file_min`; previously only the trailing gap (after `file_max`) was returned, causing `dccd backfill --start <early-date>` to silently skip all historical data before the first existing candle (#XX)
