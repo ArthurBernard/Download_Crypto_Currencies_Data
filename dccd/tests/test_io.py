@@ -3,12 +3,12 @@
 
 import sqlite3
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from dccd.tools.io import IODataBase, get_df, save_df
 
-_DF = pd.DataFrame({'a': [1, 2], 'b': [3.0, 4.0]})
+_DF = pl.DataFrame({'a': [1, 2], 'b': [3.0, 4.0]})
 
 
 def test_invalid_method(tmp_data_path):
@@ -36,8 +36,8 @@ def test_save_as_dataframe_append(tmp_data_path):
 
 def test_get_df_missing(tmp_data_path):
     result = get_df(tmp_data_path, 'nonexistent')
-    assert isinstance(result, pd.DataFrame)
-    assert result.empty
+    assert isinstance(result, pl.DataFrame)
+    assert len(result) == 0
 
 
 def test_save_load_df(tmp_data_path):
@@ -55,7 +55,7 @@ def test_save_as_csv_create(tmp_data_path):
     import os
     path = tmp_data_path + '/test.csv'
     assert os.path.exists(path)
-    loaded = pd.read_csv(path, index_col=0)
+    loaded = pl.read_csv(path)
     assert list(loaded.columns) == ['a', 'b']
     assert len(loaded) == 2
 
@@ -64,8 +64,7 @@ def test_save_as_csv_append_no_duplicate_header(tmp_data_path):
     db = IODataBase(tmp_data_path, 'csv')
     db.save_as_csv(_DF, name='test')
     db.save_as_csv(_DF, name='test')
-    loaded = pd.read_csv(tmp_data_path + '/test.csv', index_col=0)
-    # Should have 4 rows, not 3 (which would happen if header was written as data)
+    loaded = pl.read_csv(tmp_data_path + '/test.csv')
     assert len(loaded) == 4
 
 
@@ -75,7 +74,7 @@ def test_save_as_sqlite(tmp_data_path):
     db = IODataBase(tmp_data_path, 'sqlite')
     db.save_as_sqlite(_DF, name='test', table='data')
     conn = sqlite3.connect(tmp_data_path + '/test.db')
-    result = pd.read_sql('SELECT * FROM data', con=conn)
+    result = pl.read_database('SELECT * FROM data', connection=conn)
     conn.close()
     assert 'a' in result.columns
     assert len(result) == 2
@@ -84,22 +83,25 @@ def test_save_as_sqlite(tmp_data_path):
 # --- Excel ---
 
 def test_save_as_excel(tmp_data_path):
+    import openpyxl
     db = IODataBase(tmp_data_path, 'excel')
     db.save_as_excel(_DF, name='test', sheet_name='Sheet1')
-    result = pd.read_excel(tmp_data_path + '/test.xlsx', sheet_name='Sheet1',
-                           index_col=0)
-    assert list(result.columns) == ['a', 'b']
-    assert len(result) == 2
+    wb = openpyxl.load_workbook(tmp_data_path + '/test.xlsx')
+    ws = wb['Sheet1']
+    rows = list(ws.iter_rows(values_only=True))
+    assert rows[0] == ('a', 'b')   # header
+    assert len(rows) == 3          # 1 header + 2 data rows
 
 
 def test_save_as_excel_append(tmp_data_path):
+    import openpyxl
     db = IODataBase(tmp_data_path, 'excel')
     db.save_as_excel(_DF, name='test', sheet_name='Sheet1')
-    db.save_as_excel(_DF, name='test', sheet_name='Sheet2')
-    import openpyxl
+    db.save_as_excel(_DF, name='test', sheet_name='Sheet1')
     wb = openpyxl.load_workbook(tmp_data_path + '/test.xlsx')
-    assert 'Sheet1' in wb.sheetnames
-    assert 'Sheet2' in wb.sheetnames
+    ws = wb['Sheet1']
+    rows = list(ws.iter_rows(values_only=True))
+    assert len(rows) == 5          # 1 header + 4 data rows
 
 
 # --- __call__ dispatch ---
@@ -114,29 +116,26 @@ def test_call_dispatches_csv(tmp_data_path):
 # --- Parquet ---
 
 def test_save_as_parquet_create(tmp_data_path):
-    pytest.importorskip('pyarrow')
     db = IODataBase(tmp_data_path, 'parquet')
     db.save_as_parquet(_DF, name='test')
-    result = pd.read_parquet(tmp_data_path + '/test.parquet')
+    result = pl.read_parquet(tmp_data_path + '/test.parquet')
     assert list(result.columns) == ['a', 'b']
     assert len(result) == 2
 
 
 def test_save_as_parquet_append(tmp_data_path):
-    pytest.importorskip('pyarrow')
     db = IODataBase(tmp_data_path, 'parquet')
     db.save_as_parquet(_DF, name='test')
     db.save_as_parquet(_DF, name='test')
-    result = pd.read_parquet(tmp_data_path + '/test.parquet')
+    result = pl.read_parquet(tmp_data_path + '/test.parquet')
     assert len(result) == 4
 
 
-# --- Polars ---
+# --- 'polars' method alias ---
 
-def test_save_as_polars(tmp_data_path):
-    pl = pytest.importorskip('polars')
+def test_polars_method_alias(tmp_data_path):
     db = IODataBase(tmp_data_path, 'polars')
-    db.save_as_polars(_DF, name='test')
+    db(_DF, name='test')
     result = pl.read_parquet(tmp_data_path + '/test.parquet')
     assert 'a' in result.columns
     assert len(result) == 2

@@ -4,13 +4,11 @@
 # @Email: arthur.bernard.92@gmail.com
 # @Date: 2019-07-26 11:54:55
 # @Last modified by: ArthurBernard
-# @Last modified time: 2019-09-11 08:42:29
 
-""" Tools and object to load, append and save differnet kind of database. """
+""" Tools and object to load, append and save different kind of database. """
 
 # Built-in packages
 import os.path
-import sqlite3
 import time
 from collections.abc import Callable
 from os import makedirs
@@ -18,47 +16,29 @@ from pickle import Pickler, Unpickler
 from typing import Any, Literal
 
 # Third-party packages
-try:
-    import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    pd = None  # type: ignore[assignment]
-    HAS_PANDAS = False
-
+import polars as pl
 from sqlalchemy import URL, create_engine
-
-try:
-    import polars as pl
-    HAS_POLARS = True
-except ImportError:
-    HAS_POLARS = False
-
-# Local packages
-
 
 __all__ = ['IODataBase', 'get_df', 'save_df']
 
 
 class IODataBase:
-    """ Object to save a pd.DataFrame into different kind/format of database.
+    """ Object to save a pl.DataFrame into different kind/format of database.
 
     Parameters
     ----------
     path : str, optional
         Path of the database, default is './' (current directory).
-    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL', 'Oracle',\
-              'MSSQL', 'MySQL'}
+    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'parquet', 'PostgreSQL',\
+              'Oracle', 'MSSQL', 'MySQL'}
         Format of database, default is CSV.
 
     Attributes
     ----------
     path : str
         Path of the database.
-    method : {'DataFrame', 'SQLite', 'CSV', 'Excel', 'PostgreSQL', 'Oracle',\
-              'MSSQL', 'MySQL'}
+    method : str
         Kind/format of the database.
-    parser : dict
-        Values are function to corresponding to `method`.
 
     Methods
     -------
@@ -67,21 +47,13 @@ class IODataBase:
     save_as_sqlite
     save_as_csv
     save_as_excel
+    save_as_parquet
     __call__
 
     """
 
-    # TODO:
-    # - Add InfluxDB method
-    # - Add output methods
-    # - Add unitest/doctest
-
     def __init__(self, path: str = './', method: str = 'csv') -> None:
-        """ Initialize object. """
-        # Verify path exist
         makedirs(path, exist_ok=True)
-
-        # Set init attribute
         self.path = path if path.endswith('/') else path + '/'
         self.method = method.lower()
         self.parser: dict[str, Callable[..., None]] = {
@@ -90,412 +62,154 @@ class IODataBase:
             'csv': self.save_as_csv,
             'excel': self.save_as_excel,
             'parquet': self.save_as_parquet,
-            'polars': self.save_as_polars,
+            'polars': self.save_as_parquet,
             'postgresql': self.save_as_sql,
             'mysql': self.save_as_sql,
             'oracle': self.save_as_sql,
             'mssql': self.save_as_sql,
         }
-
-        # Verify method
-        if self.method not in self.parser.keys():
-
+        if self.method not in self.parser:
             raise NotImplementedError(
-                "`method` should be DataFrame, SQLite, CSV or Excel"
+                f"`method` must be one of {list(self.parser)}, got {method!r}"
             )
 
-    def __call__(self, new_data: pd.DataFrame, **kwargs: Any) -> None:
-        """ Append and save `new_data` in database as `method` format.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        kwargs : dict, optional
-            Cf parameters of corresponding `method`.
-
-        """
+    def __call__(self, new_data: pl.DataFrame, **kwargs: Any) -> None:
+        """ Append and save *new_data* in the configured format. """
         return self.parser[self.method](new_data, **kwargs)
 
-    def save_as_dataframe(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.dat') -> None:
-        """ Append and save `new_data` as pd.DataFrame binary object.
-
-        With pickle save as binary pd.DataFrame object, if `name` database
-        already exists, load it, append `new_data` and save it, else create a
-        new database.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        name : str, optional
-            Name of the database, default is the current date.
-        ext : str, optional
-            Extension of the database, default is '.dat'.
-
-        """
+    def save_as_dataframe(self, new_data: pl.DataFrame, name: str | None = None, ext: str = '.dat') -> None:
+        """ Append and save *new_data* as a pickle binary file. """
         if name is None:
             name = time.strftime('%y-%m-%d', time.gmtime(time.time()))
+        existing = get_df(self.path, name, ext=ext)
+        combined = pl.concat([existing, new_data]) if len(existing) > 0 else new_data
+        save_df(combined, self.path, name, ext=ext)
 
-        # Load data
-        database = get_df(self.path, name, ext=ext)
-        # Append new data
-        database = pd.concat([database, new_data], sort=False)
-        # Save new data
-        save_df(database, self.path, name, ext=ext)
-
-    def get_from_dataframe(self, name: str, ext: str = '.dat') -> pd.DataFrame:
-        """ Get data from pd.DataFrame binary object.
-
-        With pickle get as binary pd.DataFrame object.
-
-        Parameters
-        ----------
-        name : str
-            Name of the database.
-        ext : str, optional
-            Extension of the database, default is '.dat'.
-
-        """
+    def get_from_dataframe(self, name: str, ext: str = '.dat') -> pl.DataFrame:
+        """ Load data from pickle binary file. """
         return get_df(self.path, name, ext=ext)
 
-    def save_as_sqlite(self, new_data: pd.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '.db', index: bool = True, index_label: str | list[str] | None = None) -> None:
-        """ Append and save `new_data` in SQLite database.
-
-        With sqlite, if `name` database already exists append `new_data`, else
-        create a new data base.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        table : str, optional
-            Name of the table, default is 'main_table'.
-        name : str, optional
-            Name of the database, default is the current year.
-        ext : str, optional
-            Extension of the database, default is '.db'.
-        index : bool, optional
-            Write pd.DataFrame index as a column. Uses index_label as the
-            column name in the table. Default is True.
-        index_label : string or sequence, optional
-            Column label for index column(s). If None is given (default) and
-            index is True, then the index names are used. A sequence should
-            be given if the pd.DataFrame uses pd.MultiIndex.
-
-        """
+    def save_as_sqlite(self, new_data: pl.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '.db') -> None:
+        """ Append *new_data* into a SQLite table. """
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
+        conn = f"sqlite:///{self.path}{name}{ext}"
+        new_data.write_database(table, connection=conn, if_table_exists='append')
 
-        # Open connection with database
-        conn = sqlite3.connect(self.path + name + ext)
-        # Append data
-        new_data.to_sql(table, con=conn, if_exists='append', index=index,
-                        index_label=index_label)
-        # Close connection
-        conn.close()
+    def get_from_sqlite(self, name: str, table: str = 'main_table', ext: str = '.db') -> pl.DataFrame:
+        """ Load data from a SQLite table. """
+        conn = f"sqlite:///{self.path}{name}{ext}"
+        return pl.read_database(f"SELECT * FROM {table}", connection=conn)
 
-    def get_from_sqlite(self, name: str, table: str = 'main_table', ext: str = '.db') -> pd.DataFrame:
-        """ Get data from SQLite database.
-
-        Parameters
-        ----------
-        name : str, optional
-            Name of the database, default is the current year.
-        table : str, optional
-            Name of the table, default is 'main_table'.
-        ext : str, optional
-            Extension of the database, default is '.db'.
-        index : bool, optional
-            Write pd.DataFrame index as a column. Uses index_label as the
-            column name in the table. Default is True.
-        index_label : string or sequence, optional
-            Column label for index column(s). If None is given (default) and
-            index is True, then the index names are used. A sequence should be
-            given if the pd.DataFrame uses pd.MultiIndex.
-
-        """
-        # TODO : to finish !
-
-        # Open connection with database
-        conn = sqlite3.connect(self.path + name + ext)
-        # Append data
-        df = pd.read_sql(table, con=conn)
-        # Close connection
-        conn.close()
-
-        return df
-
-    def save_as_sql(self, new_data: pd.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '', index: bool = True, index_label: str | list[str] | None = None, driver: str | None = None, username: str | None = None, password: str | None = None, host: str | None = None, port: str | int | None = None, **kwargs: Any) -> None:
-        """ Append and save `new_data` in SQL database.
-
-        SQL database as `method={'PostgreSQL', 'Oracle', 'MSSQL', 'MySQL'}`.
-        If `name` already exists append `new_data`, else create a new
-        database. See SQLAlchemy documentation for more details [1]_.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        table : str, optional
-            Name of the table, default is 'main_table'.
-        name : str, optional
-            Name of the database, default is the current year.
-        ext : str, optional
-            Extension of the database, default is '.db'.
-        index : bool, optional
-            Write pd.DataFrame index as a column. Uses index_label as the
-            column name in the table. Default is True.
-        index_label : string or sequence, optional
-            Column label for index column(s). If None is given (default) and
-            index is True, then the index names are used. A sequence should be
-            given if the pd.DataFrame uses pd.MultiIndex.
-        driver : str, optional
-            DBAPI driver name, e.g. ``'psycopg2'``, ``'pg8000'``,
-            ``'mysqlclient'``, ``'pymysql'``, ``'cx_oracle'``, ``'pyodbc'``,
-            ``'pymssql'``.  When ``None`` (default) the dialect's default DBAPI
-            is used.  Passed to SQLAlchemy as ``{method}+{driver}``.
-        username : str, optional
-            Username for the database connection.  Default is ``None``.
-        password : str, optional
-            Password for the database connection.  Default is ``None``.
-        host : str, optional
-            Hostname or IP address of the database server.  Default is
-            ``None`` (SQLAlchemy falls back to ``'localhost'``).
-        port : str or int, optional
-            Port number of the database server.  Default is ``None``
-            (uses the dialect's default port).
-        kwargs : dict, optional
-            A dictionary of options to be passed to the dialect and/or the
-            DBAPI upon connect.
-
-        References
-        ----------
-        .. [1] https://docs.sqlalchemy.org/en/13/core/engines.html
-
-        """
+    def save_as_sql(self, new_data: pl.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '', index: bool = True, index_label: str | list[str] | None = None, driver: str | None = None, username: str | None = None, password: str | None = None, host: str | None = None, port: str | int | None = None, **kwargs: Any) -> None:
+        """ Append *new_data* into a SQL database (PostgreSQL, MySQL, …). """
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
-
-        if driver is None:
-            driver = self.method
-        else:
-            driver = self.method + '+' + driver
-
-        # Open connection with database
+        drivername = self.method if driver is None else f"{self.method}+{driver}"
         url = URL.create(
-            driver, username=username, password=password, host=host,
+            drivername, username=username, password=password, host=host,
             port=port, database=self.path + name + ext, query=kwargs,
         )
-        conn = create_engine(url)
-        # Append data
-        new_data.to_sql(table, con=conn, if_exists='append', index=index,
-                        index_label=index_label)
-        # Close connection
-        # conn.close()
+        engine = create_engine(url)
+        new_data.write_database(table, connection=engine, if_table_exists='append')
 
-    def save_as_csv(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.csv', index: bool = True, index_label: str | list[str] | None = None) -> None:
-        """ Append and save `new_data` in database as CSV format.
-
-        With pickle save as binary pd.DataFrame object, if `name` database
-        already exists append `new_data`, otherwise create a new file.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        name : str, optional
-            Name of the database, default is the current year.
-        ext : str, optional
-            Extension of the database, default is '.csv'.
-        index : bool, optional
-            Write row names (index), default is True.
-        index_label : str or sequence, optional
-            Column label for index column(s) if desired. If not specified
-            (default is None), and index are True, then the index names are
-            used. A sequence should be given if the DataFrame uses MultiIndex.
-            If False do not print fields for index names. Use
-            `index_label=False` for easier importing in R.
-
-        """
+    def save_as_csv(self, new_data: pl.DataFrame, name: str | None = None, ext: str = '.csv') -> None:
+        """ Append *new_data* to a CSV file (header written once). """
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
-
-        # Append data to database without header
-        if os.path.exists(self.path + name + ext):
-            new_data.to_csv(self.path + name + ext, mode='a', header=False,
-                            index=index, index_label=index_label)
-
-        # Create database and write the header
-        else:
-            new_data.to_csv(self.path + name + ext, mode='w', header=True,
-                            index=index, index_label=index_label)
-
-    def save_as_parquet(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', index: bool = True, compression: Literal['snappy', 'gzip', 'brotli', 'lz4', 'zstd'] = 'snappy') -> None:
-        """ Append and save `new_data` as Parquet file.
-
-        Requires pyarrow: ``pip install dccd[io]``.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        name : str, optional
-            Name of the file, default is the current year.
-        ext : str, optional
-            Extension, default is '.parquet'.
-        index : bool, optional
-            Write DataFrame index, default is True.
-        compression : str, optional
-            Compression codec, default is 'snappy'.
-
-        """
-        if name is None:
-            name = time.strftime('%y', time.gmtime(time.time()))
-
         path = self.path + name + ext
         if os.path.exists(path):
-            existing = pd.read_parquet(path)
-            new_data = pd.concat([existing, new_data])
-        new_data.to_parquet(path, index=index, compression=compression)
+            with open(path, 'ab') as f:
+                new_data.write_csv(f, include_header=False)
+        else:
+            new_data.write_csv(path)
 
-    def save_as_polars(self, new_data: pd.DataFrame, name: str | None = None, ext: str = '.parquet', compression: Literal['snappy', 'gzip', 'brotli', 'lz4', 'zstd'] = 'snappy') -> None:
-        """ Append and save `new_data` as Parquet file via Polars.
-
-        Requires polars: ``pip install dccd[io]``.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        name : str, optional
-            Name of the file, default is the current year.
-        ext : str, optional
-            Extension, default is '.parquet'.
-        compression : str, optional
-            Compression codec, default is 'snappy'.
-
-        """
-        if not HAS_POLARS:
-            raise ImportError(
-                "polars is required for this method: pip install dccd[io]"
-            )
-
+    def save_as_parquet(self, new_data: pl.DataFrame, name: str | None = None, ext: str = '.parquet', compression: Literal['snappy', 'gzip', 'brotli', 'lz4', 'zstd'] = 'snappy') -> None:
+        """ Append *new_data* to a Parquet file. """
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
-
         path = self.path + name + ext
-        new_pl = pl.from_pandas(new_data)
         if os.path.exists(path):
             existing = pl.read_parquet(path)
-            new_pl = pl.concat([existing, new_pl])
-        new_pl.write_parquet(path, compression=compression)
+            new_data = pl.concat([existing, new_data])
+        new_data.write_parquet(path, compression=compression)
 
-    def save_as_excel(self, new_data: pd.DataFrame, name: str | None = None, sheet_name: str = 'Sheet1', ext: str = '.xlsx', index: bool = True, index_label: str | list[str] | None = None) -> None:
-        """ Append and save `new_data` in database as Excel format.
-
-        With pickle save as binary pd.DataFrame object, if `name` database
-        already exists append `new_data`, else create a new file.
-
-        Parameters
-        ----------
-        new_data : pd.DataFrame
-            Data to append to the database.
-        name : str, optional
-            Name of the database, default is the current date.
-        sheet_name : str, optional
-            Name of sheet which will contain `new_data`, default is 'Sheet1'.
-        ext : str, optional
-            Extension of the database, default is '.xlsx'.
-        index : bool, optional
-            Write row names (index), default is True.
-        index_label : str or sequence, optional
-            Column label for index column(s) if desired. If not specified
-            (default is None), and index are True, then the index names are
-            used. A sequence should be given if the DataFrame uses MultiIndex.
+    def save_as_excel(self, new_data: pl.DataFrame, name: str | None = None, sheet_name: str = 'Sheet1', ext: str = '.xlsx') -> None:
+        """ Append *new_data* to an Excel file (requires openpyxl).
 
         Warnings
         --------
-        Slow method, not recommanded for large database.
+        Slow method, not recommended for large datasets.
 
         """
+        import openpyxl
+
         if name is None:
             name = time.strftime('%y-%m-%d', time.gmtime(time.time()))
-
         path = self.path + name + ext
 
-        # Append data to database if exist
-        try:
-            with pd.ExcelWriter(path, engine='openpyxl', mode='a') as w:
-                new_data.to_excel(w, sheet_name=sheet_name, merge_cells=False,
-                                  index=index, index_label=index_label)
-        # Create a new database
-        except FileNotFoundError:
-            new_data.to_excel(path, sheet_name=sheet_name, merge_cells=False,
-                              index=index, index_label=index_label)
+        if os.path.exists(path):
+            wb = openpyxl.load_workbook(path)
+            if sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                write_header = False
+            else:
+                ws = wb.create_sheet(sheet_name)
+                write_header = True
+        else:
+            wb = openpyxl.Workbook()
+            ws = wb.active  # type: ignore[assignment]
+            ws.title = sheet_name
+            write_header = True
+
+        if write_header:
+            ws.append(new_data.columns)
+        for row in new_data.iter_rows(named=False):
+            ws.append(list(row))
+
+        wb.save(path)
 
 
-def get_df(path: str, name: str, ext: str = '') -> pd.DataFrame:
-    """ Load a dataframe as binnary file.
+def get_df(path: str, name: str, ext: str = '') -> pl.DataFrame:
+    """ Load a DataFrame from a pickle binary file.
 
     Parameters
     ----------
     path, name, ext : str
-        Path to the file, name of the file and the extension of the file.
+        Directory path, file name, and optional extension.
 
     Returns
     -------
-    pandas.DataFrame
-        A dataframe, if file not find return an empty dataframe.
+    pl.DataFrame
+        Loaded DataFrame, or an empty DataFrame if the file is not found.
 
     """
     if path[-1] != '/' and name[0] != '/':
         path += '/'
-
-    if len(ext) > 0 and ext[0] != '.':
+    if ext and not ext.startswith('.'):
         ext = '.' + ext
-
     try:
         with open(path + name + ext, 'rb') as f:
-            df = Unpickler(f).load()
-
-            return df
-
+            return Unpickler(f).load()
     except FileNotFoundError:
+        return pl.DataFrame()
 
-        return pd.DataFrame()
 
-
-def save_df(df: pd.DataFrame, path: str, name: str, ext: str = '') -> None:
-    """ Save a dataframe as a binnary file.
+def save_df(df: pl.DataFrame, path: str, name: str, ext: str = '') -> None:
+    """ Save a DataFrame as a pickle binary file.
 
     Parameters
     ----------
-    df : pandas.DataFrame
-        A dataframe to save as binnary file.
+    df : pl.DataFrame
+        DataFrame to persist.
     path, name, ext : str
-        Path to the file, name of the file and the extension of the file.
+        Directory path, file name, and optional extension.
 
     """
     if path[-1] != '/' and name[0] != '/':
         path += '/'
-
-    if len(ext) > 0 and ext[0] != '.':
+    if ext and not ext.startswith('.'):
         ext = '.' + ext
-
-    try:
-        with open(path + name + ext, 'wb') as f:
-            Pickler(f).dump(df)
-
-    except FileNotFoundError:
-        makedirs(path, exist_ok=True)
-
-        with open(path + name + ext, 'wb') as f:
-            Pickler(f).dump(df)
-
-
-if __name__ == '__main__':
-
-    import doctest
-
-    doctest.testmod()
+    makedirs(path, exist_ok=True)
+    with open(path + name + ext, 'wb') as f:
+        Pickler(f).dump(df)
