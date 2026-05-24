@@ -40,7 +40,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-import pandas as pd
+import polars as pl
 from tqdm import tqdm
 
 from dccd.tools.date_time import date_to_TS
@@ -448,28 +448,29 @@ class KrakenBackfill(_BackfillBase):
             return []
 
         span = self.obj.span
-        df = pd.DataFrame(trades)
-        df['ts'] = pd.to_datetime(df['timestamp'], unit='s', utc=True)
-        df = df.set_index('ts').sort_index()
-
-        freq = f'{span}s'
-        origin = pd.Timestamp(start_ts, unit='s', tz='UTC')
-        resample_kw = {'closed': 'left', 'label': 'left', 'origin': origin}
-        ohlc = df['price'].resample(freq, **resample_kw).ohlc()
-        vol  = df['amount'].resample(freq, **resample_kw).sum()
-        qvol = (df['price'] * df['amount']).resample(freq, **resample_kw).sum()
-
+        df = (
+            pl.DataFrame(trades)
+            .with_columns(pl.from_epoch('timestamp', time_unit='s').alias('ts'))
+            .sort('ts')
+        )
         result = (
-            ohlc.join(vol.rename('volume')).join(qvol.rename('quoteVolume'))
-            .loc[
-                pd.Timestamp(start_ts, unit='s', tz='UTC'):
-                pd.Timestamp(end_ts - 1, unit='s', tz='UTC'),
-            ]
-            .dropna(subset=['open'])
+            df.group_by_dynamic('ts', every=f'{span}s', closed='left', start_by='datapoint')
+            .agg(
+                pl.col('price').first().alias('open'),
+                pl.col('price').max().alias('high'),
+                pl.col('price').min().alias('low'),
+                pl.col('price').last().alias('close'),
+                pl.col('amount').sum().alias('volume'),
+                (pl.col('price') * pl.col('amount')).sum().alias('quoteVolume'),
+            )
+            .filter(
+                (pl.col('ts').dt.epoch(time_unit='s') >= start_ts)
+                & (pl.col('ts').dt.epoch(time_unit='s') < end_ts)
+            )
         )
 
         return [{
-            'date':            round(row_ts.timestamp()),
+            'date':            int(row['ts'].timestamp()),
             'open':            float(row['open']),
             'high':            float(row['high']),
             'low':             float(row['low']),
@@ -480,7 +481,7 @@ class KrakenBackfill(_BackfillBase):
                 float(row['quoteVolume'] / row['volume'])
                 if row['volume'] > 0 else float(row['close'])
             ),
-        } for row_ts, row in result.iterrows()]
+        } for row in result.iter_rows(named=True)]
 
 
 # ---------------------------------------------------------------------------

@@ -31,7 +31,6 @@ from dccd.continuous_dl.okx import DownloadOKXData
 from dccd.daemon.storage import RemoteStorage
 from dccd.process_data import set_marketdepth, set_orders, set_trades
 from dccd.storage import DataStore
-from dccd.tools.io import IODataBase
 
 if TYPE_CHECKING:
     from dccd.daemon.config import CollectorConfig, StorageConfig, StreamJob
@@ -350,16 +349,16 @@ class StreamManager:
             data_type = 'trades'
         else:
             data_type = 'orderbook'
-        save_path = str(DataStore(
+        store = DataStore(
             self.config.storage.local_path,
             job.exchange,
             pair,
             None,
             data_type,
-        ).directory)
+        )
 
         downloader.set_process_data(_process_fn(channels))
-        downloader.set_saver(IODataBase(save_path, method='csv'))
+        downloader.set_saver(store.save)
 
         conn_kw = _connect_kwargs(job.exchange, pair, channels)
         loop = asyncio.new_event_loop()

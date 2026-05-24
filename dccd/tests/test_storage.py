@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from dccd.storage import DataStore
@@ -14,8 +14,8 @@ from dccd.storage import DataStore
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _ohlc_df(ts_values: list[int]) -> pd.DataFrame:
-    return pd.DataFrame({
+def _ohlc_df(ts_values: list[int]) -> pl.DataFrame:
+    return pl.DataFrame({
         'TS': ts_values,
         'open': [100.0] * len(ts_values),
         'high': [101.0] * len(ts_values),
@@ -25,8 +25,8 @@ def _ohlc_df(ts_values: list[int]) -> pd.DataFrame:
     })
 
 
-def _trades_df(ts_values: list[int]) -> pd.DataFrame:
-    return pd.DataFrame({
+def _trades_df(ts_values: list[int]) -> pl.DataFrame:
+    return pl.DataFrame({
         'TS': ts_values,
         'price': [50000.0] * len(ts_values),
         'amount': [0.1] * len(ts_values),
@@ -106,15 +106,15 @@ def test_save_merges_with_existing(tmp_path):
     store.save(df1)
     store.save(df2)
 
-    result = pd.read_parquet(store.directory / '2023.parquet')
+    result = pl.read_parquet(store.directory / '2023.parquet')
     # Dedup on TS: 3 unique timestamps
     assert len(result) == 3
-    assert sorted(result['TS'].tolist()) == [1672531200, 1672534800, 1672538400]
+    assert sorted(result['TS'].to_list()) == [1672531200, 1672534800, 1672538400]
 
 
 def test_save_empty_df_is_noop(tmp_path):
     store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
-    store.save(pd.DataFrame())
+    store.save(pl.DataFrame())
     assert list(store.directory.glob('*.parquet')) == []
 
 
@@ -151,7 +151,7 @@ def test_save_trades_multiple_days(tmp_path):
 def test_load_returns_empty_when_no_data(tmp_path):
     store = DataStore(str(tmp_path), 'binance', 'BTC/USDT', 3600, 'ohlc')
     result = store.load()
-    assert result.empty
+    assert len(result) == 0
 
 
 def test_load_range_across_years(tmp_path):
@@ -163,7 +163,7 @@ def test_load_range_across_years(tmp_path):
 
     result_filtered = store.load(start=1672531200, end=1672531200)
     assert len(result_filtered) == 1
-    assert result_filtered['TS'].iloc[0] == 1672531200
+    assert result_filtered['TS'][0] == 1672531200
 
 
 def test_load_skips_corrupted_file(tmp_path):
@@ -220,7 +220,7 @@ def test_last_timestamp_removes_corrupted_and_falls_back(tmp_path):
 # Helpers for gap-detection tests
 # ---------------------------------------------------------------------------
 
-def _complete_year_df(year: int, span: int) -> pd.DataFrame:
+def _complete_year_df(year: int, span: int) -> pl.DataFrame:
     from datetime import datetime, timezone
     t0 = int(datetime(year,     1, 1, tzinfo=timezone.utc).timestamp())
     t1 = int(datetime(year + 1, 1, 1, tzinfo=timezone.utc).timestamp())
