@@ -8,8 +8,10 @@ import yaml
 from pydantic import ValidationError
 
 from dccd.daemon.config import (
+    DEFAULT_CONFIG_PATH,
     CollectorConfig,
     load_config,
+    resolve_config_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -166,3 +168,49 @@ def test_load_config_validation_error(tmp_path):
     p = _make_config_file(tmp_path, bad)
     with pytest.raises(ValidationError):
         load_config(p)
+
+
+# ---------------------------------------------------------------------------
+# resolve_config_path
+# ---------------------------------------------------------------------------
+
+def test_resolve_explicit_path(tmp_path):
+    p = tmp_path / 'my.yml'
+    result = resolve_config_path(str(p))
+    assert result == p
+
+
+def test_resolve_explicit_path_expanduser(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    result = resolve_config_path('~/my.yml')
+    assert result == tmp_path / 'my.yml'
+
+
+def test_resolve_cwd_fallback(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cwd_cfg = tmp_path / 'config.yml'
+    cwd_cfg.write_text(yaml.dump(_VALID_CONFIG))
+    result = resolve_config_path(None)
+    assert result == pathlib.Path('config.yml')
+
+
+def test_resolve_xdg_fallback(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    xdg_dir = tmp_path / 'xdg'
+    xdg_cfg = xdg_dir / 'dccd' / 'config.yml'
+    xdg_cfg.parent.mkdir(parents=True)
+    xdg_cfg.write_text(yaml.dump(_VALID_CONFIG))
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(xdg_dir))
+    result = resolve_config_path(None)
+    assert result == xdg_cfg
+
+
+def test_resolve_no_config_raises(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'empty_xdg'))
+    with pytest.raises(FileNotFoundError, match='No config file found'):
+        resolve_config_path(None)
+
+
+def test_default_config_path_constant():
+    assert DEFAULT_CONFIG_PATH.parts[-2:] == ('dccd', 'config.yml')

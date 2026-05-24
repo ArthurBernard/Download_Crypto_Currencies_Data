@@ -69,17 +69,15 @@ __all__ = ['app']
 
 app = typer.Typer(help='dccd — autonomous crypto data collection daemon')
 
-_DEFAULT_CONFIG = 'config.yml'
-
-
-def _load(config_path: str) -> object:
+def _load(config_path: Optional[str]) -> object:
     """Load config, exit with code 1 on any error."""
-    from dccd.daemon.config import load_config
+    from dccd.daemon.config import load_config, resolve_config_path
 
     try:
-        return load_config(config_path)
-    except FileNotFoundError:
-        typer.echo(f'Error: config file not found: {config_path}', err=True)
+        resolved = resolve_config_path(config_path)
+        return load_config(resolved)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
         raise typer.Exit(1)
     except Exception as exc:
         typer.echo(f'Error: {exc}', err=True)
@@ -88,8 +86,10 @@ def _load(config_path: str) -> object:
 
 @app.command()
 def validate(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Validate a YAML config file and print a one-line summary.
 
@@ -98,8 +98,15 @@ def validate(
     Exits with code 1 on any error (missing file, bad YAML, invalid config).
 
     """
-    cfg = _load(config)
-    typer.echo(f'Config: {config}')
+    from dccd.daemon.config import resolve_config_path
+
+    try:
+        resolved = resolve_config_path(config)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
+        raise typer.Exit(1)
+    cfg = _load(str(resolved))
+    typer.echo(f'Config: {resolved}')
     typer.echo(f'  data_path          : {cfg.settings.data_path}')  # type: ignore[attr-defined]
     typer.echo(f'  timezone           : {cfg.settings.timezone}')  # type: ignore[attr-defined]
     typer.echo(f'  remotes            : {len(cfg.storage.remotes)}')  # type: ignore[attr-defined]
@@ -110,8 +117,9 @@ def validate(
 
 @app.command()
 def backfill(
-    config: str = typer.Option(
-        _DEFAULT_CONFIG, '--config', '-c', help='Path to the YAML config file.',
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
     ),
     exchange: Optional[str] = typer.Option(
         None, '--exchange', '-e',
@@ -152,8 +160,10 @@ def backfill(
 
 @app.command()
 def collect(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Fetch one incremental batch per histo_job, then exit.
 
@@ -187,8 +197,10 @@ def collect(
 
 @app.command()
 def start(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Start the continuous daemon and block until SIGINT or SIGTERM.
 
@@ -234,8 +246,10 @@ def start(
 
 @app.command()
 def status(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Print a health table from the saved metrics JSON.
 
@@ -280,8 +294,10 @@ def add(
     exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.'),
     pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).'),
     span: int = typer.Option(..., '--span', '-s', help='Candle interval in seconds.'),
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Append a new histo job to the YAML config file in-place.
 
@@ -293,11 +309,16 @@ def add(
     import yaml
     from pydantic import ValidationError
 
-    from dccd.daemon.config import CollectorConfig
+    from dccd.daemon.config import CollectorConfig, resolve_config_path
 
-    config_path = Path(config)
+    try:
+        config_path = resolve_config_path(config)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
+        raise typer.Exit(1)
+
     if not config_path.exists():
-        typer.echo(f'Error: config file not found: {config}', err=True)
+        typer.echo(f'Error: config file not found: {config_path}', err=True)
         raise typer.Exit(1)
 
     raw: dict = yaml.safe_load(config_path.read_text())
@@ -316,4 +337,4 @@ def add(
 
     config_path.write_text(yaml.dump(raw, default_flow_style=False))
     typer.echo(f'Added histo job: exchange={exchange} pair={pair} span={span}s')
-    typer.echo(f'Config written to {config}.')
+    typer.echo(f'Config written to {config_path}.')
