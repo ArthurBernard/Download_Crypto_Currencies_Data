@@ -9,6 +9,7 @@ Loads a YAML file and validates it with Pydantic v2 models.
 
 from __future__ import annotations
 
+import os
 import pathlib
 from typing import Any
 
@@ -18,13 +19,21 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 __all__ = [
     'AlertConfig',
     'CollectorConfig',
+    'DEFAULT_CONFIG_PATH',
     'HistoJob',
     'RemoteConfig',
     'SettingsConfig',
     'StorageConfig',
     'StreamJob',
     'load_config',
+    'resolve_config_path',
 ]
+
+_XDG_CONFIG_HOME: pathlib.Path = pathlib.Path(
+    os.environ.get('XDG_CONFIG_HOME', '~/.config')
+).expanduser()
+
+DEFAULT_CONFIG_PATH: pathlib.Path = _XDG_CONFIG_HOME / 'dccd' / 'config.yml'
 
 SUPPORTED_HISTO_EXCHANGES: frozenset[str] = frozenset(
     {'binance', 'kraken', 'bybit', 'okx', 'coinbase'}
@@ -265,6 +274,42 @@ class CollectorConfig(BaseModel):
                 "(histo_jobs or stream_jobs)"
             )
         return self
+
+
+def resolve_config_path(path: str | pathlib.Path | None = None) -> pathlib.Path:
+    """ Return the config file path to use, applying XDG fallback when *path* is None.
+
+    Parameters
+    ----------
+    path : str, pathlib.Path, or None
+        Explicit config path.  When ``None``, the function searches in order:
+        ``./config.yml`` (current working directory), then
+        :data:`DEFAULT_CONFIG_PATH` (``$XDG_CONFIG_HOME/dccd/config.yml``).
+
+    Returns
+    -------
+    pathlib.Path
+        Resolved path.  When *path* is not ``None`` the value is returned
+        as-is (after ``expanduser``); existence is **not** checked.
+
+    Raises
+    ------
+    FileNotFoundError
+        When *path* is ``None`` and none of the candidate paths exist.
+
+    """
+    if path is not None:
+        return pathlib.Path(path).expanduser()
+    xdg_cfg = (
+        pathlib.Path(os.environ.get('XDG_CONFIG_HOME', '~/.config')).expanduser()
+        / 'dccd' / 'config.yml'
+    )
+    candidates = [pathlib.Path('config.yml'), xdg_cfg]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    tried = ', '.join(str(c) for c in candidates)
+    raise FileNotFoundError(f'No config file found. Tried: {tried}')
 
 
 def load_config(path: str | pathlib.Path) -> CollectorConfig:

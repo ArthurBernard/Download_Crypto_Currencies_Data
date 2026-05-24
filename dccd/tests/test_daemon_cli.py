@@ -106,3 +106,20 @@ def test_add_histo_job(config_file: Path) -> None:
         p for job in loaded['histo_jobs'] for p in job['pairs']
     ]
     assert 'ETH/USD' in pairs_all
+
+
+def test_validate_no_config_uses_xdg(config_file: Path) -> None:
+    with patch('dccd.daemon.config.resolve_config_path', return_value=config_file):
+        result = runner.invoke(app, ['validate'])
+    assert result.exit_code == 0
+    assert 'valid' in result.output.lower()
+
+
+def test_validate_missing_all_configs(tmp_path: Path) -> None:
+    with patch(
+        'dccd.daemon.config.resolve_config_path',
+        side_effect=FileNotFoundError('No config file found. Tried: config.yml, ~/.config/dccd/config.yml'),
+    ):
+        result = runner.invoke(app, ['validate'])
+    assert result.exit_code == 1
+    assert 'No config file found' in result.output
