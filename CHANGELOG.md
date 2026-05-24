@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `dccd/daemon/cli.py` — `dccd status --json`: emit raw metrics as a JSON object on stdout, suitable for piping into Grafana / jq (#XX)
-- `dccd/daemon/config.py` — `HistoJob.max_retries` (int, 1–10, default 3) and `HistoJob.retry_delay` (float ≥ 0, default 2.0): per-job retry configuration for transient network errors; delay is exponential (`retry_delay * 2^(attempt-1)`) (#XX)
+- `dccd/daemon/cli.py` — `dccd status --json`: emit raw metrics as a JSON object on stdout, suitable for piping into Grafana / jq (#53)
+- `dccd/daemon/config.py` — `HistoJob.max_retries` (int, 1–10, default 3) and `HistoJob.retry_delay` (float ≥ 0, default 2.0): per-job retry configuration for transient network errors; delay is exponential (`retry_delay * 2^(attempt-1)`) (#53)
 - `dccd/daemon/config.py` — `resolve_config_path()` and `DEFAULT_CONFIG_PATH`: CLI commands now fall back to `$XDG_CONFIG_HOME/dccd/config.yml` (default `~/.config/dccd/config.yml`) when no `--config` option is provided and `./config.yml` does not exist (#49)
 - `dccd/daemon/cli.py` — `dccd inventory`: scans `data_path` and prints a table of all stored OHLC, trades, and orderbook data with date range, row count, and gap count per series; uses Polars for fast columnar reads (#50)
 - `dccd/daemon/cli.py` — `dccd remove --exchange X --pair Y --span N`: removes a pair from a histo_job (or the whole job if it was the last pair) and re-validates the config before writing (#50)
