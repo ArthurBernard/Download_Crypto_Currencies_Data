@@ -4,7 +4,6 @@
 import sqlite3
 
 import polars as pl
-
 import pytest
 
 from dccd.tools.io import IODataBase, get_df, save_df
