@@ -22,7 +22,6 @@ __pycache__/
 
 # Local only (not committed)
 CLAUDE.md
-TODO.md
 todo/
 done/
 config.yml
