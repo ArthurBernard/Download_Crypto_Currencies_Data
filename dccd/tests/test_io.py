@@ -4,6 +4,7 @@
 import sqlite3
 
 import polars as pl
+
 import pytest
 
 from dccd.tools.io import IODataBase, get_df, save_df
@@ -74,10 +75,11 @@ def test_save_as_sqlite(tmp_data_path):
     db = IODataBase(tmp_data_path, 'sqlite')
     db.save_as_sqlite(_DF, name='test', table='data')
     conn = sqlite3.connect(tmp_data_path + '/test.db')
-    result = pl.read_database('SELECT * FROM data', connection=conn)
+    rows = conn.execute('SELECT * FROM data').fetchall()
     conn.close()
-    assert 'a' in result.columns
-    assert len(result) == 2
+    assert len(rows) == 2
+    assert rows[0] == (1, 3.0)
+    assert rows[1] == (2, 4.0)
 
 
 # --- Excel ---

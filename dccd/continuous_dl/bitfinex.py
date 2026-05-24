@@ -286,7 +286,7 @@ def get_data_bitfinex(channel: str, process_func: Any, process_params: dict[str,
                    'Oracle', 'MSSQL', 'MySQL'},
         It will create an IODataBase object to save/update the database in the
         specified format `save_method`, default is 'DataFrame' it save as
-        binary pd.DataFrame object. More informations are available into
+        binary pl.DataFrame object. More informations are available into
         :mod:`dccd.tools.io`.
     io_params : dict, optional
         Dictionary of the keyword arguments available to the

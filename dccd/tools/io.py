@@ -90,19 +90,44 @@ class IODataBase:
         return get_df(self.path, name, ext=ext)
 
     def save_as_sqlite(self, new_data: pl.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '.db') -> None:
-        """ Append *new_data* into a SQLite table. """
+        """ Append *new_data* into a SQLite table (stdlib sqlite3, no extra deps). """
+        import sqlite3
+
+        _PL_TO_SQLITE: dict[type, str] = {
+            pl.Int8: 'INTEGER', pl.Int16: 'INTEGER', pl.Int32: 'INTEGER', pl.Int64: 'INTEGER',
+            pl.UInt8: 'INTEGER', pl.UInt16: 'INTEGER', pl.UInt32: 'INTEGER', pl.UInt64: 'INTEGER',
+            pl.Float32: 'REAL', pl.Float64: 'REAL',
+            pl.Boolean: 'INTEGER',
+        }
+
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
-        conn = f"sqlite:///{self.path}{name}{ext}"
-        new_data.write_database(table, connection=conn, if_table_exists='append')
+        path = self.path + name + ext
+        conn = sqlite3.connect(path)
+        cols = ', '.join(
+            f'"{c}" {_PL_TO_SQLITE.get(type(t), "TEXT")}'
+            for c, t in zip(new_data.columns, new_data.dtypes)
+        )
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" ({cols})')
+        placeholders = ', '.join(['?'] * len(new_data.columns))
+        conn.executemany(f'INSERT INTO "{table}" VALUES ({placeholders})', new_data.iter_rows())
+        conn.commit()
+        conn.close()
 
     def get_from_sqlite(self, name: str, table: str = 'main_table', ext: str = '.db') -> pl.DataFrame:
         """ Load data from a SQLite table. """
-        conn = f"sqlite:///{self.path}{name}{ext}"
-        return pl.read_database(f"SELECT * FROM {table}", connection=conn)
+        import sqlite3
+        path = self.path + name + ext
+        conn = sqlite3.connect(path)
+        result = pl.read_database(f'SELECT * FROM "{table}"', connection=conn)
+        conn.close()
+        return result
 
-    def save_as_sql(self, new_data: pl.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '', index: bool = True, index_label: str | list[str] | None = None, driver: str | None = None, username: str | None = None, password: str | None = None, host: str | None = None, port: str | int | None = None, **kwargs: Any) -> None:
-        """ Append *new_data* into a SQL database (PostgreSQL, MySQL, …). """
+    def save_as_sql(self, new_data: pl.DataFrame, table: str = 'main_table', name: str | None = None, ext: str = '', driver: str | None = None, username: str | None = None, password: str | None = None, host: str | None = None, port: str | int | None = None, **kwargs: Any) -> None:
+        """ Append *new_data* into a SQL database via ADBC (PostgreSQL, MySQL, …).
+
+        Requires the appropriate ADBC driver, e.g. ``adbc_driver_postgresql``.
+        """
         if name is None:
             name = time.strftime('%y', time.gmtime(time.time()))
         drivername = self.method if driver is None else f"{self.method}+{driver}"
@@ -111,7 +136,7 @@ class IODataBase:
             port=port, database=self.path + name + ext, query=kwargs,
         )
         engine = create_engine(url)
-        new_data.write_database(table, connection=engine, if_table_exists='append')
+        new_data.write_database(table, connection=engine, if_table_exists='append', engine='adbc')
 
     def save_as_csv(self, new_data: pl.DataFrame, name: str | None = None, ext: str = '.csv') -> None:
         """ Append *new_data* to a CSV file (header written once). """
