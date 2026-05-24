@@ -283,3 +283,51 @@ def test_run_retries_on_fetch_error():
 
     assert calls['n'] == 3   # 2 failures + 1 success
     obj.save.assert_called_once()
+
+
+def test_custom_max_retries():
+    """job.max_retries is honoured — loop stops after N attempts."""
+    obj = _mock_obj(span=60)
+    obj._store.missing_intervals.return_value = [(1_000, 1_060)]
+    job = OHLCBackfill(obj, max_candles=1, sleep=0.0, form='parquet', max_retries=2)
+
+    calls = {'n': 0}
+
+    def _always_fail(current: int, end: int) -> int:
+        calls['n'] += 1
+        raise RuntimeError('always fails')
+
+    job._fetch_window = _always_fail  # type: ignore[method-assign]
+
+    with patch('dccd.daemon.backfill.time_mod'):
+        job.run('2020-01-01 00:00:00')
+
+    assert calls['n'] == 2   # exactly max_retries attempts, then skipped
+    obj.save.assert_not_called()
+
+
+def test_custom_retry_delay():
+    """Exponential backoff uses retry_delay as base."""
+    obj = _mock_obj(span=60)
+    obj._store.missing_intervals.return_value = [(1_000, 1_060)]
+    job = OHLCBackfill(obj, max_candles=1, sleep=0.0, form='parquet',
+                       max_retries=3, retry_delay=5.0)
+
+    attempt = {'n': 0}
+
+    def _fail_twice(current: int, end: int) -> int:
+        attempt['n'] += 1
+        if attempt['n'] < 3:
+            raise RuntimeError('transient')
+        return 1
+
+    job._fetch_window = _fail_twice  # type: ignore[method-assign]
+    job._advance      = lambda current, end: end  # type: ignore[method-assign]
+
+    with patch('dccd.daemon.backfill.time_mod') as mock_time:
+        job.run('2020-01-01 00:00:00')
+
+    sleep_calls = [c.args[0] for c in mock_time.sleep.call_args_list]
+    # First retry: 5.0 * 2^0 = 5.0 ; second retry: 5.0 * 2^1 = 10.0
+    assert 5.0 in sleep_calls
+    assert 10.0 in sleep_calls

@@ -140,6 +140,8 @@ class HistoJob(BaseModel):
     pairs: list[str]
     span: int
     format: str = 'parquet'
+    max_retries: int = Field(default=3, ge=1, le=10)
+    retry_delay: float = Field(default=2.0, ge=0.0)
 
     @field_validator('exchange')
     @classmethod

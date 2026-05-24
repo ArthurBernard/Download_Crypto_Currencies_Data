@@ -258,6 +258,7 @@ def status(
         None, '--config', '-c',
         help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
     ),
+    json_out: bool = typer.Option(False, '--json', help='Output raw metrics as JSON on stdout.'),
 ) -> None:
     """ Print a health table from the saved metrics JSON.
 
@@ -266,15 +267,22 @@ def status(
     ``last_success``, ``rows`` (cumulative), ``errors`` (consecutive).
     Prints ``No metrics yet.`` if the file does not exist.
 
+    Pass ``--json`` to emit the raw metrics dict as JSON on stdout instead,
+    suitable for piping into Grafana, jq, or other tooling.
+
     """
     cfg = _load(config)
     metrics_file = Path(cfg.storage.local_path) / '.dccd' / 'metrics.json'  # type: ignore[attr-defined]
 
     if not metrics_file.exists():
-        typer.echo('No metrics yet.')
+        typer.echo('{}' if json_out else 'No metrics yet.')
         return
 
     data: dict = json.loads(metrics_file.read_text())
+
+    if json_out:
+        typer.echo(json.dumps(data, indent=2))
+        return
 
     def _fmt_ts(ts: float | None) -> str:
         if ts is None:

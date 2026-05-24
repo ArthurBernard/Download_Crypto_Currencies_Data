@@ -261,3 +261,98 @@ def test_validate_missing_all_configs(tmp_path: Path) -> None:
         result = runner.invoke(app, ['validate'])
     assert result.exit_code == 1
     assert 'No config file found' in result.output
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — config validation
+# ---------------------------------------------------------------------------
+
+def test_validate_unknown_exchange(tmp_path: Path) -> None:
+    cfg = {
+        'storage': {'local_path': str(tmp_path)},
+        'histo_jobs': [{'exchange': 'fakeex', 'pairs': ['BTC/USDT'], 'span': 3600}],
+    }
+    cfg_file = tmp_path / 'config.yml'
+    cfg_file.write_text(yaml.dump(cfg))
+    result = runner.invoke(app, ['validate', '--config', str(cfg_file)])
+    assert result.exit_code != 0
+    assert 'fakeex' in result.output.lower() or result.exit_code != 0
+
+
+def test_validate_bad_pair_format(tmp_path: Path) -> None:
+    cfg = {
+        'storage': {'local_path': str(tmp_path)},
+        'histo_jobs': [{'exchange': 'binance', 'pairs': ['BTCUSDT'], 'span': 3600}],
+    }
+    cfg_file = tmp_path / 'config.yml'
+    cfg_file.write_text(yaml.dump(cfg))
+    result = runner.invoke(app, ['validate', '--config', str(cfg_file)])
+    assert result.exit_code != 0
+
+
+def test_validate_missing_config_file() -> None:
+    result = runner.invoke(app, ['validate', '--config', '/nonexistent/config.yml'])
+    assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — status --json
+# ---------------------------------------------------------------------------
+
+def test_status_json_no_metrics(config_file: Path) -> None:
+    result = runner.invoke(app, ['status', '--json', '--config', str(config_file)])
+    assert result.exit_code == 0
+    data = json.loads(result.output.strip())
+    assert data == {}
+
+
+def test_status_json_output(tmp_path: Path) -> None:
+    dccd_dir = tmp_path / 'data' / '.dccd'
+    dccd_dir.mkdir(parents=True)
+    metrics = {
+        'binance/BTC/USDT': {
+            'last_run_at': 1747440000.0,
+            'last_success_at': 1747440000.0,
+            'rows_collected': 42,
+            'errors_count': 0,
+        }
+    }
+    (dccd_dir / 'metrics.json').write_text(json.dumps(metrics))
+    cfg = {
+        'storage': {'local_path': str(dccd_dir.parent)},
+        'histo_jobs': [{'exchange': 'binance', 'pairs': ['BTC/USDT'], 'span': 3600}],
+    }
+    cfg_file = tmp_path / 'config.yml'
+    cfg_file.write_text(yaml.dump(cfg))
+
+    result = runner.invoke(app, ['status', '--json', '--config', str(cfg_file)])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert 'binance/BTC/USDT' in data
+    assert data['binance/BTC/USDT']['rows_collected'] == 42
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — backfill filters
+# ---------------------------------------------------------------------------
+
+def test_backfill_dry_run_parallel(config_file: Path) -> None:
+    with patch('dccd.daemon.backfill.make_job') as mock_make:
+        mock_job = mock_make.return_value
+        mock_job.obj.full_path = '/tmp/fake'
+        result = runner.invoke(app, [
+            'backfill', '--dry-run', '--parallel', '--config', str(config_file),
+        ])
+    assert result.exit_code == 0
+    # dry-run must never call the real fetch
+    mock_job.run.assert_called_once()
+    call_kwargs = mock_job.run.call_args
+    assert call_kwargs.kwargs.get('dry_run') or call_kwargs.args[1]
+
+
+def test_backfill_exchange_filter_no_match(config_file: Path) -> None:
+    result = runner.invoke(app, [
+        'backfill', '--exchange', 'unknownex', '--config', str(config_file),
+    ])
+    assert result.exit_code == 0
+    assert 'no matching' in result.output.lower()
