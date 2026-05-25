@@ -223,10 +223,10 @@ class ImportDataCryptoCurrencies(ABC):
 
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
-        df = pl.DataFrame(data).rename({'date': 'TS'}).with_columns(pl.col('TS').cast(pl.Int64))
-        if len(df) == 0 or 'TS' not in df.columns:
-            self.df = df
+        if not data:
+            self.df = pl.DataFrame()
             return self
+        df = pl.DataFrame(data).rename({'date': 'TS'}).with_columns(pl.col('TS').cast(pl.Int64))
         # Discard any candle at or beyond self.end: those belong to the next
         # window.  Without this filter, exchanges that return the endpoint
         # candle (inclusive API boundary) would cause _advance to overshoot
