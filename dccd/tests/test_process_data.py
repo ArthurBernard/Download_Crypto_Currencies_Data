@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-import pandas as pd
+import polars as pl
 
 from dccd.process_data import set_marketdepth, set_ohlc, set_orders, set_trades
 
@@ -21,16 +21,16 @@ def _book():
 
 def test_set_trades_sorted():
     result = set_trades(_trades())
-    assert isinstance(result, pd.DataFrame)
-    assert list(result['tid']) == [1, 2]
+    assert isinstance(result, pl.DataFrame)
+    assert result['tid'].to_list() == [1, 2]
 
 
 def test_set_orders_timestamp():
     orders = [{'price': 50000.0, 'qty': 1.0}, {'price': 50100.0, 'qty': 0.5}]
     result = set_orders(orders, t=_TS)
-    assert isinstance(result, pd.DataFrame)
+    assert isinstance(result, pl.DataFrame)
     assert 'timestamp' in result.columns
-    assert (result['timestamp'] == _TS).all()
+    assert result['timestamp'].to_list() == [_TS, _TS]
 
 
 def test_set_orders_default_timestamp():
@@ -39,20 +39,21 @@ def test_set_orders_default_timestamp():
     before = int(time.time())
     result = set_orders(orders)
     after = int(time.time())
-    assert before <= int(result['timestamp'].iloc[0]) <= after
+    assert before <= int(result['timestamp'][0]) <= after
 
 
 def test_set_ohlc_structure():
     result = set_ohlc(_trades(), ts=60)
-    assert isinstance(result, pd.DataFrame)
-    for col in ['open', 'high', 'low', 'close', 'volume']:
+    assert isinstance(result, pl.DataFrame)
+    for col in ['TS', 'open', 'high', 'low', 'close', 'volume']:
         assert col in result.columns
 
 
 def test_set_ohlc_values():
     result = set_ohlc(_trades(), ts=86400)
     # Both trades fall in the same daily bucket
-    row = result.dropna().iloc[0]
+    assert len(result) == 1
+    row = result.row(0, named=True)
     assert float(row['open']) == 50000.0
     assert float(row['high']) == 50100.0
     assert float(row['low']) == 50000.0
@@ -62,15 +63,16 @@ def test_set_ohlc_values():
 
 def test_set_marketdepth_structure():
     result = set_marketdepth(_book(), t=_TS)
-    assert isinstance(result, pd.DataFrame)
-    index_values = result.index.get_level_values(1).unique().tolist()
-    assert 'bid' in index_values
-    assert 'ask' in index_values
+    assert isinstance(result, pl.DataFrame)
+    assert 'side' in result.columns
+    assert 'bid' in result['side'].to_list()
+    assert 'ask' in result['side'].to_list()
 
 
 def test_set_marketdepth_columns():
     result = set_marketdepth(_book(), t=_TS)
-    col_names = result.index.get_level_values(2).unique().tolist()
-    assert 'price' in col_names
-    assert 'cum_amount' in col_names
-    assert 'vwab' in col_names
+    assert 'price' in result.columns
+    assert 'cum_amount' in result.columns
+    assert 'vwab' in result.columns
+    assert 'rank' in result.columns
+    assert 'TS' in result.columns

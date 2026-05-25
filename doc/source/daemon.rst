@@ -99,6 +99,22 @@ Quick start (CLI)
        # Add a new histo job to an existing config in-place
        dccd add --exchange kraken --pair ETH/USD --span 86400 --config config.yml
 
+       # Remove a pair (or whole job) from the config
+       dccd remove --exchange kraken --pair ETH/USD --span 86400 --config config.yml
+
+       # Inspect all data stored on disk (OHLC, trades, orderbook)
+       dccd inventory --config config.yml
+       # exchange   pair         type        span   from         to           rows  gaps
+       # -------------------------------------------------------------------------------
+       # binance    BTC/USDT     ohlc        1h     2020-01-01   2026-05-24  1 234     0
+       # binance    BTC/USDT     trades      -      2021-01-01   2026-05-24     50     0
+
+.. note::
+
+   The ``--config`` option is optional for all commands.  When omitted, dccd
+   searches for ``./config.yml`` in the current directory first, then falls back
+   to ``$XDG_CONFIG_HOME/dccd/config.yml`` (default ``~/.config/dccd/config.yml``).
+
 Python API
 ----------
 
@@ -137,6 +153,8 @@ Configuration
    :toctree: generated/
 
    config.load_config -- load and validate a YAML configuration file
+   config.resolve_config_path -- resolve config path with XDG fallback
+   config.DEFAULT_CONFIG_PATH -- XDG default config path constant
    config.CollectorConfig -- root configuration model
    config.SettingsConfig -- global local settings (data path, timezone)
    config.StorageConfig -- remote sync settings and destinations

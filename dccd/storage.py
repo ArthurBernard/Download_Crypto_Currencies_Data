@@ -27,14 +27,10 @@ from __future__ import annotations
 import logging
 import pathlib
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
-import pandas as pd
+import polars as pl
 
 from dccd.tools.date_time import span_label
-
-if TYPE_CHECKING:
-    pass
 
 __all__ = ['DataStore']
 
@@ -107,7 +103,7 @@ class DataStore:
     # Write
     # ------------------------------------------------------------------
 
-    def save(self, df: pd.DataFrame) -> None:
+    def save(self, df: pl.DataFrame) -> None:
         """Write *df* into the appropriate period file(s), merging with existing data.
 
         OHLC data is grouped by year; trades and orderbook by calendar day.
@@ -116,11 +112,11 @@ class DataStore:
 
         Parameters
         ----------
-        df : pd.DataFrame
+        df : pl.DataFrame
             Data to persist.  Must contain a ``'TS'`` column (Unix timestamps).
 
         """
-        if df.empty:
+        if len(df) == 0:
             return
 
         if 'TS' not in df.columns:
@@ -131,26 +127,27 @@ class DataStore:
         else:
             self._save_grouped(df, fmt='%Y-%m-%d')
 
-    def _save_grouped(self, df: pd.DataFrame, fmt: str) -> None:
-        labels = pd.to_datetime(df['TS'], unit='s', utc=True).dt.strftime(fmt)
-        for label, group_df in df.groupby(labels, sort=False):
+    def _save_grouped(self, df: pl.DataFrame, fmt: str) -> None:
+        df_with_period = df.with_columns(
+            pl.from_epoch('TS', time_unit='s').dt.strftime(fmt).alias('_period')
+        )
+        for label in df_with_period['_period'].unique().sort().to_list():
+            group = df_with_period.filter(pl.col('_period') == label).drop('_period')
             file_path = self.directory / f'{label}.parquet'
-            new = group_df.reset_index(drop=True)
             if file_path.exists():
                 try:
-                    existing = pd.read_parquet(file_path)
-                    new = (
-                        pd.concat([existing, new], ignore_index=True)
-                        .drop_duplicates(subset='TS', keep='last')
-                        .sort_values('TS')
-                        .reset_index(drop=True)
+                    existing = pl.read_parquet(file_path)
+                    group = (
+                        pl.concat([existing, group])
+                        .unique(subset=['TS'], keep='last')
+                        .sort('TS')
                     )
                 except Exception:
                     logger.warning('Corrupted file %s — overwriting.', file_path)
-                    new = new.drop_duplicates(subset='TS', keep='last').sort_values('TS').reset_index(drop=True)
+                    group = group.unique(subset=['TS'], keep='last').sort('TS')
             else:
-                new = new.drop_duplicates(subset='TS', keep='last').sort_values('TS').reset_index(drop=True)
-            new.to_parquet(file_path, index=False)
+                group = group.unique(subset=['TS'], keep='last').sort('TS')
+            group.write_parquet(file_path)
 
     # ------------------------------------------------------------------
     # Read
@@ -160,7 +157,7 @@ class DataStore:
         self,
         start: int | None = None,
         end: int | None = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Load and concatenate all period files covering ``[start, end]``.
 
         Parameters
@@ -174,33 +171,33 @@ class DataStore:
 
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             Concatenated data, sorted by ``'TS'``, filtered to ``[start, end]``.
             Empty DataFrame if no files are found.
 
         """
         files = sorted(self.directory.glob('*.parquet'))
         if not files:
-            return pd.DataFrame()
+            return pl.DataFrame()
 
-        pieces: list[pd.DataFrame] = []
+        pieces: list[pl.DataFrame] = []
         for f in files:
             try:
-                pieces.append(pd.read_parquet(f))
+                pieces.append(pl.read_parquet(f))
             except Exception:
                 logger.warning('Skipping corrupted file %s', f)
 
         if not pieces:
-            return pd.DataFrame()
+            return pl.DataFrame()
 
-        df = pd.concat(pieces, ignore_index=True).sort_values('TS').reset_index(drop=True)
+        df = pl.concat(pieces).sort('TS')
 
         if start is not None:
-            df = df[df['TS'] >= start]
+            df = df.filter(pl.col('TS') >= start)
         if end is not None:
-            df = df[df['TS'] <= end]
+            df = df.filter(pl.col('TS') <= end)
 
-        return df.reset_index(drop=True)
+        return df
 
     # ------------------------------------------------------------------
     # Metadata
@@ -235,8 +232,8 @@ class DataStore:
         for period in reversed(periods):
             file_path = self.directory / f'{period}.parquet'
             try:
-                df = pd.read_parquet(file_path, columns=['TS'])
-                if not df.empty:
+                df = pl.read_parquet(file_path, columns=['TS'])
+                if len(df) > 0:
                     return int(df['TS'].max())
             except Exception:
                 logger.warning('Corrupted file %s — removing.', file_path)
@@ -264,7 +261,7 @@ class DataStore:
         file_path = self.directory / f'{year}.parquet'
         if not file_path.exists():
             return False
-        df = pd.read_parquet(file_path, columns=['TS'])
+        df = pl.read_parquet(file_path, columns=['TS'])
         year_start = datetime(year,     1, 1, tzinfo=timezone.utc)
         year_end   = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
         expected = int((year_end - year_start).total_seconds()) // self.span
@@ -322,8 +319,8 @@ class DataStore:
             if file_path.exists():
                 if year < current_year and self.is_period_complete(year):
                     continue  # full year already on disk — skip
-                df = pd.read_parquet(file_path, columns=['TS'])
-                if not df.empty:
+                df = pl.read_parquet(file_path, columns=['TS'])
+                if len(df) > 0:
                     file_min = int(df['TS'].min())
                     file_max = int(df['TS'].max())
                     # Gap before the first saved row (e.g. backfill requested

@@ -37,9 +37,10 @@ from __future__ import annotations
 
 import time as time_mod
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-import pandas as pd
+import polars as pl
 from tqdm import tqdm
 
 from dccd.tools.date_time import date_to_TS
@@ -92,6 +93,12 @@ class _BackfillBase(ABC):
     form : str
         Output format (accepted for backward compatibility; storage is
         always Parquet via :class:`~dccd.storage.DataStore`).
+    max_retries : int, optional
+        Maximum fetch attempts per window before skipping it.  Default 3.
+    retry_delay : float, optional
+        Base delay in seconds between retries.  Actual delay is
+        ``retry_delay * 2 ** (attempt - 1)`` (exponential back-off).
+        Default 2.0.
 
     """
 
@@ -100,10 +107,14 @@ class _BackfillBase(ABC):
         obj: ImportDataCryptoCurrencies,
         sleep: float,
         form: str,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
     ) -> None:
         self.obj = obj
         self.sleep = sleep
         self.form = form
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         cls_name = type(obj).__name__[4:]  # strip leading 'From'
         self.label = f'{cls_name:8s} {obj.crypto}/{obj.fiat}'
 
@@ -184,9 +195,15 @@ class _BackfillBase(ABC):
             tqdm.write(f'[{self.label}] already up to date')
             return
 
-        total = sum(max(1, (e - s) // self.window_size + 1) for s, e in intervals)
+        def _iso(ts: int) -> str:
+            return datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d')
+
+        total        = sum(max(1, (e - s) // self.window_size + 1) for s, e in intervals)
+        end_date_str = _iso(intervals[-1][1])
         bar = tqdm(
-            total=total, desc=self.label, unit='win',
+            total=total,
+            desc=f'{self.label}  {_iso(intervals[0][0])} → {end_date_str}',
+            unit='',
             position=position, leave=True, dynamic_ncols=True,
         )
 
@@ -200,22 +217,23 @@ class _BackfillBase(ABC):
 
                 last_exc: Exception | None = None
                 n = 0
-                for attempt in range(1, _MAX_RETRIES + 1):
+                for attempt in range(1, self.max_retries + 1):
                     try:
                         n = self._fetch_window(current, end)
                         break
                     except Exception as exc:
                         last_exc = exc
-                        if attempt < _MAX_RETRIES:
+                        if attempt < self.max_retries:
+                            delay = self.retry_delay * (2 ** (attempt - 1))
                             tqdm.write(
-                                f'[{self.label}] attempt {attempt}/{_MAX_RETRIES} '
-                                f'failed: {exc} — retrying in 2s'
+                                f'[{self.label}] attempt {attempt}/{self.max_retries} '
+                                f'failed: {exc} — retrying in {delay:.1f}s'
                             )
-                            time_mod.sleep(2)
+                            time_mod.sleep(delay)
                 else:
                     tqdm.write(
                         f'[{self.label}] window {current} failed after '
-                        f'{_MAX_RETRIES} attempts: {last_exc} — skipping'
+                        f'{self.max_retries} attempts: {last_exc} — skipping'
                     )
                     skipped += 1
                     current += self.window_size
@@ -227,8 +245,10 @@ class _BackfillBase(ABC):
                     self.obj.save()
                     n_candles += n
 
+                current_date = _iso(current)
                 current = self._advance(current, end)
                 bar.update(1)
+                bar.set_description(f'{self.label}  {current_date} → {end_date_str}')
                 bar.set_postfix(candles=n_candles, skipped=skipped)
                 time_mod.sleep(self.sleep)
 
@@ -256,6 +276,10 @@ class OHLCBackfill(_BackfillBase):
         Seconds to wait between requests.
     form : str
         Output format (accepted for backward compatibility).
+    max_retries : int, optional
+        See :class:`_BackfillBase`.  Default 3.
+    retry_delay : float, optional
+        See :class:`_BackfillBase`.  Default 2.0.
 
     """
 
@@ -265,8 +289,10 @@ class OHLCBackfill(_BackfillBase):
         max_candles: int,
         sleep: float,
         form: str,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
     ) -> None:
-        super().__init__(obj, sleep, form)
+        super().__init__(obj, sleep, form, max_retries=max_retries, retry_delay=retry_delay)
         self.max_candles = max_candles
 
     @property
@@ -275,7 +301,7 @@ class OHLCBackfill(_BackfillBase):
 
     def _fetch_window(self, current: int, end: int) -> int:
         self.obj.import_data(start=current, end=end)
-        if self.obj.df is None or self.obj.df.empty:
+        if self.obj.df is None or len(self.obj.df) == 0:
             return 0
         self._warn_if_suspicious(current, end)
         return len(self.obj.df)
@@ -439,28 +465,29 @@ class KrakenBackfill(_BackfillBase):
             return []
 
         span = self.obj.span
-        df = pd.DataFrame(trades)
-        df['ts'] = pd.to_datetime(df['timestamp'], unit='s', utc=True)
-        df = df.set_index('ts').sort_index()
-
-        freq = f'{span}s'
-        origin = pd.Timestamp(start_ts, unit='s', tz='UTC')
-        resample_kw = {'closed': 'left', 'label': 'left', 'origin': origin}
-        ohlc = df['price'].resample(freq, **resample_kw).ohlc()
-        vol  = df['amount'].resample(freq, **resample_kw).sum()
-        qvol = (df['price'] * df['amount']).resample(freq, **resample_kw).sum()
-
+        df = (
+            pl.DataFrame(trades)
+            .with_columns(pl.from_epoch('timestamp', time_unit='s').alias('ts'))
+            .sort('ts')
+        )
         result = (
-            ohlc.join(vol.rename('volume')).join(qvol.rename('quoteVolume'))
-            .loc[
-                pd.Timestamp(start_ts, unit='s', tz='UTC'):
-                pd.Timestamp(end_ts - 1, unit='s', tz='UTC'),
-            ]
-            .dropna(subset=['open'])
+            df.group_by_dynamic('ts', every=f'{span}s', closed='left', start_by='datapoint')
+            .agg(
+                pl.col('price').first().alias('open'),
+                pl.col('price').max().alias('high'),
+                pl.col('price').min().alias('low'),
+                pl.col('price').last().alias('close'),
+                pl.col('amount').sum().alias('volume'),
+                (pl.col('price') * pl.col('amount')).sum().alias('quoteVolume'),
+            )
+            .filter(
+                (pl.col('ts').dt.epoch(time_unit='s') >= start_ts)
+                & (pl.col('ts').dt.epoch(time_unit='s') < end_ts)
+            )
         )
 
         return [{
-            'date':            round(row_ts.timestamp()),
+            'date':            int(row['ts'].timestamp()),
             'open':            float(row['open']),
             'high':            float(row['high']),
             'low':             float(row['low']),
@@ -471,7 +498,7 @@ class KrakenBackfill(_BackfillBase):
                 float(row['quoteVolume'] / row['volume'])
                 if row['volume'] > 0 else float(row['close'])
             ),
-        } for row_ts, row in result.iterrows()]
+        } for row in result.iter_rows(named=True)]
 
 
 # ---------------------------------------------------------------------------
@@ -486,6 +513,8 @@ def make_job(
     path: str,
     tz: str,
     form: str,
+    max_retries: int = 3,
+    retry_delay: float = 2.0,
 ) -> _BackfillBase:
     """Build the appropriate backfill strategy for an (exchange, pair).
 
@@ -532,13 +561,16 @@ def make_job(
     obj = cls(path, crypto, span, fiat, form=form, tz=tz)
 
     if exchange == _KRAKEN_EXCHANGE:
-        return KrakenBackfill(obj, sleep=sleep, form=form)
+        return KrakenBackfill(obj, sleep=sleep, form=form,
+                              max_retries=max_retries, retry_delay=retry_delay)
 
     return OHLCBackfill(
         obj,
         max_candles=defaults['max_candles'],
         sleep=sleep,
         form=form,
+        max_retries=max_retries,
+        retry_delay=retry_delay,
     )
 
 
@@ -587,6 +619,8 @@ def run_backfill(
             job = make_job(
                 histo_job.exchange, crypto, fiat, histo_job.span,
                 path, tz, histo_job.format,
+                max_retries=histo_job.max_retries,
+                retry_delay=histo_job.retry_delay,
             )
             if job.obj.full_path in seen_paths:
                 tqdm.write(

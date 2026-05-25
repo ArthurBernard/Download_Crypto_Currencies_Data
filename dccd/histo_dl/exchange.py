@@ -21,10 +21,10 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 # Import extern packages
-import pandas as pd
+import polars as pl
 import requests
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
@@ -32,9 +32,6 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from dccd.models import OHLCBar, OrderBookEntry, Trade
 from dccd.storage import DataStore
 from dccd.tools.date_time import date_to_TS, span_to_str, str_to_span
-
-if TYPE_CHECKING:
-    import polars as pl
 
 __all__ = ['ImportDataCryptoCurrencies']
 
@@ -88,9 +85,9 @@ class ImportDataCryptoCurrencies(ABC):
         Number of seconds between observations.
     full_path : str
         Absolute directory path managed by :class:`~dccd.storage.DataStore`.
-    trades_df : pd.DataFrame
+    trades_df : pl.DataFrame
         Trades data after calling :meth:`import_trades`.
-    orderbook_df : pd.DataFrame
+    orderbook_df : pl.DataFrame
         Order book snapshot after calling :meth:`import_orderbook`.
 
     Methods
@@ -118,8 +115,8 @@ class ImportDataCryptoCurrencies(ABC):
         self._canonical_pair = f'{crypto}/{fiat}'
         self._store = DataStore(path, self._exchange_name, self._canonical_pair, self.span, 'ohlc')
         self.full_path = str(self._store.directory)
-        self.trades_df: pd.DataFrame = pd.DataFrame()
-        self.orderbook_df: pd.DataFrame = pd.DataFrame()
+        self.trades_df: pl.DataFrame = pl.DataFrame()
+        self.orderbook_df: pl.DataFrame = pl.DataFrame()
         self.form = form
         self.start: int = 0
         self.end: int = 0
@@ -197,9 +194,9 @@ class ImportDataCryptoCurrencies(ABC):
             Ignored.  Kept for backward-compatibility.
 
         """
-        df = self.df.copy()
+        df = self.df
         if 'Date' in df.columns:
-            df = df.drop('Date', axis=1)
+            df = df.drop('Date')
         self._store.save(df)
         self.full_path = str(self._store.directory)
         return self
@@ -226,10 +223,10 @@ class ImportDataCryptoCurrencies(ABC):
 
         """
         data = [OHLCBar(**d).model_dump(exclude_none=False) for d in data]
-        df = pd.DataFrame(data).rename(columns={'date': 'TS'})
-        if df.empty or 'TS' not in df.columns:
-            self.df = df
+        if not data:
+            self.df = pl.DataFrame()
             return self
+        df = pl.DataFrame(data).rename({'date': 'TS'}).with_columns(pl.col('TS').cast(pl.Int64))
         # Discard any candle at or beyond self.end: those belong to the next
         # window.  Without this filter, exchanges that return the endpoint
         # candle (inclusive API boundary) would cause _advance to overshoot
@@ -237,27 +234,29 @@ class ImportDataCryptoCurrencies(ABC):
         # Guard: only filter when self.end is set (> 0); direct callers that
         # bypass _set_time leave self.end = 0, so we skip the filter.
         if self.end > 0:
-            df = df[df['TS'] < self.end]
+            df = df.filter(pl.col('TS') < self.end)
         # Use self.end as the exclusive grid boundary so the full window is
         # covered even when the last trade arrives >span seconds before the
         # window end.  Callers must set self.end to the correct window
         # boundary before calling _sort_data (the backfill scripts do this).
-        TS = pd.DataFrame(
-            list(range(self.start, self.end, self.span)),
-            columns=['TS']
+        ts_grid = pl.DataFrame(
+            {'TS': list(range(self.start, self.end, self.span))},
+            schema={'TS': pl.Int64},
         )
-        if df.empty or 'TS' not in df.columns:
+        if len(df) == 0 or 'TS' not in df.columns:
             self.df = df
             return self
-        df = (df.merge(TS, on='TS', how='outer', sort=False)
-              .sort_values('TS')
-              .reset_index(drop=True)
-              .ffill())
-        df = df.assign(Date=pd.to_datetime(df.TS, unit='s'))
-        self.df = df.assign(date=df.Date.dt.date, time=df.Date.dt.time)
+        non_ts_cols = [c for c in df.columns if c != 'TS']
+        df = (
+            df.join(ts_grid, on='TS', how='full', coalesce=True)
+            .sort('TS')
+            .with_columns([pl.col(c).forward_fill() for c in non_ts_cols])
+            .with_columns(pl.from_epoch('TS', time_unit='s').alias('Date'))
+        )
+        self.df = df
         # Update self.end to the actual last candle so callers can advance
         # their window pointer correctly (critical for Kraken).
-        if not df.empty:
+        if len(df) > 0:
             self.end = int(self.df['TS'].max())
         return self
 
@@ -275,7 +274,7 @@ class ImportDataCryptoCurrencies(ABC):
 
         Returns
         -------
-        data : pd.DataFrame
+        data : pl.DataFrame
             Data sorted and cleaned in a data frame.
 
         """
@@ -283,23 +282,22 @@ class ImportDataCryptoCurrencies(ABC):
 
         return self._sort_data(data)
 
-    def get_data(self, format: str = 'pandas') -> pd.DataFrame | pl.DataFrame:
+    def get_data(self, format: str = 'polars') -> pl.DataFrame:
         """ Return the downloaded data.
 
         Parameters
         ----------
-        format : {'pandas', 'polars'}, optional
-            Output format. Default is 'pandas'.
+        format : {'polars', 'pandas'}, optional
+            Output format. Default is 'polars'.
 
         Returns
         -------
-        pandas.DataFrame or polars.DataFrame
+        pl.DataFrame
             Current data in the requested format.
 
         """
-        if format == 'polars':
-            import polars as pl
-            return pl.from_pandas(self.df)
+        if format == 'pandas':
+            return self.df.to_pandas()
         return self.df
 
     def _period(self, span: int | str) -> tuple[int, str]:
@@ -411,10 +409,9 @@ class ImportDataCryptoCurrencies(ABC):
 
         """
         validated = [Trade(**d).model_dump() for d in data]
-        df = pd.DataFrame(validated).rename(columns={'timestamp': 'TS'})
-        df = df.sort_values('TS').reset_index(drop=True)
-        if not df.empty and df['tid'].notna().any():
-            df = df.drop_duplicates(subset='tid', keep='last').reset_index(drop=True)
+        df = pl.DataFrame(validated).rename({'timestamp': 'TS'}).sort('TS')
+        if len(df) > 0 and df['tid'].is_not_null().any():
+            df = df.unique(subset=['tid'], keep='last').sort('TS')
         self.trades_df = df
         return self
 
@@ -440,7 +437,7 @@ class ImportDataCryptoCurrencies(ABC):
             Returns ``self`` to allow method chaining.
 
         """
-        if self.trades_df.empty:
+        if len(self.trades_df) == 0:
             return self
         store = DataStore(self.path, self._exchange_name, self._canonical_pair, None, 'trades')
         store.save(self.trades_df)
@@ -517,13 +514,10 @@ class ImportDataCryptoCurrencies(ABC):
 
         """
         validated = [OrderBookEntry(**d).model_dump() for d in data]
-        df = pd.DataFrame(validated)
-        df['_p'] = df['price'].astype(float)
-        bids = df[df['side'] == 'bid'].sort_values('_p', ascending=False)
-        asks = df[df['side'] == 'ask'].sort_values('_p', ascending=True)
-        self.orderbook_df = (
-            pd.concat([bids, asks]).drop('_p', axis=1).reset_index(drop=True)
-        )
+        df = pl.DataFrame(validated).with_columns(pl.col('price').cast(pl.Float64))
+        bids = df.filter(pl.col('side') == 'bid').sort('price', descending=True)
+        asks = df.filter(pl.col('side') == 'ask').sort('price', descending=False)
+        self.orderbook_df = pl.concat([bids, asks])
         return self
 
     def save_orderbook(self, form: str = 'parquet') -> ImportDataCryptoCurrencies:
@@ -544,11 +538,11 @@ class ImportDataCryptoCurrencies(ABC):
             Returns ``self`` to allow method chaining.
 
         """
-        if self.orderbook_df.empty:
+        if len(self.orderbook_df) == 0:
             return self
-        df = self.orderbook_df.copy()
+        df = self.orderbook_df
         if 'TS' not in df.columns:
-            df.insert(0, 'TS', int(time.time()))
+            df = df.with_columns(pl.lit(int(time.time())).alias('TS'))
         store = DataStore(self.path, self._exchange_name, self._canonical_pair, None, 'orderbook')
         store.save(df)
         return self

@@ -3,13 +3,13 @@
 
 import pathlib
 
-import pandas as pd
+import polars as pl
 
 _FALLBACK_TS = 1325376000  # 2012-01-01 00:00:00 UTC
 
 
-def _sample_df() -> pd.DataFrame:
-    return pd.DataFrame({'TS': [1700000000, 1700003600, 1700007200]})
+def _sample_df() -> pl.DataFrame:
+    return pl.DataFrame({'TS': [1700000000, 1700003600, 1700007200]})
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ def test_get_last_date_parquet(tmp_path):
 
     obj = FromBinance(str(tmp_path), 'BTC', 60, fiat='USDT')
     df = _sample_df()
-    df.to_parquet(pathlib.Path(obj.full_path) / '2023.parquet', index=False)
+    df.write_parquet(pathlib.Path(obj.full_path) / '2023.parquet')
     assert obj._get_last_date() == 1700007200
 
 
@@ -60,9 +60,17 @@ def test_save_parquet(tmp_path):
 
     files = list(pathlib.Path(obj.full_path).glob('*.parquet'))
     assert len(files) == 1
-    df = pd.read_parquet(files[0])
+    df = pl.read_parquet(files[0])
     assert 'TS' in df.columns
     assert len(df) >= 1
+
+
+def test_sort_data_empty_list_no_crash(tmp_path):
+    from dccd.histo_dl.binance import FromBinance
+
+    obj = FromBinance(str(tmp_path), 'BTC', 3600, fiat='USDT')
+    obj._sort_data([])
+    assert len(obj.df) == 0
 
 
 def test_save_creates_correct_path(tmp_path):

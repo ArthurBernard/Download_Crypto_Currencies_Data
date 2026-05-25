@@ -48,10 +48,6 @@ From pip::
 
     $ pip install dccd
 
-With optional Parquet / Polars support::
-
-    $ pip install "dccd[io]"
-
 With autonomous daemon support (APScheduler + PyYAML)::
 
     $ pip install "dccd[daemon]"
@@ -111,14 +107,14 @@ Output formats
 --------------
 
 Historical data can be saved as **CSV**, **Excel** (``.xlsx``), **SQLite**,
-**PostgreSQL** (via SQLAlchemy), or **Parquet** (requires ``dccd[io]``).
-Parquet files can be read back as either a ``pandas.DataFrame`` or a
-``polars.DataFrame``.
+**PostgreSQL** (via SQLAlchemy), or **Parquet**.
+All DataFrames are native ``polars.DataFrame``.  A ``pandas.DataFrame`` can be
+obtained via ``get_data(format='pandas')``.
 
 Quick start
 ===========
 
-Historical data (pandas):
+Historical data:
 
 .. code-block:: python
 
@@ -127,13 +123,8 @@ Historical data (pandas):
     obj = FromBinance('/path/to/data/', 'BTC', 3600, fiat='USDT')
     obj.import_data(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
     obj.save(form='parquet')
-    df = obj.get_data()            # pandas DataFrame
-
-Polars output:
-
-.. code-block:: python
-
-    df_pl = obj.get_data(format='polars')
+    df = obj.get_data()               # polars DataFrame (default)
+    df_pd = obj.get_data(format='pandas')  # pandas DataFrame (optional)
 
 Incremental update (resume from last saved point):
 
@@ -160,7 +151,7 @@ Trades (historical or recent):
     obj = FromBinance('/path/', 'BTC', 3600, fiat='USDT')
     obj.import_trades(start='2024-01-01 00:00:00', end='2024-01-02 00:00:00')
     obj.save_trades(form='csv')
-    df = obj.trades_df    # pandas DataFrame — columns: timestamp, price, amount, type, tid
+    df = obj.trades_df    # polars DataFrame — columns: TS, price, amount, type, tid
 
     # Kraken also supports full history; Bybit/Coinbase return recent-only snapshots
     FromKraken('/path/', 'BTC', 3600).import_trades(start='2024-01-01', end='2024-01-02').save_trades()
@@ -223,6 +214,16 @@ CLI quick start:
 
     # Continuous daemon (Ctrl-C to stop)
     dccd start --config config.yml
+
+    # Add / remove a histo job in-place
+    dccd add --exchange kraken --pair ETH/USD --span 86400 --config config.yml
+    dccd remove --exchange kraken --pair ETH/USD --span 86400 --config config.yml
+
+    # Inspect all data on disk (OHLC, trades, orderbook)
+    dccd inventory --config config.yml
+
+Note: ``--config`` is optional — dccd searches ``./config.yml`` then
+``~/.config/dccd/config.yml`` when omitted.
 
 Python API:
 

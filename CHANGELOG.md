@@ -6,10 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.3.1] - 2026-05-24
+## [2.3.2] - 2026-05-25
+
+### Added
+
+- `dccd/daemon/cli.py` — `dccd status --json`: emit raw metrics as a JSON object on stdout, suitable for piping into Grafana / jq (#53)
+- `dccd/daemon/config.py` — `HistoJob.max_retries` (int, 1–10, default 3) and `HistoJob.retry_delay` (float ≥ 0, default 2.0): per-job retry configuration for transient network errors; delay is exponential (`retry_delay * 2^(attempt-1)`) (#53)
+- `dccd/daemon/config.py` — `resolve_config_path()` and `DEFAULT_CONFIG_PATH`: CLI commands now fall back to `$XDG_CONFIG_HOME/dccd/config.yml` (default `~/.config/dccd/config.yml`) when no `--config` option is provided and `./config.yml` does not exist (#49)
+- `dccd/daemon/cli.py` — `dccd inventory`: scans `data_path` and prints a table of all stored OHLC, trades, and orderbook data with date range, row count, and gap count per series; uses Polars for fast columnar reads (#50)
+- `dccd/daemon/cli.py` — `dccd remove --exchange X --pair Y --span N`: removes a pair from a histo_job (or the whole job if it was the last pair) and re-validates the config before writing (#50)
+
+### Changed
+
+- `dccd/storage.py`, `dccd/histo_dl/exchange.py`, `dccd/daemon/backfill.py`, `dccd/process_data.py`, `dccd/daemon/stream_manager.py` — replace pandas with polars throughout; `DataStore.save/load` accept/return `pl.DataFrame`; `get_data()` defaults to `format='polars'`; `set_marketdepth` returns a flat long-format `pl.DataFrame`; stream savers write parquet via `DataStore`; `pandas` removed from core dependencies (#52)
+- `dccd/daemon/backfill.py` — backfill progress bar now shows the current window date (`YYYY-MM-DD → YYYY-MM-DD`) instead of a raw window count (`n win`); makes it easy to see which period is being downloaded at a glance (#48)
 
 ### Fixed
 
+- `dccd/histo_dl/exchange.py` — `_sort_data` no longer raises `ColumnNotFoundError: "date"` when the exchange API returns an empty candle list; the polars migration (PR #52) had re-introduced a variant of the empty-data crash from v2.3.1; now returns early with an empty `self.df` (#54)
+
+## [2.3.1] - 2026-05-24
+
+### Fixed
 - `dccd/storage.py` — `DataStore.missing_intervals` now detects the gap **before** the first saved row when the requested `start` predates `file_min`; previously only the trailing gap (after `file_max`) was returned, causing `dccd backfill --start <early-date>` to silently skip all historical data before the first existing candle (#46)
 - `dccd/histo_dl/coinbase.py` — raise `RuntimeError` when Coinbase returns HTTP 200 with a JSON dict (e.g. `{"message": "..."}` for near-future windows) instead of silently iterating dict keys and crashing with `ValueError` (#45)
 - `dccd/histo_dl/coinbase.py` — additional guard: raise `RuntimeError` when Coinbase returns a JSON list whose first element is not itself a list/tuple (e.g. `["message"]`); previously caused `float("m")` `ValueError` (#45)

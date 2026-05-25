@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dccd"
-version = "2.3.1"
+version = "2.3.2"
 description = "Download Crypto Currency Data from different exchanges."
 readme = "README.rst"
 license = { text = "MIT" }
@@ -25,7 +25,8 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.26",
-    "pandas>=2.0",
+    "polars>=0.20",
+    "pyarrow>=13",
     "requests>=2.28",
     "openpyxl>=3.1",
     "websockets>=12.0",
@@ -36,9 +37,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-io = ["pyarrow>=13", "polars>=0.20"]
+io = ["polars>=0.20", "pyarrow>=13"]
 daemon = ["pyyaml>=6.0", "apscheduler>=3.10,<4", "typer>=0.12", "tqdm>=4.64"]
-dev = ["pytest>=7.4", "pytest-asyncio>=0.23", "pytest-cov>=4.1", "ruff>=0.4", "interrogate>=1.5", "mypy>=1.0", "pandas-stubs>=2.0", "pyyaml>=6.0", "apscheduler>=3.10,<4", "typer>=0.12", "tqdm>=4.64"]
+dev = ["pytest>=7.4", "pytest-asyncio>=0.23", "pytest-cov>=4.1", "ruff>=0.4", "interrogate>=1.5", "mypy>=1.0", "pyyaml>=6.0", "apscheduler>=3.10,<4", "typer>=0.12", "tqdm>=4.64"]
 doc = ["sphinx>=7.0", "furo", "numpydoc", "sphinx-design", "sphinx-copybutton", "pyyaml>=6.0", "apscheduler>=3.10,<4"]
 
 [project.scripts]

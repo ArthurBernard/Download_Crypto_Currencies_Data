@@ -52,6 +52,14 @@ Commands
         Append a new histo_job to the YAML config file in-place and
         re-validate the modified config before writing.
 
+    dccd remove --exchange X --pair Y --span N [--config PATH]
+        Remove a pair from a histo_job (or the whole job if it was the last
+        pair) and re-validate before writing.
+
+    dccd inventory [--config PATH]
+        Scan data_path and print a table of all stored data (OHLC, trades,
+        orderbook) with date range, row count, and gap count per series.
+
 """
 
 from __future__ import annotations
@@ -69,17 +77,15 @@ __all__ = ['app']
 
 app = typer.Typer(help='dccd — autonomous crypto data collection daemon')
 
-_DEFAULT_CONFIG = 'config.yml'
-
-
-def _load(config_path: str) -> object:
+def _load(config_path: Optional[str]) -> object:
     """Load config, exit with code 1 on any error."""
-    from dccd.daemon.config import load_config
+    from dccd.daemon.config import load_config, resolve_config_path
 
     try:
-        return load_config(config_path)
-    except FileNotFoundError:
-        typer.echo(f'Error: config file not found: {config_path}', err=True)
+        resolved = resolve_config_path(config_path)
+        return load_config(resolved)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
         raise typer.Exit(1)
     except Exception as exc:
         typer.echo(f'Error: {exc}', err=True)
@@ -88,8 +94,10 @@ def _load(config_path: str) -> object:
 
 @app.command()
 def validate(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Validate a YAML config file and print a one-line summary.
 
@@ -98,8 +106,15 @@ def validate(
     Exits with code 1 on any error (missing file, bad YAML, invalid config).
 
     """
-    cfg = _load(config)
-    typer.echo(f'Config: {config}')
+    from dccd.daemon.config import resolve_config_path
+
+    try:
+        resolved = resolve_config_path(config)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
+        raise typer.Exit(1)
+    cfg = _load(str(resolved))
+    typer.echo(f'Config: {resolved}')
     typer.echo(f'  data_path          : {cfg.settings.data_path}')  # type: ignore[attr-defined]
     typer.echo(f'  timezone           : {cfg.settings.timezone}')  # type: ignore[attr-defined]
     typer.echo(f'  remotes            : {len(cfg.storage.remotes)}')  # type: ignore[attr-defined]
@@ -110,8 +125,9 @@ def validate(
 
 @app.command()
 def backfill(
-    config: str = typer.Option(
-        _DEFAULT_CONFIG, '--config', '-c', help='Path to the YAML config file.',
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
     ),
     exchange: Optional[str] = typer.Option(
         None, '--exchange', '-e',
@@ -152,8 +168,10 @@ def backfill(
 
 @app.command()
 def collect(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Fetch one incremental batch per histo_job, then exit.
 
@@ -187,8 +205,10 @@ def collect(
 
 @app.command()
 def start(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Start the continuous daemon and block until SIGINT or SIGTERM.
 
@@ -234,8 +254,11 @@ def start(
 
 @app.command()
 def status(
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
+    json_out: bool = typer.Option(False, '--json', help='Output raw metrics as JSON on stdout.'),
 ) -> None:
     """ Print a health table from the saved metrics JSON.
 
@@ -244,15 +267,22 @@ def status(
     ``last_success``, ``rows`` (cumulative), ``errors`` (consecutive).
     Prints ``No metrics yet.`` if the file does not exist.
 
+    Pass ``--json`` to emit the raw metrics dict as JSON on stdout instead,
+    suitable for piping into Grafana, jq, or other tooling.
+
     """
     cfg = _load(config)
     metrics_file = Path(cfg.storage.local_path) / '.dccd' / 'metrics.json'  # type: ignore[attr-defined]
 
     if not metrics_file.exists():
-        typer.echo('No metrics yet.')
+        typer.echo('{}' if json_out else 'No metrics yet.')
         return
 
     data: dict = json.loads(metrics_file.read_text())
+
+    if json_out:
+        typer.echo(json.dumps(data, indent=2))
+        return
 
     def _fmt_ts(ts: float | None) -> str:
         if ts is None:
@@ -280,8 +310,10 @@ def add(
     exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.'),
     pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).'),
     span: int = typer.Option(..., '--span', '-s', help='Candle interval in seconds.'),
-    config: str = typer.Option(_DEFAULT_CONFIG, '--config', '-c',
-                               help='Path to the YAML config file.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
 ) -> None:
     """ Append a new histo job to the YAML config file in-place.
 
@@ -293,11 +325,16 @@ def add(
     import yaml
     from pydantic import ValidationError
 
-    from dccd.daemon.config import CollectorConfig
+    from dccd.daemon.config import CollectorConfig, resolve_config_path
 
-    config_path = Path(config)
+    try:
+        config_path = resolve_config_path(config)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
+        raise typer.Exit(1)
+
     if not config_path.exists():
-        typer.echo(f'Error: config file not found: {config}', err=True)
+        typer.echo(f'Error: config file not found: {config_path}', err=True)
         raise typer.Exit(1)
 
     raw: dict = yaml.safe_load(config_path.read_text())
@@ -316,4 +353,151 @@ def add(
 
     config_path.write_text(yaml.dump(raw, default_flow_style=False))
     typer.echo(f'Added histo job: exchange={exchange} pair={pair} span={span}s')
-    typer.echo(f'Config written to {config}.')
+    typer.echo(f'Config written to {config_path}.')
+
+
+@app.command()
+def remove(
+    exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.'),
+    pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).'),
+    span: int = typer.Option(..., '--span', '-s', help='Candle interval in seconds.'),
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
+) -> None:
+    """ Remove a pair from a histo_job in the YAML config file in-place.
+
+    Finds the ``histo_job`` matching ``(exchange, span)`` that contains
+    *pair*, removes *pair* from its ``pairs`` list, and removes the whole
+    job if the list becomes empty.  Re-validates the config with Pydantic
+    before writing; exits with code 1 and leaves the file unchanged if
+    validation fails (e.g. removing the last job).
+
+    """
+    import yaml
+    from pydantic import ValidationError
+
+    from dccd.daemon.config import CollectorConfig, resolve_config_path
+
+    try:
+        config_path = resolve_config_path(config)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
+        raise typer.Exit(1)
+
+    if not config_path.exists():
+        typer.echo(f'Error: config file not found: {config_path}', err=True)
+        raise typer.Exit(1)
+
+    raw: dict = yaml.safe_load(config_path.read_text())
+    jobs: list = raw.get('histo_jobs', [])
+
+    target = next(
+        (j for j in jobs if j.get('exchange') == exchange
+         and j.get('span') == span and pair in j.get('pairs', [])),
+        None,
+    )
+    if target is None:
+        typer.echo(
+            f'No matching job found: exchange={exchange} pair={pair} span={span}s',
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    target['pairs'].remove(pair)
+    if not target['pairs']:
+        jobs.remove(target)
+
+    try:
+        CollectorConfig.model_validate(raw)
+    except ValidationError as exc:
+        typer.echo(f'Validation error after remove: {exc}', err=True)
+        raise typer.Exit(1)
+
+    config_path.write_text(yaml.dump(raw, default_flow_style=False))
+    typer.echo(f'Removed {pair} from {exchange}/{span}s.')
+    typer.echo(f'Config written to {config_path}.')
+
+
+@app.command()
+def inventory(
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
+) -> None:
+    """ Print a table of all data stored under data_path.
+
+    Scans ``{data_path}/{exchange}/{ohlc|trades|orderbook}/…`` for Parquet
+    files and reports, for each series: exchange, pair, data type, span
+    (OHLC only), date range, row count, and gap count (missing years for
+    OHLC, missing days for trades/orderbook).
+
+    Requires ``polars`` (included in the ``daemon`` and ``io`` extras).
+
+    """
+    import collections
+    from datetime import date
+    from pathlib import Path as _Path
+
+    import polars as pl
+
+    from dccd.tools.date_time import TS_to_date
+
+    cfg = _load(config)
+    data_path = _Path(cfg.storage.local_path)  # type: ignore[attr-defined]
+
+    _DATA_TYPES = ('ohlc', 'trades', 'orderbook')
+    groups: dict[tuple[str, str, str, str], list[_Path]] = collections.defaultdict(list)
+
+    for dt in _DATA_TYPES:
+        for f in data_path.glob(f'*/{dt}/**/*.parquet'):
+            parts = f.relative_to(data_path).parts
+            # ohlc:  (exchange, 'ohlc', pair_slug, span_label, 'YYYY.parquet')     len=5
+            # other: (exchange, 'trades'|'orderbook', pair_slug, 'YYYY-MM-DD.parquet') len=4
+            exchange_name = parts[0]
+            pair_slug = parts[2]
+            span_lbl = parts[3] if dt == 'ohlc' and len(parts) == 5 else '-'
+            groups[(exchange_name, dt, pair_slug, span_lbl)].append(f)
+
+    if not groups:
+        typer.echo(f'No data found under {data_path}.')
+        return
+
+    rows = []
+    for (exchange_name, dt, pair_slug, span_lbl), files in sorted(groups.items()):
+        files = sorted(files)
+        ts_col = pl.concat([
+            pl.read_parquet(f, columns=['TS']) for f in files
+        ])['TS']
+        total_rows = len(ts_col)
+        ts_min = ts_col.min()
+        ts_max = ts_col.max()
+        from_date = TS_to_date(int(ts_min), form='%Y-%m-%d') if ts_min is not None else '-'
+        to_date = TS_to_date(int(ts_max), form='%Y-%m-%d') if ts_max is not None else '-'
+
+        if dt == 'ohlc':
+            existing_years = {int(f.stem) for f in files}
+            gaps = len(set(range(min(existing_years), max(existing_years) + 1)) - existing_years)
+        else:
+            existing_days = {f.stem for f in files}
+            d0 = date.fromisoformat(min(existing_days))
+            d1 = date.fromisoformat(max(existing_days))
+            gaps = (d1 - d0).days + 1 - len(existing_days)
+
+        pair = pair_slug.replace('-', '/', 1)
+        rows.append((exchange_name, pair, dt, span_lbl, from_date, to_date, total_rows, gaps))
+
+    ew, pw, tw, sw, fw, tow, rw, gw = 10, 12, 11, 6, 12, 12, 8, 6
+    header = (
+        f"{'exchange':<{ew}} {'pair':<{pw}} {'type':<{tw}} {'span':<{sw}} "
+        f"{'from':<{fw}} {'to':<{tow}} {'rows':>{rw}} {'gaps':>{gw}}"
+    )
+    typer.echo(header)
+    typer.echo('-' * len(header))
+    for exchange_name, pair, dt, span_lbl, from_date, to_date, total_rows, gaps in rows:
+        typer.echo(
+            f"{exchange_name:<{ew}} {pair:<{pw}} {dt:<{tw}} {span_lbl:<{sw}} "
+            f"{from_date:<{fw}} {to_date:<{tow}} {total_rows:>{rw},} {gaps:>{gw}}"
+        )
