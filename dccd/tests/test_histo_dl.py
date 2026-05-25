@@ -65,6 +65,14 @@ def test_save_parquet(tmp_path):
     assert len(df) >= 1
 
 
+def test_sort_data_empty_list_no_crash(tmp_path):
+    from dccd.histo_dl.binance import FromBinance
+
+    obj = FromBinance(str(tmp_path), 'BTC', 3600, fiat='USDT')
+    obj._sort_data([])
+    assert len(obj.df) == 0
+
+
 def test_save_creates_correct_path(tmp_path):
     from dccd.histo_dl.binance import FromBinance
 
