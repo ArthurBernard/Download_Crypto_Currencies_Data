@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-05-25
+
 ### Added
 
 - `dccd/daemon/cli.py` — `dccd status --json`: emit raw metrics as a JSON object on stdout, suitable for piping into Grafana / jq (#53)
@@ -21,14 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `dccd/storage.py` — `DataStore.missing_intervals` now detects the gap **before** the first saved row when the requested `start` predates `file_min`; previously only the trailing gap (after `file_max`) was returned, causing `dccd backfill --start <early-date>` to silently skip all historical data before the first existing candle (#XX)
+- `dccd/histo_dl/exchange.py` — `_sort_data` no longer raises `ColumnNotFoundError: "date"` when the exchange API returns an empty candle list; the polars migration (PR #52) had re-introduced a variant of the empty-data crash from v2.3.1; now returns early with an empty `self.df` (#54)
 
-- `dccd/histo_dl/coinbase.py` — raise `RuntimeError` when Coinbase returns HTTP 200 with a JSON dict (e.g. `{"message": "..."}` for near-future windows) instead of silently iterating dict keys and crashing with `ValueError` (#XX)
-- `dccd/histo_dl/coinbase.py` — additional guard: raise `RuntimeError` when Coinbase returns a JSON list whose first element is not itself a list/tuple (e.g. `["message"]`); previously caused `float("m")` `ValueError` (#XX)
-- `dccd/histo_dl/exchange.py` — `_sort_data` no longer raises `ColumnNotFoundError: "date"` when the exchange API returns an empty candle list; now returns early with an empty `self.df` so the backfill skips the window cleanly instead of retrying 3× and logging a cryptic error (#54)
-- `dccd/histo_dl/exchange.py` — `_sort_data` strips any candle at or beyond `self.end` before merging; exchanges with inclusive endpoint semantics (Coinbase) no longer cause `_advance` to overshoot by one span per window, preventing drift that accumulated into near-future requests (#XX)
-- `dccd/histo_dl/okx.py` — raise `RuntimeError` when OKX response code is not `"0"`, letting the backfill retry/skip logic handle API-level errors (#XX)
-- `dccd/histo_dl/okx.py` — switch `_import_data` from `/market/candles` to `/market/history-candles`; the former only serves the last ~24 h of 1-minute bars and silently returns empty data for older windows (#XX)
+## [2.3.1] - 2026-05-24
+
+### Fixed
+
+- `dccd/storage.py` — `DataStore.missing_intervals` now detects the gap **before** the first saved row when the requested `start` predates `file_min`; previously only the trailing gap (after `file_max`) was returned, causing `dccd backfill --start <early-date>` to silently skip all historical data before the first existing candle (#46)
+- `dccd/histo_dl/coinbase.py` — raise `RuntimeError` when Coinbase returns HTTP 200 with a JSON dict (e.g. `{"message": "..."}` for near-future windows) instead of silently iterating dict keys and crashing with `ValueError` (#45)
+- `dccd/histo_dl/coinbase.py` — additional guard: raise `RuntimeError` when Coinbase returns a JSON list whose first element is not itself a list/tuple (e.g. `["message"]`); previously caused `float("m")` `ValueError` (#45)
+- `dccd/histo_dl/exchange.py` — `_sort_data` no longer raises `KeyError: 'TS'` when the API returns empty data; returns early with an empty `self.df` so the backfill skips the window cleanly (#45)
+- `dccd/histo_dl/exchange.py` — `_sort_data` strips any candle at or beyond `self.end` before merging; exchanges with inclusive endpoint semantics (Coinbase) no longer cause `_advance` to overshoot by one span per window, preventing drift that accumulated into near-future requests (#45)
+- `dccd/histo_dl/okx.py` — raise `RuntimeError` when OKX response code is not `"0"`, letting the backfill retry/skip logic handle API-level errors (#45)
+- `dccd/histo_dl/okx.py` — switch `_import_data` from `/market/candles` to `/market/history-candles`; the former only serves the last ~24 h of 1-minute bars and silently returns empty data for older windows (#45)
 
 ## [2.3.0] - 2026-05-22
 
