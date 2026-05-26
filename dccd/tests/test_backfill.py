@@ -37,7 +37,7 @@ def _make_kraken_job(tmp_path) -> KrakenBackfill:
 
 def test_trades_to_ohlc_basic():
     job = _make_kraken_job('/tmp')
-    start = 1700000000
+    start = 1700000040  # must be a multiple of 60 so start_by='window' bins align exactly
     end   = start + 300  # 5 minutes
 
     trades = [
@@ -59,12 +59,12 @@ def test_trades_to_ohlc_basic():
 
 def test_trades_to_ohlc_empty():
     job = _make_kraken_job('/tmp')
-    assert job._trades_to_ohlc([], 1700000000, 1700000300) == []
+    assert job._trades_to_ohlc([], 1700000040, 1700000340) == []
 
 
 def test_trades_to_ohlc_weighted_average():
     job = _make_kraken_job('/tmp')
-    start = 1700000000
+    start = 1700000040  # must be a multiple of 60
     trades = [
         {'timestamp': start + 5,  'price': 100.0, 'amount': 1.0},
         {'timestamp': start + 10, 'price': 200.0, 'amount': 1.0},
