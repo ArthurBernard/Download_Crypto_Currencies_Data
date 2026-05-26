@@ -58,8 +58,8 @@ __all__ = ['OHLCBackfill', 'KrakenBackfill', 'make_job', 'run_backfill']
 _EXCHANGE_DEFAULTS: dict[str, dict] = {
     'binance':  {'max_candles': 990, 'sleep': 0.12},
     'bybit':    {'max_candles': 990, 'sleep': 0.15},
-    'kraken':   {'sleep': 1.00},
-    'okx':      {'max_candles': 990, 'sleep': 0.20},
+    'kraken':   {'sleep': 1.0},
+    'okx':      {'max_candles': 300, 'sleep': 0.20},
     'coinbase': {'max_candles': 300, 'sleep': 0.25},
 }
 
@@ -471,7 +471,7 @@ class KrakenBackfill(_BackfillBase):
             .sort('ts')
         )
         result = (
-            df.group_by_dynamic('ts', every=f'{span}s', closed='left', start_by='datapoint')
+            df.group_by_dynamic('ts', every=f'{span}s', closed='left', start_by='window')
             .agg(
                 pl.col('price').first().alias('open'),
                 pl.col('price').max().alias('high'),
@@ -484,10 +484,11 @@ class KrakenBackfill(_BackfillBase):
                 (pl.col('ts').dt.epoch(time_unit='s') >= start_ts)
                 & (pl.col('ts').dt.epoch(time_unit='s') < end_ts)
             )
+            .with_columns(pl.col('ts').dt.epoch(time_unit='s').alias('ts_sec'))
         )
 
         return [{
-            'date':            int(row['ts'].timestamp()),
+            'date':            row['ts_sec'],
             'open':            float(row['open']),
             'high':            float(row['high']),
             'low':             float(row['low']),
