@@ -222,6 +222,9 @@ CLI quick start:
     # Inspect all data on disk (OHLC, trades, orderbook)
     dccd inventory --config config.yml
 
+    # Enable shell tab-completion (run once after install)
+    dccd --install-completion
+
 Note: ``--config`` is optional — dccd searches ``./config.yml`` then
 ``~/.config/dccd/config.yml`` when omitted.
 
