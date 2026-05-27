@@ -77,6 +77,24 @@ __all__ = ['app']
 
 app = typer.Typer(help='dccd — autonomous crypto data collection daemon')
 
+
+def _complete_histo_exchange(incomplete: str) -> list[str]:
+    from dccd.daemon.config import SUPPORTED_HISTO_EXCHANGES
+    return [e for e in sorted(SUPPORTED_HISTO_EXCHANGES) if e.startswith(incomplete)]
+
+
+def _complete_pairs_from_config(incomplete: str) -> list[str]:
+    from dccd.daemon.config import load_config, resolve_config_path
+    try:
+        cfg = load_config(resolve_config_path(None))
+        pairs: set[str] = set()
+        for job in cfg.histo_jobs:  # type: ignore[attr-defined]
+            pairs.update(job.pairs)
+        return [p for p in sorted(pairs) if p.startswith(incomplete)]
+    except Exception:
+        return []
+
+
 def _load(config_path: Optional[str]) -> object:
     """Load config, exit with code 1 on any error."""
     from dccd.daemon.config import load_config, resolve_config_path
@@ -132,10 +150,12 @@ def backfill(
     exchange: Optional[str] = typer.Option(
         None, '--exchange', '-e',
         help='Restrict to one exchange (e.g. binance, kraken, bybit).',
+        autocompletion=_complete_histo_exchange,
     ),
     pairs: Optional[List[str]] = typer.Option(
         None, '--pairs', '-p',
         help='Restrict to specific pairs, e.g. --pairs BTC/USDT ETH/USDT.',
+        autocompletion=_complete_pairs_from_config,
     ),
     start: str = typer.Option(
         '2020-01-01 00:00:00', '--start',
@@ -307,8 +327,10 @@ def status(
 
 @app.command()
 def add(
-    exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.'),
-    pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).'),
+    exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.',
+                                 autocompletion=_complete_histo_exchange),
+    pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).',
+                             autocompletion=_complete_pairs_from_config),
     span: int = typer.Option(..., '--span', '-s', help='Candle interval in seconds.'),
     config: Optional[str] = typer.Option(
         None, '--config', '-c',
@@ -358,8 +380,10 @@ def add(
 
 @app.command()
 def remove(
-    exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.'),
-    pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).'),
+    exchange: str = typer.Option(..., '--exchange', '-e', help='Exchange name.',
+                                 autocompletion=_complete_histo_exchange),
+    pair: str = typer.Option(..., '--pair', '-p', help='Trading pair (e.g. BTC/USDT).',
+                             autocompletion=_complete_pairs_from_config),
     span: int = typer.Option(..., '--span', '-s', help='Candle interval in seconds.'),
     config: Optional[str] = typer.Option(
         None, '--config', '-c',

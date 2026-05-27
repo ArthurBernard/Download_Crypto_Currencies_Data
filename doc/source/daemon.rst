@@ -104,6 +104,9 @@ Quick start (CLI)
 
        # Inspect all data stored on disk (OHLC, trades, orderbook)
        dccd inventory --config config.yml
+
+       # Enable shell tab-completion (run once after install)
+       dccd --install-completion
        # exchange   pair         type        span   from         to           rows  gaps
        # -------------------------------------------------------------------------------
        # binance    BTC/USDT     ohlc        1h     2020-01-01   2026-05-24  1 234     0
