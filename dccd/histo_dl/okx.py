@@ -140,7 +140,7 @@ class FromOKX(ImportDataCryptoCurrencies):
         param = {
             'instId': self.pair,
             'bar': okx_interval(self.span),
-            'before': self.start * 1000,
+            'before': self.start * 1000 - 1,  # -1 ms: OKX `before` is exclusive
             'after': self.end * 1000,
             'limit': 300,
         }
