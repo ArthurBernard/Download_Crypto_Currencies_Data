@@ -36,6 +36,31 @@ def test_import_data(loader, mock_okx):
         assert key in data[0]
 
 
+def test_before_param_is_inclusive(loader, monkeypatch):
+    """before=start*1000-1 so the window-start candle is not excluded by OKX."""
+    import requests
+    from unittest.mock import MagicMock, patch
+
+    captured = {}
+    start = 1_704_067_200  # 2024-01-01 00:00:00 UTC
+
+    def fake_get(url, params=None, **kwargs):
+        captured['params'] = params
+        m = MagicMock()
+        m.status_code = 200
+        m.raise_for_status = lambda: None
+        m.json.return_value = {
+            "data": [
+                [str(start * 1000), "42000", "42100", "41900", "42050", "1.5", "1.5", "63075", "1"],
+            ]
+        }
+        return m
+
+    monkeypatch.setattr("requests.get", fake_get)
+    loader._import_data(start=start)
+    assert captured['params']['before'] == start * 1000 - 1
+
+
 def test_pair_format(loader):
     assert loader.pair == 'BTC-USDT'
 
