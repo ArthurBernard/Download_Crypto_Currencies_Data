@@ -38,8 +38,7 @@ def test_import_data(loader, mock_okx):
 
 def test_before_param_is_inclusive(loader, monkeypatch):
     """before=start*1000-1 so the window-start candle is not excluded by OKX."""
-    import requests
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     captured = {}
     start = 1_704_067_200  # 2024-01-01 00:00:00 UTC
