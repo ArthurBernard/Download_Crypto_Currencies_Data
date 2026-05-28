@@ -1,38 +1,13 @@
-===============
-Getting Started
-===============
+==========
+Quickstart
+==========
 
-Installation
-------------
-
-Core package (historical REST + WebSocket streaming):
-
-.. code-block:: bash
-
-   pip install dccd
-
-With daemon extras (CLI scheduler, APScheduler, YAML config, rclone sync):
-
-.. code-block:: bash
-
-   pip install dccd[daemon]
-
-From source:
-
-.. code-block:: bash
-
-   git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data.git
-   cd Download_Crypto_Currencies_Data
-   pip install -e ".[daemon,dev]"
-
-.. note::
-
-   All REST endpoints used by ``dccd`` are public — no API key is required.
+See :doc:`installation` for prerequisites and install instructions.
 
 ----
 
-Quickstart: Historical API
---------------------------
+Historical API
+--------------
 
 Download OHLCV candles via REST, save to Parquet, and load as a DataFrame:
 
@@ -140,8 +115,8 @@ To get a :class:`pandas.DataFrame` instead of the default Polars output:
 
 ----
 
-Quickstart: Continuous (WebSocket) API
----------------------------------------
+Continuous (WebSocket) API
+---------------------------
 
 Stream order book and trades from Binance for one hour, saving a snapshot
 every 60 seconds:
@@ -174,8 +149,8 @@ See :doc:`continuous_dl` for all six exchange classes.
 
 ----
 
-Quickstart: CLI Daemon
------------------------
+CLI Daemon
+----------
 
 Create a minimal config file ``config.yml``:
 

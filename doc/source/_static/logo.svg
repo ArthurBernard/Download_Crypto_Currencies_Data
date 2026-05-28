@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 56" width="200" height="56">
+  <!-- dccd text -->
+  <text x="6" y="38" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a2e" letter-spacing="-0.5">dccd</text>
+  <!-- Candlestick chart -->
+  <!-- Candle 1 (bearish) -->
+  <line x1="113" y1="10" x2="113" y2="46" stroke="#ef4444" stroke-width="1.5"/>
+  <rect x="109" y="18" width="8" height="18" fill="#ef4444" rx="1"/>
+  <!-- Candle 2 (bullish) -->
+  <line x1="127" y1="8" x2="127" y2="44" stroke="#22c55e" stroke-width="1.5"/>
+  <rect x="123" y="14" width="8" height="22" fill="#22c55e" rx="1"/>
+  <!-- Candle 3 (bearish) -->
+  <line x1="141" y1="12" x2="141" y2="42" stroke="#ef4444" stroke-width="1.5"/>
+  <rect x="137" y="20" width="8" height="14" fill="#ef4444" rx="1"/>
+  <!-- Candle 4 (bullish) -->
+  <line x1="155" y1="6" x2="155" y2="40" stroke="#22c55e" stroke-width="1.5"/>
+  <rect x="151" y="10" width="8" height="20" fill="#22c55e" rx="1"/>
+  <!-- Candle 5 (bullish) -->
+  <line x1="169" y1="4" x2="169" y2="36" stroke="#22c55e" stroke-width="1.5"/>
+  <rect x="165" y="8" width="8" height="16" fill="#22c55e" rx="1"/>
+  <!-- Candle 6 (bearish) -->
+  <line x1="183" y1="8" x2="183" y2="42" stroke="#ef4444" stroke-width="1.5"/>
+  <rect x="179" y="14" width="8" height="18" fill="#ef4444" rx="1"/>
+</svg>

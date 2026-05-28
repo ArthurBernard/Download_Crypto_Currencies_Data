@@ -79,6 +79,8 @@ html_theme_options = {
     "source_repository": "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/",
     "source_branch": "master",
     "source_directory": "doc/source/",
+    "light_logo": "logo.svg",
+    "dark_logo": "logo_dark.svg",
 }
 html_title = '{} v{} Reference Guide'.format(project, version)
 html_static_path = ['_static']
