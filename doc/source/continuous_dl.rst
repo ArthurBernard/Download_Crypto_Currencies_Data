@@ -7,8 +7,26 @@
    :no-inherited-members:
    :no-special-members:
 
-High level API
---------------
+Each exchange provides a downloader class (inheriting from
+:class:`~dccd.continuous_dl.exchange.ContinuousDownloader`) and convenience
+functions that wire up default savers.  The class-based API gives full control
+over processing callbacks and save destinations.
+
+Downloader classes
+------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   binance.DownloadBinanceData -- stream order book and trades from Binance
+   bitfinex.DownloadBitfinexData -- stream order book and trades from Bitfinex
+   bitmex.DownloadBitmexData -- stream order book and trades from Bitmex
+   bybit.DownloadBybitData -- stream order book and trades from Bybit
+   kraken.DownloadKrakenData -- stream order book and trades from Kraken
+   okx.DownloadOKXData -- stream order book and trades from OKX
+
+Convenience functions
+---------------------
 
 .. autosummary::
    :toctree: generated/
@@ -31,16 +49,3 @@ High level API
    okx.get_data_okx -- download data from OKX exchange and update the database
    okx.get_orderbook_okx -- download order book from OKX exchange and update the database
    okx.get_trades_okx -- download trades from OKX exchange and update the database
-
-Low level API
--------------
-
-.. autosummary::
-   :toctree: generated/
-
-   binance.DownloadBinanceData -- basis object to download data from Binance client websocket API
-   bitfinex.DownloadBitfinexData -- basis object to download data from Bitfinex client websocket API
-   bitmex.DownloadBitmexData -- basis object to download data from Bitmex client websocket API
-   bybit.DownloadBybitData -- basis object to download data from Bybit client websocket API
-   kraken.DownloadKrakenData -- basis object to download data from Kraken client websocket API
-   okx.DownloadOKXData -- basis object to download data from OKX client websocket API

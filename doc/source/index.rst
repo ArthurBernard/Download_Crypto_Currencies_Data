@@ -1,25 +1,36 @@
 ====================================================
- Welcome to Download Crypto Currencies Data project
+ Download Crypto Currencies Data
 ====================================================
 
-This is the documentation of ``dccd`` package, a package to download crypto-currencies data from multiple exchanges via REST and WebSocket APIs.
+``dccd`` downloads crypto-currency data (OHLCV, trades, order book) from
+multiple exchanges via REST and WebSocket APIs.  Choose the mode that fits
+your workflow:
 
-Installation
-------------
+.. grid:: 3
+   :gutter: 3
 
-From pip:
+   .. grid-item-card:: Python API
+      :link: getting_started
+      :link-type: doc
 
-.. code-block:: bash
+      Historical REST downloads and real-time WebSocket streams — use
+      ``dccd`` directly in your scripts or notebooks.
 
-   pip install dccd
+   .. grid-item-card:: CLI Daemon
+      :link: daemon
+      :link-type: doc
 
-From source:
+      Autonomous server-side collector driven by a YAML config with
+      scheduling, WebSocket streams, and rclone remote sync.
 
-.. code-block:: bash
+   .. grid-item-card:: Supported Exchanges
+      :link: #supported-exchanges
+      :link-type: url
 
-   git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data.git
-   cd Download_Crypto_Currencies_Data
-   pip install -e .
+      Binance, Coinbase, Kraken, Bybit, OKX (REST + WS) · Bitfinex,
+      Bitmex (WS only).
+
+.. _supported-exchanges:
 
 Supported exchanges
 -------------------
@@ -89,27 +100,26 @@ Supported exchanges
 
 † Recent trades only (Bybit ≤ 1 000, Coinbase ≤ 100) — no deep historical pagination via the public REST API.
 
-Presentation
-------------
+.. toctree::
+   :hidden:
+   :caption: Getting Started
 
-The ``dccd`` package provides three ways to download data:
-
-- **Historical Downloader** :mod:`dccd.histo_dl`:
-   Download OHLCV data via REST APIs with chunked requests and incremental updates.
-   Supports Binance, Coinbase, Kraken, Bybit, and OKX.
-- **Continuous Downloader** :mod:`dccd.continuous_dl`:
-   Stream real-time data (order book, trades, OHLCV) via WebSocket with automatic
-   reconnection. Supports Binance, Bitfinex, Bitmex, Bybit, Kraken, and OKX.
-- **Daemon** :mod:`dccd.daemon`:
-   Autonomous, server-side collector driven by a YAML config.  Runs REST jobs on a
-   schedule (APScheduler), opens WebSocket streams, and syncs data to remote
-   destinations (NAS, S3, SFTP, …) via rclone.
-
-Contents
---------
+   getting_started
 
 .. toctree::
-   :maxdepth: 2
+   :hidden:
+   :caption: Historical Downloader
+
+   histo_dl
+   histo_dl.binance
+   histo_dl.coinbase
+   histo_dl.kraken
+   histo_dl.bybit
+   histo_dl.okx
+
+.. toctree::
+   :hidden:
+   :caption: Continuous Downloader
 
    continuous_dl
    continuous_dl.binance
@@ -118,13 +128,21 @@ Contents
    continuous_dl.bybit
    continuous_dl.kraken
    continuous_dl.okx
-   histo_dl
-   histo_dl.binance
-   histo_dl.coinbase
-   histo_dl.kraken
-   histo_dl.bybit
-   histo_dl.okx
+
+.. toctree::
+   :hidden:
+   :caption: Daemon
+
    daemon
+
+.. toctree::
+   :hidden:
+   :caption: Reference
+
    storage
-   process_data
+   models
    tools
+   tools.date_time
+   tools.io
+   tools.websocket
+   process_data
