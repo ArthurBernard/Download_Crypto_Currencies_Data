@@ -39,18 +39,23 @@ class FromBinance(ImportDataCryptoCurrencies):
     Parameters
     ----------
     path : str
-        The path where data will be save.
+        Root directory for data files.
     crypto : str
-        The abreviation of the crypto-currency.
-    span : {int, 'weekly', 'daily', 'hourly'}
-        - If str, periodicity of observation.
-        - If int, number of the seconds between each observation, minimal span\
-            is 60 seconds.
-    fiat : str
-        A fiat currency or a crypto-currency. Binance don't allow fiat
-        currencies, but USD theter.
-    form : {'xlsx', 'csv'}
-        Your favorit format. Only 'xlsx' and 'csv' for the moment.
+        Crypto-currency symbol, e.g. ``'BTC'``.
+    span : int or str
+        Candle interval in seconds (minimum 60) or a label such as
+        ``'hourly'`` or ``'1h'``.
+    fiat : str, optional
+        Quote currency. Default is ``'USD'``, which is silently coerced to
+        ``'USDT'`` (Binance does not support fiat; only USDT is accepted as
+        a USD-equivalent). ``'EUR'`` is likewise coerced to ``'USDT'`` with
+        a warning.
+    form : str, optional
+        Legacy parameter — ignored. Storage is always Parquet via
+        :class:`~dccd.storage.DataStore`.
+    tz : str, optional
+        Timezone for date parsing: ``'local'`` (default), ``'UTC'``, or any
+        IANA timezone name (e.g. ``'Europe/Paris'``).
 
     See Also
     --------
@@ -108,7 +113,6 @@ class FromBinance(ImportDataCryptoCurrencies):
         return crypto + fiat
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
-        """ Initialize object. """
         if fiat in ['EUR', 'USD']:
             _logger.warning(
                 "Binance don't allow fiat currencies. "

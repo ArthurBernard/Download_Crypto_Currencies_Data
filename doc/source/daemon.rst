@@ -147,6 +147,86 @@ own process or customise startup/shutdown logic.  The script
     scheduler.shutdown(wait=False)
     stream_mgr.stop()
 
+Graceful shutdown
+-----------------
+
+When embedding the daemon in your own process, use a :class:`threading.Event`
+to handle ``SIGINT`` / ``SIGTERM`` cleanly:
+
+.. code-block:: python
+
+   import signal
+   import threading
+
+   stop_event = threading.Event()
+   signal.signal(signal.SIGINT,  lambda *_: stop_event.set())
+   signal.signal(signal.SIGTERM, lambda *_: stop_event.set())
+
+   scheduler  = build_histo_scheduler(config, health=health)
+   stream_mgr = StreamManager(config, health=health)
+   scheduler.start()
+   stream_mgr.start()
+
+   stop_event.wait()          # blocks until Ctrl-C or SIGTERM
+
+   scheduler.shutdown(wait=False)
+   stream_mgr.stop()
+
+Health monitoring
+-----------------
+
+:class:`~dccd.daemon.health.HealthMonitor` maintains per-job metrics in a
+rotating ``metrics.json`` file and writes a dedicated log per job.  After a
+run you can inspect collected metrics programmatically:
+
+.. code-block:: python
+
+   from dccd.daemon.health import HealthMonitor
+
+   health = HealthMonitor(config.settings.data_path, config.alerts)
+
+   # … run scheduler / stream_mgr …
+
+   metrics = health.get_metrics()
+   for key, m in metrics.items():
+       print(f'{key:40s}  rows={m.rows_collected:6d}  errors={m.errors_count}')
+
+When the number of consecutive errors on a job exceeds ``max_consecutive_errors``
+(set in the ``alerts:`` YAML block), the monitor fires a webhook alert.
+
+Webhook alerts
+--------------
+
+Add an ``alerts:`` block to your config to receive a Slack (or any incoming
+webhook) notification when a job fails repeatedly:
+
+.. code-block:: yaml
+
+   alerts:
+     webhook_url: "https://hooks.slack.com/services/T.../B.../..."
+     max_consecutive_errors: 3   # alert after 3 consecutive failures
+
+The payload is a JSON ``{"text": "..."}`` compatible with the Slack
+Incoming Webhooks format.  Any service that accepts the same format
+(Discord, Mattermost, …) works without any code changes.
+
+Per-job retry settings
+^^^^^^^^^^^^^^^^^^^^^^
+
+Fine-tune retry behaviour per ``histo_job``:
+
+.. code-block:: yaml
+
+   histo_jobs:
+     - exchange: binance
+       pairs: [BTC/USDT]
+       span: 3600
+       max_retries: 5      # attempts before marking window as failed (default 3)
+       retry_delay: 1.0    # initial wait in seconds; doubles on each attempt
+
+The retry delay is exponential: ``retry_delay × 2^(attempt − 1)``.  With
+``retry_delay=1.0`` and ``max_retries=5`` the waits are 1 s, 2 s, 4 s, 8 s.
+
 .. _daemon-config:
 
 Configuration

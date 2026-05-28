@@ -36,17 +36,22 @@ class FromKraken(ImportDataCryptoCurrencies):
     Parameters
     ----------
     path : str
-        The path where data will be save.
+        Root directory for data files.
     crypto : str
-        The abreviation of the crypto-currency.
-    span : {int, 'weekly', 'daily', 'hourly'}
-        - If str, periodicity of observation.
-        - If int, number of the seconds between each observation, minimal span\
-            is 60 seconds.
-    fiat : str
-        A fiat currency or a crypto-currency.
-    form : {'xlsx', 'csv'}
-        Your favorit format. Only 'xlsx' and 'csv' for the moment.
+        Crypto-currency symbol, e.g. ``'BTC'``.
+    span : int or str
+        Candle interval in seconds (minimum 60) or a label such as
+        ``'hourly'`` or ``'1h'``.
+    fiat : str, optional
+        Quote currency. Default is ``'USD'``. The resulting Kraken pair uses
+        the X/Z prefix scheme (e.g. ``'USD'`` → ``'XXBTZUSD'``); use
+        :meth:`format_pair` to inspect the resolved symbol.
+    form : str, optional
+        Legacy parameter — ignored. Storage is always Parquet via
+        :class:`~dccd.storage.DataStore`.
+    tz : str, optional
+        Timezone for date parsing: ``'local'`` (default), ``'UTC'``, or any
+        IANA timezone name.
 
     See Also
     --------
@@ -119,7 +124,6 @@ class FromKraken(ImportDataCryptoCurrencies):
         return 'X' + crypto + 'Z' + fiat
 
     def __init__(self, path, crypto, span, fiat='USD', form='xlsx', tz='local'):
-        """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Kraken', fiat=fiat, form=form, tz=tz
         )
