@@ -114,3 +114,13 @@ Exchange classes
    kraken.FromKraken -- historical downloader for Kraken REST API
    bybit.FromBybit -- historical downloader for Bybit REST API
    okx.FromOKX -- historical downloader for OKX REST API
+
+.. toctree::
+   :hidden:
+   :caption: Exchanges
+
+   histo_dl.binance
+   histo_dl.coinbase
+   histo_dl.kraken
+   histo_dl.bybit
+   histo_dl.okx

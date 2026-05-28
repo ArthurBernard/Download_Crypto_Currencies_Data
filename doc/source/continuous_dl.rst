@@ -95,3 +95,14 @@ Convenience functions
    okx.get_data_okx -- download data from OKX exchange and update the database
    okx.get_orderbook_okx -- download order book from OKX exchange and update the database
    okx.get_trades_okx -- download trades from OKX exchange and update the database
+
+.. toctree::
+   :hidden:
+   :caption: Exchanges
+
+   continuous_dl.binance
+   continuous_dl.bitfinex
+   continuous_dl.bitmex
+   continuous_dl.bybit
+   continuous_dl.kraken
+   continuous_dl.okx

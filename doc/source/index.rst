@@ -2,9 +2,26 @@
  Download Crypto Currencies Data
 ====================================================
 
+|pypi| |python| |license|
+
+.. |pypi| image:: https://img.shields.io/pypi/v/dccd.svg
+   :target: https://pypi.org/project/dccd/
+   :alt: PyPI version
+
+.. |python| image:: https://img.shields.io/pypi/pyversions/dccd.svg
+   :alt: Python versions
+
+.. |license| image:: https://img.shields.io/github/license/ArthurBernard/Download_Crypto_Currencies_Data.svg
+   :alt: License
+
 ``dccd`` downloads crypto-currency data (OHLCV, trades, order book) from
-multiple exchanges via REST and WebSocket APIs.  Choose the mode that fits
-your workflow:
+multiple exchanges via REST and WebSocket APIs.
+
+.. code-block:: bash
+
+   pip install dccd
+
+Choose the mode that fits your workflow:
 
 .. grid:: 3
    :gutter: 3
@@ -23,12 +40,21 @@ your workflow:
       Autonomous server-side collector driven by a YAML config with
       scheduling, WebSocket streams, and rclone remote sync.
 
-   .. grid-item-card:: Supported Exchanges
-      :link: #supported-exchanges
-      :link-type: url
+   .. grid-item-card:: Storage & Formats
+      :link: storage
+      :link-type: doc
 
-      Binance, Coinbase, Kraken, Bybit, OKX (REST + WS) · Bitfinex,
-      Bitmex (WS only).
+      Annual Parquet files by default · CSV · Excel · SQLite ·
+      PostgreSQL · Polars & Pandas output.
+
+.. rubric:: Key features
+
+- **7 exchanges** — Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, Bitmex
+- **3 data types** — OHLCV candles, trade history, order book snapshots
+- **Incremental updates** — ``start='last'`` resumes from the last saved timestamp, no duplicates
+- **Polars-native output** — ``get_data()`` returns a :class:`polars.DataFrame`; ``get_data(format='pandas')`` for Pandas
+- **No API key required** — all endpoints used are public
+- **Autonomous daemon** — YAML config, APScheduler, WebSocket streams, rclone remote sync
 
 .. _supported-exchanges:
 
@@ -111,23 +137,12 @@ Supported exchanges
    :caption: Historical Downloader
 
    histo_dl
-   histo_dl.binance
-   histo_dl.coinbase
-   histo_dl.kraken
-   histo_dl.bybit
-   histo_dl.okx
 
 .. toctree::
    :hidden:
    :caption: Continuous Downloader
 
    continuous_dl
-   continuous_dl.binance
-   continuous_dl.bitfinex
-   continuous_dl.bitmex
-   continuous_dl.bybit
-   continuous_dl.kraken
-   continuous_dl.okx
 
 .. toctree::
    :hidden:
@@ -142,7 +157,4 @@ Supported exchanges
    storage
    models
    tools
-   tools.date_time
-   tools.io
-   tools.websocket
    process_data

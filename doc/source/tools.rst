@@ -21,3 +21,10 @@ Utility modules used across ``dccd``.
      - :class:`~dccd.tools.io.IODataBase`, :func:`~dccd.tools.io.get_df`, :func:`~dccd.tools.io.save_df`
    * - :mod:`dccd.tools.websocket`
      - :class:`~dccd.tools.websocket.BasisWebSocket` asyncio base class
+
+.. toctree::
+   :hidden:
+
+   tools.date_time
+   tools.io
+   tools.websocket
