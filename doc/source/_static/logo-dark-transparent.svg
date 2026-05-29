@@ -2,11 +2,11 @@
   <defs>
     <style>
       .bg    { fill: #161b22; }
-      .struct{ fill: #eceff2; }
+      .struct{ fill: #919ba7; }
       .green { fill: #2ec26a; }
       .red   { fill: #ff3b30; }
-      .edge  { stroke: #eceff2; stroke-width: 8; stroke-linecap: round; fill: none; }
-      .wick  { stroke: #eceff2; stroke-width: 11; stroke-linecap: butt; }
+      .edge  { stroke: #919ba7; stroke-width: 8; stroke-linecap: round; fill: none; }
+      .wick  { stroke: #919ba7; stroke-width: 11; stroke-linecap: butt; }
     </style>
   </defs>
 

@@ -1,16 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Left arc -->
-  <path d="M 16,3 A 11,11 0 0,0 16,29"
-        fill="none" stroke="#eceff2" stroke-width="3.5" stroke-linecap="square"/>
-  <!-- Right arc -->
-  <path d="M 16,3 A 11,11 0 0,1 16,29"
-        fill="none" stroke="#eceff2" stroke-width="3.5" stroke-linecap="square"/>
-  <!-- Wick -->
-  <line x1="16" y1="2" x2="16" y2="30"
-        stroke="#eceff2" stroke-width="1.8" stroke-linecap="round"/>
-  <!-- Body: green left, red right -->
-  <rect x="11" y="10" width="5" height="12" fill="#2ec26a"/>
-  <rect x="16" y="10" width="5" height="12" fill="#ff3b30"/>
-  <rect x="11" y="10" width="10" height="12"
-        fill="none" stroke="#eceff2" stroke-width="1.2"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="188 161 648 648">
+  <defs>
+    <style>
+      .struct{ fill: #919ba7; }
+      .green { fill: #2ec26a; }
+      .red   { fill: #ff3b30; }
+      .edge  { stroke: #919ba7; stroke-width: 8; stroke-linecap: round; fill: none; }
+      .wick  { stroke: #919ba7; stroke-width: 11; stroke-linecap: butt; }
+    </style>
+  </defs>
+
+  <path class="struct" d="M 506 304 A 168 174 0 0 0 506 652 A 92 174 0 0 1 506 304 Z"/>
+  <path class="struct" d="M 518 304 A 168 174 0 0 1 518 652 A 92 174 0 0 0 518 304 Z"/>
+
+  <g>
+    <line class="edge" x1="232" y1="432" x2="362" y2="476"/>
+    <line class="edge" x1="258" y1="520" x2="362" y2="476"/>
+    <line class="edge" x1="362" y1="476" x2="440" y2="432"/>
+    <line class="edge" x1="362" y1="476" x2="432" y2="520"/>
+    <circle class="green"  cx="232" cy="432" r="24"/>
+    <circle class="green"  cx="432" cy="520" r="19"/>
+    <circle class="struct" cx="440" cy="432" r="16"/>
+    <circle class="struct" cx="258" cy="520" r="15"/>
+  </g>
+
+  <g>
+    <line class="edge" x1="792" y1="432" x2="662" y2="476"/>
+    <line class="edge" x1="766" y1="520" x2="662" y2="476"/>
+    <line class="edge" x1="662" y1="476" x2="584" y2="432"/>
+    <line class="edge" x1="662" y1="476" x2="592" y2="520"/>
+    <circle class="red"    cx="792" cy="432" r="24"/>
+    <circle class="red"    cx="592" cy="520" r="19"/>
+    <circle class="struct" cx="584" cy="432" r="16"/>
+    <circle class="struct" cx="766" cy="520" r="15"/>
+  </g>
+
+  <line class="wick" x1="512" y1="248" x2="512" y2="722"/>
+  <rect class="struct" x="466" y="378" width="92" height="206" rx="5"/>
+  <rect fill="none"    x="475" y="387" width="74" height="188" rx="2"/>
+  <rect class="struct" x="509" y="387" width="6"  height="188"/>
+  <rect class="green"  x="479" y="426" width="29" height="149"/>
+  <rect class="red"    x="516" y="398" width="29" height="84"/>
 </svg>
