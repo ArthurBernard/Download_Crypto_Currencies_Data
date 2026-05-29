@@ -1,54 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
 
-  <!-- Wick -->
-  <line x1="100" y1="12" x2="100" y2="188"
-        stroke="#2d3748" stroke-width="5" stroke-linecap="round"/>
+  <!-- ═══ Connecting lines (drawn first, under everything) ═══ -->
 
-  <!-- Candle body: left half green, right half red -->
-  <rect x="84" y="64" width="16" height="72" fill="#22c55e"/>
-  <rect x="100" y="64" width="16" height="72" fill="#ef4444"/>
-  <!-- Body border -->
-  <rect x="84" y="64" width="32" height="72"
-        fill="none" stroke="#2d3748" stroke-width="4"/>
+  <!-- Left network: X-crossing pattern -->
+  <line x1="40" y1="82"  x2="70" y2="92"  stroke="#2d3748" stroke-width="2"/>
+  <line x1="40" y1="82"  x2="70" y2="112" stroke="#2d3748" stroke-width="2"/>
+  <line x1="40" y1="114" x2="70" y2="92"  stroke="#2d3748" stroke-width="2"/>
+  <line x1="40" y1="114" x2="70" y2="112" stroke="#2d3748" stroke-width="2"/>
+  <line x1="47" y1="132" x2="70" y2="112" stroke="#2d3748" stroke-width="2"/>
 
-  <!-- Left arc — very thick, square ends create horizontal ticks at wick -->
-  <path d="M 100,24 A 60,60 0 0,0 100,176"
-        fill="none" stroke="#2d3748" stroke-width="11" stroke-linecap="square"/>
+  <!-- Right network: mirror -->
+  <line x1="160" y1="82"  x2="130" y2="92"  stroke="#2d3748" stroke-width="2"/>
+  <line x1="160" y1="82"  x2="130" y2="112" stroke="#2d3748" stroke-width="2"/>
+  <line x1="160" y1="114" x2="130" y2="92"  stroke="#2d3748" stroke-width="2"/>
+  <line x1="160" y1="114" x2="130" y2="112" stroke="#2d3748" stroke-width="2"/>
+  <line x1="153" y1="132" x2="130" y2="112" stroke="#2d3748" stroke-width="2"/>
 
-  <!-- Right arc -->
-  <path d="M 100,24 A 60,60 0 0,1 100,176"
-        fill="none" stroke="#2d3748" stroke-width="11" stroke-linecap="square"/>
+  <!-- ═══ Arcs (thick, square caps = horizontal ticks at wick) ═══ -->
+  <path d="M 100,27 A 60,60 0 0,0 100,173"
+        fill="none" stroke="#2d3748" stroke-width="12" stroke-linecap="square"/>
+  <path d="M 100,27 A 60,60 0 0,1 100,173"
+        fill="none" stroke="#2d3748" stroke-width="12" stroke-linecap="square"/>
 
-  <!-- ═══ Left network ═══ -->
-  <!-- Hub node -->
-  <circle cx="60" cy="100" r="6" fill="#2d3748"/>
-  <!-- Lines from hub to outer nodes -->
-  <line x1="60" y1="100" x2="22" y2="70"  stroke="#2d3748" stroke-width="2.5"/>
-  <line x1="60" y1="100" x2="16" y2="100" stroke="#2d3748" stroke-width="2.5"/>
-  <line x1="60" y1="100" x2="26" y2="132" stroke="#2d3748" stroke-width="2.5"/>
-  <!-- Intermediate nodes (midpoints) -->
-  <circle cx="41" cy="85"  r="4.5" fill="#2d3748"/>
-  <circle cx="38" cy="100" r="4.5" fill="#2d3748"/>
-  <circle cx="43" cy="116" r="4.5" fill="#2d3748"/>
-  <!-- Outer nodes -->
-  <circle cx="22" cy="70"  r="9" fill="#22c55e"/>
-  <circle cx="16" cy="100" r="9" fill="#22c55e"/>
-  <circle cx="26" cy="132" r="7" fill="#2d3748"/>
+  <!-- ═══ Wick (on top of arcs) ═══ -->
+  <line x1="100" y1="14" x2="100" y2="186"
+        stroke="#2d3748" stroke-width="4" stroke-linecap="round"/>
 
-  <!-- ═══ Right network ═══ -->
-  <!-- Hub node -->
-  <circle cx="140" cy="100" r="6" fill="#2d3748"/>
-  <!-- Lines from hub to outer nodes -->
-  <line x1="140" y1="100" x2="178" y2="70"  stroke="#2d3748" stroke-width="2.5"/>
-  <line x1="140" y1="100" x2="184" y2="100" stroke="#2d3748" stroke-width="2.5"/>
-  <line x1="140" y1="100" x2="174" y2="132" stroke="#2d3748" stroke-width="2.5"/>
-  <!-- Intermediate nodes (midpoints) -->
-  <circle cx="159" cy="85"  r="4.5" fill="#2d3748"/>
-  <circle cx="162" cy="100" r="4.5" fill="#2d3748"/>
-  <circle cx="157" cy="116" r="4.5" fill="#2d3748"/>
-  <!-- Outer nodes -->
-  <circle cx="178" cy="70"  r="9" fill="#ef4444"/>
-  <circle cx="184" cy="100" r="9" fill="#ef4444"/>
-  <circle cx="174" cy="132" r="7" fill="#2d3748"/>
+  <!-- ═══ Candle body ═══ -->
+  <rect x="88" y="68" width="12" height="64" fill="#22c55e"/>
+  <rect x="100" y="68" width="12" height="64" fill="#ef4444"/>
+  <rect x="88" y="68" width="24" height="64"
+        fill="none" stroke="#2d3748" stroke-width="3.5"/>
+
+  <!-- ═══ Left network nodes (on top of everything) ═══ -->
+  <circle cx="40"  cy="82"  r="8" fill="#22c55e"/>
+  <circle cx="40"  cy="114" r="8" fill="#22c55e"/>
+  <circle cx="47"  cy="132" r="6" fill="#2d3748"/>
+  <circle cx="70"  cy="92"  r="5" fill="#2d3748"/>
+  <circle cx="70"  cy="112" r="5" fill="#2d3748"/>
+
+  <!-- ═══ Right network nodes ═══ -->
+  <circle cx="160" cy="82"  r="8" fill="#ef4444"/>
+  <circle cx="160" cy="114" r="8" fill="#ef4444"/>
+  <circle cx="153" cy="132" r="6" fill="#2d3748"/>
+  <circle cx="130" cy="92"  r="5" fill="#2d3748"/>
+  <circle cx="130" cy="112" r="5" fill="#2d3748"/>
 
 </svg>
