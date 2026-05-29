@@ -36,6 +36,27 @@
 
          Parquet · CSV · SQLite · Polars & Pandas output.
 
+   .. rubric:: Also by the author
+
+   .. grid:: 2
+      :gutter: 2
+
+      .. grid-item-card:: Fynance
+         :link: https://github.com/ArthurBernard/Fynance
+         :link-type: url
+         :class-card: related-card
+
+         Python library for financial and econometric models,
+         performance metrics, and backtesting utilities.
+
+      .. grid-item-card:: Trading Bot
+         :link: https://github.com/ArthurBernard/Trading_Bot
+         :link-type: url
+         :class-card: related-card
+
+         Automated crypto trading framework built on top of ``dccd``
+         with strategy execution and live order management.
+
 .. |pypi| image:: https://img.shields.io/pypi/v/dccd.svg
    :target: https://pypi.org/project/dccd/
    :alt: PyPI version

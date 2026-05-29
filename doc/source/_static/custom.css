@@ -254,33 +254,37 @@ code.literal {
 /* ========================================================================== */
 
 .hero-banner {
-    padding: 2.5rem 0 2rem;
-    margin-bottom: 2rem;
-    border-bottom: 1px solid var(--color-background-border);
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--color-brand-primary) 10%, var(--color-background-primary)),
+        color-mix(in srgb, var(--color-brand-primary) 4%, var(--color-background-primary))
+    );
+    border: 1px solid color-mix(in srgb, var(--color-brand-primary) 25%, var(--color-background-border));
+    border-radius: 12px;
+    padding: 2.5rem 2rem 2rem;
+    margin: 0 0 2.5rem;
 }
 
 .hero-tagline {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     color: var(--color-foreground-secondary);
     margin: 0 0 1.5rem;
     line-height: 1.5;
-}
-
-.hero-badges {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    padding-top: 0.5rem;
-}
-
-.hero-badges img {
-    height: 20px;
+    font-weight: 400;
 }
 
 .hero-card {
     font-size: 0.9rem !important;
+    background: var(--color-background-primary) !important;
+}
+
+.related-card {
+    font-size: 0.88rem !important;
+    background: var(--color-background-secondary) !important;
+    border-style: dashed !important;
+    opacity: 0.9;
+}
+.related-card:hover {
+    opacity: 1;
 }
 
 /* === sphinx-design cards on landing ====================================== */
