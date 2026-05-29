@@ -254,11 +254,8 @@ code.literal {
 /* ========================================================================== */
 
 .hero-banner {
-    background: linear-gradient(135deg,
-        color-mix(in srgb, var(--color-brand-primary) 10%, var(--color-background-primary)),
-        color-mix(in srgb, var(--color-brand-primary) 4%, var(--color-background-primary))
-    );
-    border: 1px solid color-mix(in srgb, var(--color-brand-primary) 25%, var(--color-background-border));
+    background: var(--color-background-secondary);
+    border: 2px solid var(--color-brand-primary);
     border-radius: 12px;
     padding: 2.5rem 2rem 2rem;
     margin: 0 0 2.5rem;
@@ -274,12 +271,10 @@ code.literal {
 
 .hero-card {
     font-size: 0.9rem !important;
-    background: var(--color-background-primary) !important;
 }
 
 .related-card {
     font-size: 0.88rem !important;
-    background: var(--color-background-secondary) !important;
     border-style: dashed !important;
     opacity: 0.9;
 }
