@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <style>
+      .dark  { fill: #353d47; }
+      .green { fill: #21a73a; }
+      .red   { fill: #f5201f; }
+      .white { fill: #ffffff; }
+      .edge  { stroke: #353d47; stroke-width: 8; stroke-linecap: round; fill: none; }
+      .wick  { stroke: #353d47; stroke-width: 11; stroke-linecap: butt; }
+    </style>
+  </defs>
+
+
+  <!-- ============ PARENTHÈSES CALLIGRAPHIQUES (effilées aux pointes) ============ -->
+  <!-- gauche "(" : arc extérieur très bombé + arc intérieur peu bombé -->
+  <path class="dark" d="M 506 304 A 168 174 0 0 0 506 652 A 92 174 0 0 1 506 304 Z"/>
+  <!-- droite ")" -->
+  <path class="dark" d="M 518 304 A 168 174 0 0 1 518 652 A 92 174 0 0 0 518 304 Z"/>
+
+  <!-- ============ RÉSEAU GAUCHE (vert) ============ -->
+  <g>
+    <line class="edge" x1="232" y1="432" x2="362" y2="476"/>
+    <line class="edge" x1="258" y1="520" x2="362" y2="476"/>
+    <line class="edge" x1="362" y1="476" x2="440" y2="432"/>
+    <line class="edge" x1="362" y1="476" x2="432" y2="520"/>
+    <circle class="green" cx="232" cy="432" r="24"/>
+    <circle class="green" cx="432" cy="520" r="19"/>
+    <circle class="dark"  cx="440" cy="432" r="16"/>
+    <circle class="dark"  cx="258" cy="520" r="15"/>
+  </g>
+
+  <!-- ============ RÉSEAU DROIT (rouge) ============ -->
+  <g>
+    <line class="edge" x1="792" y1="432" x2="662" y2="476"/>
+    <line class="edge" x1="766" y1="520" x2="662" y2="476"/>
+    <line class="edge" x1="662" y1="476" x2="584" y2="432"/>
+    <line class="edge" x1="662" y1="476" x2="592" y2="520"/>
+    <circle class="red"  cx="792" cy="432" r="24"/>
+    <circle class="red"  cx="592" cy="520" r="19"/>
+    <circle class="dark" cx="584" cy="432" r="16"/>
+    <circle class="dark" cx="766" cy="520" r="15"/>
+  </g>
+
+  <!-- ============ CHANDELIER ============ -->
+  <line class="wick" x1="512" y1="248" x2="512" y2="722"/>
+  <rect class="dark"  x="466" y="378" width="92" height="206" rx="5"/>
+  <rect class="white" x="475" y="387" width="74" height="188" rx="2"/>
+  <rect class="dark"  x="509" y="387" width="6"  height="188"/>
+  <rect class="green" x="479" y="426" width="29" height="149"/>
+  <rect class="red"   x="516" y="398" width="29" height="84"/>
+</svg>
