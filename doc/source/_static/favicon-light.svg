@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Left arc -->
+  <path d="M 16,3 A 11,11 0 0,0 16,29"
+        fill="none" stroke="#353d47" stroke-width="3.5" stroke-linecap="square"/>
+  <!-- Right arc -->
+  <path d="M 16,3 A 11,11 0 0,1 16,29"
+        fill="none" stroke="#353d47" stroke-width="3.5" stroke-linecap="square"/>
+  <!-- Wick -->
+  <line x1="16" y1="2" x2="16" y2="30"
+        stroke="#353d47" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Body: green left, red right -->
+  <rect x="11" y="10" width="5" height="12" fill="#21a73a"/>
+  <rect x="16" y="10" width="5" height="12" fill="#f5201f"/>
+  <rect x="11" y="10" width="10" height="12"
+        fill="none" stroke="#353d47" stroke-width="1.2"/>
+</svg>
