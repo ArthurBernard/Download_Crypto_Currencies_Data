@@ -2,60 +2,7 @@
  Download Crypto Currencies Data
 ====================================================
 
-.. div:: hero-banner
-
-   .. raw:: html
-
-      <p class="hero-tagline">
-        Crypto market data — REST &amp; WebSocket — 7 exchanges — no API key
-      </p>
-
-   |pypi| |python| |license|
-
-   .. grid:: 3
-      :gutter: 2
-
-      .. grid-item-card:: Python API
-         :link: quickstart
-         :link-type: doc
-         :class-card: hero-card
-
-         Historical + real-time streams directly in your scripts.
-
-      .. grid-item-card:: CLI Daemon
-         :link: daemon
-         :link-type: doc
-         :class-card: hero-card
-
-         Autonomous collector with YAML config and remote sync.
-
-      .. grid-item-card:: Storage
-         :link: storage
-         :link-type: doc
-         :class-card: hero-card
-
-         Parquet · CSV · SQLite · Polars & Pandas output.
-
-   .. rubric:: Also by the author
-
-   .. grid:: 2
-      :gutter: 2
-
-      .. grid-item-card:: Fynance
-         :link: https://github.com/ArthurBernard/Fynance
-         :link-type: url
-         :class-card: related-card
-
-         Python library for financial and econometric models,
-         performance metrics, and backtesting utilities.
-
-      .. grid-item-card:: Trading Bot
-         :link: https://github.com/ArthurBernard/Trading_Bot
-         :link-type: url
-         :class-card: related-card
-
-         Automated crypto trading framework built on top of ``dccd``
-         with strategy execution and live order management.
+|pypi| |python| |license|
 
 .. |pypi| image:: https://img.shields.io/pypi/v/dccd.svg
    :target: https://pypi.org/project/dccd/
@@ -66,6 +13,37 @@
 
 .. |license| image:: https://img.shields.io/github/license/ArthurBernard/Download_Crypto_Currencies_Data.svg
    :alt: License
+
+``dccd`` downloads crypto-currency data (OHLCV, trades, order book) from
+multiple exchanges via REST and WebSocket APIs.
+
+.. code-block:: bash
+
+   pip install dccd
+
+.. grid:: 3
+   :gutter: 3
+
+   .. grid-item-card:: Python API
+      :link: quickstart
+      :link-type: doc
+
+      Historical REST downloads and real-time WebSocket streams — use
+      ``dccd`` directly in your scripts or notebooks.
+
+   .. grid-item-card:: CLI Daemon
+      :link: daemon
+      :link-type: doc
+
+      Autonomous server-side collector driven by a YAML config with
+      scheduling, WebSocket streams, and rclone remote sync.
+
+   .. grid-item-card:: Storage & Formats
+      :link: storage
+      :link-type: doc
+
+      Annual Parquet files by default · CSV · Excel · SQLite ·
+      PostgreSQL · Polars & Pandas output.
 
 .. rubric:: Key features
 

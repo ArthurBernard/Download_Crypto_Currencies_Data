@@ -1,43 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="160" height="160">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
 
-  <!-- Wick vertical -->
-  <line x1="100" y1="14" x2="100" y2="186" stroke="#e2e8f0" stroke-width="4" stroke-linecap="butt"/>
+  <!-- Wick -->
+  <line x1="100" y1="12" x2="100" y2="188"
+        stroke="#e2e8f0" stroke-width="5" stroke-linecap="round"/>
 
   <!-- Candle body: left half green, right half red -->
-  <rect x="87" y="68" width="13" height="64" fill="#4ade80"/>
-  <rect x="100" y="68" width="13" height="64" fill="#f87171"/>
+  <rect x="84" y="64" width="16" height="72" fill="#4ade80"/>
+  <rect x="100" y="64" width="16" height="72" fill="#f87171"/>
   <!-- Body border -->
-  <rect x="87" y="68" width="26" height="64" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+  <rect x="84" y="64" width="32" height="72"
+        fill="none" stroke="#e2e8f0" stroke-width="4"/>
 
-  <!-- Left arc (opening right, flat ends) -->
-  <path d="M 100,26 A 60,60 0 0,0 100,174"
-        fill="none" stroke="#e2e8f0" stroke-width="6" stroke-linecap="square"/>
-  <!-- Right arc (opening left, flat ends) -->
-  <path d="M 100,26 A 60,60 0 0,1 100,174"
-        fill="none" stroke="#e2e8f0" stroke-width="6" stroke-linecap="square"/>
+  <!-- Left arc -->
+  <path d="M 100,24 A 60,60 0 0,0 100,176"
+        fill="none" stroke="#e2e8f0" stroke-width="11" stroke-linecap="square"/>
+
+  <!-- Right arc -->
+  <path d="M 100,24 A 60,60 0 0,1 100,176"
+        fill="none" stroke="#e2e8f0" stroke-width="11" stroke-linecap="square"/>
 
   <!-- ═══ Left network ═══ -->
-  <circle cx="64" cy="100" r="4.5" fill="#e2e8f0"/>
-  <line x1="64" y1="100" x2="26" y2="74"  stroke="#e2e8f0" stroke-width="2.2"/>
-  <line x1="64" y1="100" x2="20" y2="100" stroke="#e2e8f0" stroke-width="2.2"/>
-  <line x1="64" y1="100" x2="30" y2="128" stroke="#e2e8f0" stroke-width="2.2"/>
-  <circle cx="45" cy="87"  r="3.5" fill="#e2e8f0"/>
-  <circle cx="42" cy="100" r="3.5" fill="#e2e8f0"/>
-  <circle cx="47" cy="114" r="3.5" fill="#e2e8f0"/>
-  <circle cx="26" cy="74"  r="7" fill="#4ade80"/>
-  <circle cx="20" cy="100" r="7" fill="#4ade80"/>
-  <circle cx="30" cy="128" r="6" fill="#e2e8f0"/>
+  <circle cx="60" cy="100" r="6" fill="#e2e8f0"/>
+  <line x1="60" y1="100" x2="22" y2="70"  stroke="#e2e8f0" stroke-width="2.5"/>
+  <line x1="60" y1="100" x2="16" y2="100" stroke="#e2e8f0" stroke-width="2.5"/>
+  <line x1="60" y1="100" x2="26" y2="132" stroke="#e2e8f0" stroke-width="2.5"/>
+  <circle cx="41" cy="85"  r="4.5" fill="#e2e8f0"/>
+  <circle cx="38" cy="100" r="4.5" fill="#e2e8f0"/>
+  <circle cx="43" cy="116" r="4.5" fill="#e2e8f0"/>
+  <circle cx="22" cy="70"  r="9" fill="#4ade80"/>
+  <circle cx="16" cy="100" r="9" fill="#4ade80"/>
+  <circle cx="26" cy="132" r="7" fill="#e2e8f0"/>
 
   <!-- ═══ Right network ═══ -->
-  <circle cx="136" cy="100" r="4.5" fill="#e2e8f0"/>
-  <line x1="136" y1="100" x2="174" y2="74"  stroke="#e2e8f0" stroke-width="2.2"/>
-  <line x1="136" y1="100" x2="180" y2="100" stroke="#e2e8f0" stroke-width="2.2"/>
-  <line x1="136" y1="100" x2="170" y2="128" stroke="#e2e8f0" stroke-width="2.2"/>
-  <circle cx="155" cy="87"  r="3.5" fill="#e2e8f0"/>
-  <circle cx="158" cy="100" r="3.5" fill="#e2e8f0"/>
-  <circle cx="153" cy="114" r="3.5" fill="#e2e8f0"/>
-  <circle cx="174" cy="74"  r="7" fill="#f87171"/>
-  <circle cx="180" cy="100" r="7" fill="#f87171"/>
-  <circle cx="170" cy="128" r="6" fill="#e2e8f0"/>
+  <circle cx="140" cy="100" r="6" fill="#e2e8f0"/>
+  <line x1="140" y1="100" x2="178" y2="70"  stroke="#e2e8f0" stroke-width="2.5"/>
+  <line x1="140" y1="100" x2="184" y2="100" stroke="#e2e8f0" stroke-width="2.5"/>
+  <line x1="140" y1="100" x2="174" y2="132" stroke="#e2e8f0" stroke-width="2.5"/>
+  <circle cx="159" cy="85"  r="4.5" fill="#e2e8f0"/>
+  <circle cx="162" cy="100" r="4.5" fill="#e2e8f0"/>
+  <circle cx="157" cy="116" r="4.5" fill="#e2e8f0"/>
+  <circle cx="178" cy="70"  r="9" fill="#f87171"/>
+  <circle cx="184" cy="100" r="9" fill="#f87171"/>
+  <circle cx="174" cy="132" r="7" fill="#e2e8f0"/>
 
 </svg>
