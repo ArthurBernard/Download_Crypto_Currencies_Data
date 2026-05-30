@@ -1,3 +1,13 @@
+.. image:: _static/logo-light-transparent.svg
+   :class: only-light hero-logo
+   :height: 160px
+   :alt: dccd logo
+
+.. image:: _static/logo-dark-transparent.svg
+   :class: only-dark hero-logo
+   :height: 160px
+   :alt: dccd logo
+
 ====================================================
  Download Crypto Currencies Data
 ====================================================
