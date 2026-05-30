@@ -1,11 +1,8 @@
-.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg
-   :align: center
-   :height: 140px
+.. |logo| image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg
+   :height: 60px
    :alt: dccd logo
 
-=============================
-Download Crypto-Currency Data
-=============================
+|logo| **Download Crypto-Currency Data**
 
 .. image:: https://img.shields.io/pypi/pyversions/dccd
     :alt: PyPI - Python Version
