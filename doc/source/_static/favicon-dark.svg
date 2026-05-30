@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="277 248 470 470">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="322 288 380 380">
 <defs>
   <linearGradient id="gArc" x1="0" y1="0" x2="0.5" y2="1">
     <stop offset="0%" stop-color="#c3ccd6"/>
@@ -16,7 +16,6 @@
 </defs>
 <path fill="url(#gArc)" d="M 506 304 A 168 174 0 0 0 506 652 A 92 174 0 0 1 506 304 Z"/>
 <path fill="url(#gArc)" d="M 518 304 A 168 174 0 0 1 518 652 A 92 174 0 0 0 518 304 Z"/>
-<line stroke="#a4adb8" stroke-width="6" stroke-linecap="round" x1="512" y1="250" x2="512" y2="720"/>
 <line stroke="#a4adb8" stroke-width="5" stroke-linecap="round" x1="460" y1="455" x2="460" y2="512"/>
 <line stroke="#a4adb8" stroke-width="5" stroke-linecap="round" x1="494" y1="492" x2="494" y2="535"/>
 <line stroke="#a4adb8" stroke-width="5" stroke-linecap="round" x1="528" y1="462" x2="528" y2="532"/>

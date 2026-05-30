@@ -85,10 +85,21 @@
     margin: 0.5rem 0 1.5rem;
 }
 .hero-header img {
-    height: 135px;
+    height: 180px;
     width: auto;
     flex-shrink: 0;
 }
+
+/* === Badge row ============================================================ */
+.badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    align-items: center;
+    margin: 0.75rem 0 1.25rem;
+    padding: 0;
+}
+.badge-row img { vertical-align: middle; }
 .hero-title {
     margin: 0 !important;
     padding: 0 !important;
