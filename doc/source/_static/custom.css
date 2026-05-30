@@ -2,6 +2,25 @@
 /*                       FYNANCE — Custom Furo styling                        */
 /* ========================================================================== */
 
+/* === Page logo header ===================================================== */
+.page-logo-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem 2rem 0.5rem;
+    border-bottom: 1px solid var(--color-background-border);
+    margin-bottom: 1rem;
+}
+.page-logo-header a {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+.page-logo-header img {
+    height: 60px;
+    width: auto;
+}
+
 /* === Web fonts ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 

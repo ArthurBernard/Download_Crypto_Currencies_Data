@@ -89,7 +89,6 @@ html_css_files = ['custom.css']
 html_sidebars = {
     "**": [
         "sidebar/scroll-start.html",
-        "sidebar/brand.html",
         "sidebar/search.html",
         "sidebar/navigation.html",
         "sidebar/ethical-ads.html",
