@@ -1,12 +1,12 @@
-.. image:: _static/logo-light-transparent.svg
-   :class: only-light hero-logo
-   :height: 160px
-   :alt: dccd logo
+.. raw:: html
 
-.. image:: _static/logo-dark-transparent.svg
-   :class: only-dark hero-logo
-   :height: 160px
-   :alt: dccd logo
+   <div class="hero-header">
+     <img class="only-light" src="_static/logo-light-transparent.svg" alt="dccd logo">
+     <img class="only-dark"  src="_static/logo-dark-transparent.svg"  alt="dccd logo">
+     <h1 class="hero-title">Download Crypto Currencies Data</h1>
+   </div>
+
+.. rst-class:: hidden-rst-title
 
 ====================================================
  Download Crypto Currencies Data

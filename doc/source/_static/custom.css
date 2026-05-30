@@ -68,10 +68,38 @@
 .sidebar-sticky { top: var(--navbar-height) !important; }
 .toc-sticky     { top: var(--navbar-height) !important; }
 
-/* === Homepage hero logo =================================================== */
-.hero-logo {
-    display: block;
-    margin: 2rem auto 1.5rem;
+/* Divider between nav groups */
+.page-logo-header__divider {
+    display: inline-block;
+    width: 1px;
+    height: 1.25rem;
+    background: var(--color-sidebar-background-border);
+    margin: 0 0.25rem;
+}
+
+/* === Homepage hero header ================================================= */
+.hero-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin: 0.5rem 0 1.5rem;
+}
+.hero-header img {
+    height: 90px;
+    width: auto;
+    flex-shrink: 0;
+}
+.hero-title {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 2rem !important;
+    font-weight: 700;
+    color: var(--color-foreground-primary);
+    border: none !important;
+}
+/* Hide the RST-generated duplicate h1 on the homepage */
+section.hidden-rst-title > h1 {
+    display: none;
 }
 
 /* === Web fonts ============================================================ */

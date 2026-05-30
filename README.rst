@@ -1,4 +1,4 @@
-.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/master/doc/source/_static/logo-light-transparent.svg
+.. image:: https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg
    :align: center
    :height: 140px
    :alt: dccd logo
