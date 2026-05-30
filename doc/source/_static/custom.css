@@ -2,24 +2,38 @@
 /*                       FYNANCE — Custom Furo styling                        */
 /* ========================================================================== */
 
-/* === Page logo header ===================================================== */
+/* === Page logo header (top navbar) ======================================== */
 .page-logo-header {
+    position: sticky;
+    top: 0;
+    z-index: 200;
     display: flex;
-    justify-content: center;
     align-items: center;
-    padding: 1.5rem 2rem 0.5rem;
-    border-bottom: 1px solid var(--color-background-border);
-    margin-bottom: 1rem;
+    padding: 0 1.5rem;
+    height: 3.5rem;
+    background: var(--color-sidebar-background);
+    border-bottom: 1px solid var(--color-sidebar-background-border);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
-.page-logo-header a {
-    display: inline-flex;
+.page-logo-header__link {
+    display: flex;
     align-items: center;
+    gap: 0.625rem;
     text-decoration: none;
 }
 .page-logo-header img {
-    height: 60px;
+    height: 2rem;
     width: auto;
 }
+.page-logo-header__name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--color-foreground-primary);
+    letter-spacing: -0.01em;
+}
+/* Offset Furo's sticky sidebar and TOC to sit below the header */
+.sidebar-sticky { top: 3.5rem !important; }
+.toc-sticky     { top: 3.5rem !important; }
 
 /* === Web fonts ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');

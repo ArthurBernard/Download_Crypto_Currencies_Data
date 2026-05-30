@@ -2,14 +2,15 @@
 {% block extrahead %}
   {{ super() }}
   <link rel="icon" href="{{ pathto('_static/logo-light-transparent.svg', 1) }}" media="(prefers-color-scheme: light)">
-  <link rel="icon" href="{{ pathto('_static/logo-dark-transparent.svg', 1) }}" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="{{ pathto('_static/logo-dark-transparent.svg',  1) }}" media="(prefers-color-scheme: dark)">
 {% endblock %}
 {% block body %}
-  <div class="page-logo-header">
-    <a href="{{ pathto(master_doc) }}">
-      <img class="only-light" src="{{ pathto('_static/logo-light-transparent.svg', 1) }}" alt="{{ project }} logo">
-      <img class="only-dark"  src="{{ pathto('_static/logo-dark-transparent.svg',  1) }}" alt="{{ project }} logo">
+  <header class="page-logo-header">
+    <a class="page-logo-header__link" href="{{ pathto(master_doc) }}">
+      <img class="only-light" src="{{ pathto('_static/logo-light-transparent.svg', 1) }}" alt="dccd logo">
+      <img class="only-dark"  src="{{ pathto('_static/logo-dark-transparent.svg',  1) }}" alt="dccd logo">
+      <span class="page-logo-header__name">dccd</span>
     </a>
-  </div>
+  </header>
   {{ super() }}
 {% endblock %}
