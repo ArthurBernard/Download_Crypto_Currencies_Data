@@ -7,8 +7,72 @@
    :no-inherited-members:
    :no-special-members:
 
-High level API
---------------
+Streams real-time data (trades, order book, OHLCV) via WebSocket with
+automatic reconnection.  Each exchange provides a downloader class and
+convenience functions.  The ``time_step`` parameter controls how often data
+is snapshotted to disk (in seconds); ``until`` sets the total run duration
+(in seconds, or as an absolute timestamp).
+
+Convenience functions vs. class API
+-------------------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 30 35
+
+   * -
+     - Convenience functions
+     - Downloader class
+   * - **Configuration**
+     - Fixed parameters
+     - Custom callbacks via ``set_process_data()``
+   * - **Save format**
+     - Default CSV or Parquet
+     - Any :class:`~dccd.tools.io.IODataBase` saver
+   * - **Typical use**
+     - Quick one-shot script
+     - Embedded in a long-running service
+
+**Convenience function** (simplest):
+
+.. code-block:: python
+
+   from dccd.continuous_dl import get_data_binance
+
+   # Stream BTC/USDT trades + book, save every 60 s for 1 h
+   get_data_binance('/data/crypto/', pair='BTCUSDT',
+                    time_step=60, until=3600, form='parquet')
+
+**Class-based API** (full control):
+
+.. code-block:: python
+
+   from dccd.continuous_dl import DownloadBinanceData
+   from dccd.tools.io import IODataBase
+
+   dl = DownloadBinanceData(pair='BTCUSDT', time_step=60, until=3600)
+   dl.set_trades_saver(IODataBase('/data/crypto/trades', method='parquet'))
+   dl.set_book_saver(IODataBase('/data/crypto/book', method='parquet'))
+   dl.run()
+
+For exchange-specific details (WebSocket URL, available channels, pair
+format) see the exchange pages in the sidebar.
+
+Downloader classes
+------------------
+
+.. autosummary::
+   :toctree: generated/
+
+   binance.DownloadBinanceData -- stream order book and trades from Binance
+   bitfinex.DownloadBitfinexData -- stream order book and trades from Bitfinex
+   bitmex.DownloadBitmexData -- stream order book and trades from Bitmex
+   bybit.DownloadBybitData -- stream order book and trades from Bybit
+   kraken.DownloadKrakenData -- stream order book and trades from Kraken
+   okx.DownloadOKXData -- stream order book and trades from OKX
+
+Convenience functions
+---------------------
 
 .. autosummary::
    :toctree: generated/
@@ -32,15 +96,13 @@ High level API
    okx.get_orderbook_okx -- download order book from OKX exchange and update the database
    okx.get_trades_okx -- download trades from OKX exchange and update the database
 
-Low level API
--------------
+.. toctree::
+   :hidden:
+   :caption: Exchanges
 
-.. autosummary::
-   :toctree: generated/
-
-   binance.DownloadBinanceData -- basis object to download data from Binance client websocket API
-   bitfinex.DownloadBitfinexData -- basis object to download data from Bitfinex client websocket API
-   bitmex.DownloadBitmexData -- basis object to download data from Bitmex client websocket API
-   bybit.DownloadBybitData -- basis object to download data from Bybit client websocket API
-   kraken.DownloadKrakenData -- basis object to download data from Kraken client websocket API
-   okx.DownloadOKXData -- basis object to download data from OKX client websocket API
+   continuous_dl.binance
+   continuous_dl.bitfinex
+   continuous_dl.bitmex
+   continuous_dl.bybit
+   continuous_dl.kraken
+   continuous_dl.okx

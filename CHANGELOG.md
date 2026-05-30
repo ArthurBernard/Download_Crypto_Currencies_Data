@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `doc/source/` — refonte complète de la documentation Sphinx : page d'accueil
+  avec cards sphinx-design (3 modes d'usage), toctree restructurée en sections
+  captionnées (Getting Started / Historical / Continuous / Daemon / Reference),
+  nouvelle page `getting_started.rst` avec quickstarts pour les 3 modes,
+  nouvelle page `models.rst` (OHLCBar, Trade, OrderBookEntry), et correction
+  de `histo_dl.rst`, `continuous_dl.rst`, `tools.rst` (#59)
+
 ## [2.3.2] - 2026-05-25
 
 ### Added

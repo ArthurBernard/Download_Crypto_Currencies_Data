@@ -79,10 +79,23 @@ html_theme_options = {
     "source_repository": "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/",
     "source_branch": "master",
     "source_directory": "doc/source/",
+    "light_logo": "logo-light-transparent.svg",
+    "dark_logo": "logo-dark-transparent.svg",
 }
 html_title = '{} v{} Reference Guide'.format(project, version)
 html_static_path = ['_static']
 html_css_files = ['custom.css']
+
+html_sidebars = {
+    "**": [
+        "sidebar/scroll-start.html",
+        "sidebar/search.html",
+        "sidebar/navigation.html",
+        "sidebar/ethical-ads.html",
+        "sidebar/related-projects.html",
+        "sidebar/scroll-end.html",
+    ]
+}
 
 html_context = {
     "display_github": True,

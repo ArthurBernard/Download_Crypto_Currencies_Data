@@ -63,16 +63,21 @@ class FromBybit(ImportDataCryptoCurrencies):
     Parameters
     ----------
     path : str
-        The path where data will be save.
+        Root directory for data files.
     crypto : str
-        The abbreviation of the crypto-currency (e.g. 'BTC').
-    span : {int, 'weekly', 'daily', 'hourly'}
-        - If str, periodicity of observation.
-        - If int, number of seconds between each observation.
+        Crypto-currency symbol, e.g. ``'BTC'``.
+    span : int or str
+        Candle interval in seconds (minimum 60) or a label such as
+        ``'hourly'`` or ``'1h'``.
     fiat : str, optional
-        Quote currency, default is 'USDT'.
-    form : {'xlsx', 'csv'}, optional
-        Output format, default is 'xlsx'.
+        Quote currency. Default is ``'USDT'``. The pair is formed by
+        concatenation (e.g. ``'BTC'`` + ``'USDT'`` → ``'BTCUSDT'``).
+    form : str, optional
+        Legacy parameter — ignored. Storage is always Parquet via
+        :class:`~dccd.storage.DataStore`.
+    tz : str, optional
+        Timezone for date parsing: ``'local'`` (default), ``'UTC'``, or any
+        IANA timezone name.
 
     See Also
     --------
@@ -128,7 +133,6 @@ class FromBybit(ImportDataCryptoCurrencies):
         return crypto + fiat
 
     def __init__(self, path, crypto, span, fiat='USDT', form='xlsx', tz='local'):
-        """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'Bybit', fiat, form, tz=tz
         )
