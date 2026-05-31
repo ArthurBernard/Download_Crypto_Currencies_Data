@@ -1,9 +1,9 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-dark-transparent.svg">
-  <img alt="dccd logo" src="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg" height="130px" align="left">
+  <img alt="dccd logo" src="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg" height="180px" align="left">
 </picture>
 
-# Download Crypto-Currency Data
+# **Download Crypto-Currency Data**
 
 [![Python versions](https://img.shields.io/pypi/pyversions/dccd)](https://pypi.org/project/dccd/)
 [![PyPI](https://img.shields.io/pypi/v/dccd.svg)](https://pypi.org/project/dccd/)
@@ -14,6 +14,8 @@
 [![Coverage](https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data/branch/master/graph/badge.svg)](https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data)
 [![Docstring coverage](https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/badges/interrogate_badge.svg)](https://github.com/ArthurBernard/Download_Crypto_Currencies_Data)
 [![Downloads](https://pepy.tech/badge/dccd)](https://pepy.tech/project/dccd)
+
+___
 
 Python package to download crypto-currency data (OHLCV, trades, order book) from multiple
 exchanges via REST and WebSocket APIs. Data can be saved to CSV, Excel, SQLite, PostgreSQL,
