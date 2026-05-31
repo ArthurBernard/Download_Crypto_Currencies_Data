@@ -63,16 +63,21 @@ class FromOKX(ImportDataCryptoCurrencies):
     Parameters
     ----------
     path : str
-        The path where data will be save.
+        Root directory for data files.
     crypto : str
-        The abbreviation of the crypto-currency (e.g. 'BTC').
-    span : {int, 'weekly', 'daily', 'hourly'}
-        - If str, periodicity of observation.
-        - If int, number of seconds between each observation.
+        Crypto-currency symbol, e.g. ``'BTC'``.
+    span : int or str
+        Candle interval in seconds (minimum 60) or a label such as
+        ``'hourly'`` or ``'1h'``.
     fiat : str, optional
-        Quote currency, default is 'USDT'.
-    form : {'xlsx', 'csv'}, optional
-        Output format, default is 'xlsx'.
+        Quote currency. Default is ``'USDT'``. The pair is formatted with a
+        hyphen separator (e.g. ``'BTC'`` + ``'USDT'`` → ``'BTC-USDT'``).
+    form : str, optional
+        Legacy parameter — ignored. Storage is always Parquet via
+        :class:`~dccd.storage.DataStore`.
+    tz : str, optional
+        Timezone for date parsing: ``'local'`` (default), ``'UTC'``, or any
+        IANA timezone name.
 
     See Also
     --------
@@ -128,7 +133,6 @@ class FromOKX(ImportDataCryptoCurrencies):
         return crypto + '-' + fiat
 
     def __init__(self, path, crypto, span, fiat='USDT', form='xlsx', tz='local'):
-        """ Initialize object. """
         ImportDataCryptoCurrencies.__init__(
             self, path, crypto, span, 'OKX', fiat, form, tz=tz
         )
@@ -140,7 +144,7 @@ class FromOKX(ImportDataCryptoCurrencies):
         param = {
             'instId': self.pair,
             'bar': okx_interval(self.span),
-            'before': self.start * 1000,
+            'before': self.start * 1000 - 1,  # -1 ms: OKX `before` is exclusive
             'after': self.end * 1000,
             'limit': 300,
         }

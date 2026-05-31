@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-05-31
+
+### Added
+
+- `doc/source/` — complete Sphinx documentation overhaul: redesigned homepage
+  with sphinx-design cards, captioned toctrees (Getting Started / Data Collection /
+  Reference), new pages (`installation`, `quickstart`, `changelog`, `cli`,
+  `configuration`, `models`, `storage`, `tools`, per-exchange histo/continuous pages),
+  adaptive light/dark logo and favicon, sticky top navbar with PyPI/GitHub/Fynance
+  links, hero header with inline logo+title, responsive layout (#59, #61)
+- `README.md` — converted from RST to Markdown; inline logo+title header with
+  `<picture>` for light/dark mode switching; badges on two rows (#60)
+
 ## [2.3.2] - 2026-05-25
 
 ### Added
