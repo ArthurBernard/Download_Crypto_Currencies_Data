@@ -68,6 +68,32 @@
 .sidebar-sticky { top: var(--navbar-height) !important; }
 .toc-sticky     { top: var(--navbar-height) !important; }
 
+/* === Responsive: compact header on small screens ========================= */
+@media (max-width: 700px) {
+    :root { --navbar-height: 5.5rem; }
+    .page-logo-header {
+        flex-wrap: wrap;
+        align-content: center;
+        height: auto;
+        min-height: var(--navbar-height);
+        padding: 0.35rem 1rem;
+        row-gap: 0.1rem;
+    }
+    /* Brand takes full width → nav wraps to second row */
+    .page-logo-header__brand { flex: 0 0 100%; }
+    .page-logo-header__nav {
+        margin-left: 0;
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .page-logo-header__nav-link {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    .page-logo-header img { height: 1.5rem; }
+    .page-logo-header__name { font-size: 1rem; }
+}
+
 /* Divider between nav groups */
 .page-logo-header__divider {
     display: inline-block;

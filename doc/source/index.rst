@@ -33,7 +33,7 @@ multiple exchanges via REST and WebSocket APIs.
 
    pip install dccd
 
-.. grid:: 3
+.. grid:: 1 1 2 3
    :gutter: 3
 
    .. grid-item-card:: Python API
