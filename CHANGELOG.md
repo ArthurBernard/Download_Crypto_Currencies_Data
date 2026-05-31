@@ -6,14 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-05-31
+
 ### Added
 
-- `doc/source/` — refonte complète de la documentation Sphinx : page d'accueil
-  avec cards sphinx-design (3 modes d'usage), toctree restructurée en sections
-  captionnées (Getting Started / Historical / Continuous / Daemon / Reference),
-  nouvelle page `getting_started.rst` avec quickstarts pour les 3 modes,
-  nouvelle page `models.rst` (OHLCBar, Trade, OrderBookEntry), et correction
-  de `histo_dl.rst`, `continuous_dl.rst`, `tools.rst` (#59)
+- `doc/source/` — complete Sphinx documentation overhaul: redesigned homepage
+  with sphinx-design cards, captioned toctrees (Getting Started / Data Collection /
+  Reference), new pages (`installation`, `quickstart`, `changelog`, `cli`,
+  `configuration`, `models`, `storage`, `tools`, per-exchange histo/continuous pages),
+  adaptive light/dark logo and favicon, sticky top navbar with PyPI/GitHub/Fynance
+  links, hero header with inline logo+title, responsive layout (#59, #61)
+- `README.md` — converted from RST to Markdown; inline logo+title header with
+  `<picture>` for light/dark mode switching; badges on two rows (#60)
 
 ## [2.3.2] - 2026-05-25
 
