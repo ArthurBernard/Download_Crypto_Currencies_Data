@@ -1,22 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Inventory{% endblock %}
 {% block content %}
-<h1>Inventory</h1>
-<p class="muted">Stored data series. Launch a backfill from any OHLC row.</p>
-<div class="card">
-  <table>
-    <thead>
-      <tr><th>Exchange</th><th>Pair</th><th>Type</th><th>Span</th>
-          <th>From</th><th>To</th><th>Rows</th><th>Gaps</th><th></th></tr>
-    </thead>
-    <tbody id="inv-body">
-      <tr><td colspan="9" class="muted">Loading…</td></tr>
-    </tbody>
-  </table>
+<div class="row" style="justify-content:space-between; align-items:flex-end;">
+  <div>
+    <h1>Inventory</h1>
+    <p class="muted">Stored data series, grouped by exchange. Launch a backfill from any OHLC row.</p>
+  </div>
+  <button id="bf-all-btn" onclick="openBackfill(null, null)" style="display:none;">Backfill all</button>
 </div>
+<div id="inv-root"><p class="muted">Loading…</p></div>
 
 <div class="modal-bg" id="bf-modal">
   <div class="modal">
+    <button class="modal-close" onclick="closeModal('bf-modal')" title="Close" aria-label="Close">&times;</button>
     <h2>Backfill</h2>
     <p id="bf-target" class="muted"></p>
     <div class="row">
@@ -25,61 +21,148 @@
       </label>
     </div>
     <div class="row" style="margin-top:1rem;">
-      <button onclick="launchBackfill()">Launch</button>
-      <button class="ghost" onclick="closeModal('bf-modal')">Cancel</button>
+      <button id="bf-launch" onclick="launchBackfill()">Launch</button>
+      <button id="bf-stop" class="danger" onclick="stopBackfill()" style="display:none;">Stop</button>
+      <button class="ghost" onclick="closeBackfill()">Cancel</button>
     </div>
+    <div id="bf-progress" style="margin-top:1rem;"></div>
     <p id="bf-msg" class="muted"></p>
+    <p id="bf-link" style="display:none;">
+      <a href="/jobs">View in Jobs › Backfill →</a>
+    </p>
   </div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
-  let bfExchange = null, bfPair = null;
+  let bfExchange = null, bfPair = null, bfJobId = null, bfPoll = null;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function rowHtml(s) {
+    const btn = s.type === 'ohlc'
+      ? '<button class="ghost" onclick="openBackfill(' +
+        JSON.stringify(s.exchange) + ',' + JSON.stringify(s.pair) + ')">Backfill</button>'
+      : '';
+    const gapCls = s.gaps > 0 ? 'err' : 'ok';
+    return '<tr><td>' + escapeHtml(s.pair) + '</td><td>' + escapeHtml(s.type) +
+      '</td><td>' + s.span + '</td><td>' + (s.first || '-') + '</td><td>' +
+      (s.last || '-') + '</td><td>' + s.rows.toLocaleString() +
+      '</td><td class="' + gapCls + '">' + s.gaps + '</td><td>' + btn + '</td></tr>';
+  }
 
   async function loadInventory() {
-    const body = document.getElementById('inv-body');
+    const root = document.getElementById('inv-root');
     try {
       const rows = await api('GET', '/api/inventory');
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="9" class="muted">No data found.</td></tr>';
+        root.innerHTML = '<div class="card"><p class="muted">No data found.</p></div>';
         return;
       }
-      body.innerHTML = rows.map(function (s) {
-        const btn = s.type === 'ohlc'
-          ? '<button class="ghost" onclick="openBackfill(\'' + s.exchange +
-            '\',\'' + s.pair + '\')">Backfill</button>'
-          : '';
-        const gapCls = s.gaps > 0 ? 'err' : 'ok';
-        return '<tr><td>' + s.exchange + '</td><td>' + s.pair + '</td><td>' +
-          s.type + '</td><td>' + s.span + '</td><td>' + (s.first || '-') +
-          '</td><td>' + (s.last || '-') + '</td><td>' + s.rows.toLocaleString() +
-          '</td><td class="' + gapCls + '">' + s.gaps + '</td><td>' + btn +
-          '</td></tr>';
+      document.getElementById('bf-all-btn').style.display = '';
+      const groups = {};
+      rows.forEach(function (s) { (groups[s.exchange] = groups[s.exchange] || []).push(s); });
+      root.innerHTML = Object.keys(groups).sort().map(function (ex) {
+        const body = groups[ex].map(rowHtml).join('');
+        return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1.2rem;">' +
+          '<h2 style="margin:0;">' + escapeHtml(ex) + '</h2>' +
+          '<button class="ghost" onclick="openBackfill(' + JSON.stringify(ex) +
+          ', null)">Backfill ' + escapeHtml(ex) + '</button></div>' +
+          '<div class="card"><table><thead><tr><th>Pair</th><th>Type</th>' +
+          '<th>Span</th><th>From</th><th>To</th><th>Rows</th><th>Gaps</th><th></th>' +
+          '</tr></thead><tbody>' + body + '</tbody></table></div>';
       }).join('');
     } catch (e) {
-      body.innerHTML = '<tr><td colspan="9" class="err">' + e.message + '</td></tr>';
+      root.innerHTML = '<div class="card"><p class="err">' + escapeHtml(e.message) + '</p></div>';
     }
   }
 
   function openBackfill(exchange, pair) {
-    bfExchange = exchange; bfPair = pair;
-    document.getElementById('bf-target').textContent = exchange + ' ' + pair;
+    bfExchange = exchange; bfPair = pair; bfJobId = null;
+    let target;
+    if (pair) target = exchange + ' ' + pair;
+    else if (exchange) target = 'All pairs of ' + exchange;
+    else target = 'All exchanges and pairs';
+    document.getElementById('bf-target').textContent = target;
     document.getElementById('bf-msg').textContent = '';
+    document.getElementById('bf-msg').className = 'muted';
+    document.getElementById('bf-progress').innerHTML = '';
+    document.getElementById('bf-link').style.display = 'none';
+    document.getElementById('bf-launch').style.display = '';
+    document.getElementById('bf-launch').disabled = false;
+    document.getElementById('bf-stop').style.display = 'none';
     openModal('bf-modal');
+  }
+
+  function closeBackfill() {
+    if (bfPoll) { clearInterval(bfPoll); bfPoll = null; }
+    closeModal('bf-modal');
+  }
+
+  function renderProgress(job) {
+    const prog = job.progress || {};
+    const keys = Object.keys(prog);
+    if (!keys.length) {
+      return job.status === 'running'
+        ? '<p class="muted">Starting…</p>' : '';
+    }
+    return keys.map(function (p) {
+      const pr = prog[p];
+      const pct = pr.total > 0 ? Math.round(100 * pr.done / pr.total) : 0;
+      return '<div class="muted">' + escapeHtml(p) + ' — ' + pr.done + '/' + pr.total +
+        ' (' + pct + '%)</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
+    }).join('');
+  }
+
+  async function pollBackfill() {
+    if (!bfJobId) return;
+    try {
+      const job = await api('GET', '/api/backfill/' + bfJobId);
+      document.getElementById('bf-progress').innerHTML = renderProgress(job);
+      const msg = document.getElementById('bf-msg');
+      const statusCls = job.status === 'error' ? 'err'
+        : (job.status === 'done' ? 'ok' : 'muted');
+      msg.className = statusCls;
+      msg.textContent = 'Status: ' + job.status + (job.error ? ' — ' + job.error : '');
+      if (job.status !== 'running' && job.status !== 'cancelling') {
+        if (bfPoll) { clearInterval(bfPoll); bfPoll = null; }
+        document.getElementById('bf-stop').style.display = 'none';
+      }
+    } catch (e) {
+      if (bfPoll) { clearInterval(bfPoll); bfPoll = null; }
+    }
   }
 
   async function launchBackfill() {
     const start = document.getElementById('bf-start').value;
     const msg = document.getElementById('bf-msg');
+    const launch = document.getElementById('bf-launch');
     try {
-      const r = await api('POST', '/api/backfill',
-        { exchange: bfExchange, pairs: [bfPair], start: start });
+      const payload = { start: start };
+      if (bfExchange) payload.exchange = bfExchange;
+      if (bfPair) payload.pairs = [bfPair];
+      const r = await api('POST', '/api/backfill', payload);
+      bfJobId = r.id;
+      launch.style.display = 'none';
+      document.getElementById('bf-stop').style.display = '';
+      document.getElementById('bf-link').style.display = '';
       msg.className = 'ok';
-      msg.textContent = 'Started: ' + r.id + ' — see Jobs page.';
+      msg.textContent = 'Started: ' + r.id;
+      pollBackfill();
+      bfPoll = setInterval(pollBackfill, 2000);
     } catch (e) {
       msg.className = 'err';
       msg.textContent = e.message;
     }
+  }
+
+  async function stopBackfill() {
+    if (!bfJobId) return;
+    try { await api('DELETE', '/api/backfill/' + bfJobId); } catch (e) { alert(e.message); }
   }
 
   loadInventory();

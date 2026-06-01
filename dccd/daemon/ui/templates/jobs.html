@@ -3,13 +3,11 @@
 {% block content %}
 <h1>Jobs</h1>
 
-<h2>Histo jobs</h2>
-<div class="card">
-  <table>
-    <thead><tr><th>Exchange</th><th>Pairs</th><th>Span</th><th>Format</th><th></th></tr></thead>
-    <tbody id="histo-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
-  </table>
+<div class="row" style="justify-content:space-between; align-items:center;">
+  <h2 style="margin:0;">Histo jobs</h2>
+  <button id="collect-all" onclick="collectNow()" style="display:none;">Collect all now</button>
 </div>
+<div id="histo-root"><p class="muted">Loading…</p></div>
 
 <h2>Add histo job</h2>
 <div class="card">
@@ -39,16 +37,44 @@
 {% endblock %}
 {% block scripts %}
 <script>
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
   async function loadJobs() {
     const data = await api('GET', '/api/jobs');
-    const hb = document.getElementById('histo-body');
-    hb.innerHTML = data.histo_jobs.length ? data.histo_jobs.map(function (j) {
-      return j.pairs.map(function (p) {
-        return '<tr><td>' + j.exchange + '</td><td>' + p + '</td><td>' + j.span +
-          '</td><td>' + j.format + '</td><td><button class="danger" onclick="rmJob(\'' +
-          j.exchange + '\',\'' + p + '\',' + j.span + ')">Remove</button></td></tr>';
+    const root = document.getElementById('histo-root');
+    if (!data.histo_jobs.length) {
+      root.innerHTML = '<div class="card"><p class="muted">None.</p></div>';
+      document.getElementById('collect-all').style.display = 'none';
+    } else {
+      document.getElementById('collect-all').style.display = '';
+      const groups = {};
+      data.histo_jobs.forEach(function (j) {
+        (groups[j.exchange] = groups[j.exchange] || []).push(j);
+      });
+      root.innerHTML = Object.keys(groups).sort().map(function (ex) {
+        const rows = groups[ex].map(function (j) {
+          return j.pairs.map(function (p) {
+            return '<tr><td>' + escapeHtml(p) + '</td><td>' + j.span + '</td><td>' +
+              escapeHtml(j.format) + '</td><td class="row" style="gap:.4rem;">' +
+              '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) + ',' +
+              JSON.stringify(p) + ')">Collect</button>' +
+              '<button class="danger" onclick="rmJob(' + JSON.stringify(ex) + ',' +
+              JSON.stringify(p) + ',' + j.span + ')">Remove</button></td></tr>';
+          }).join('');
+        }).join('');
+        return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1rem;">' +
+          '<h3 style="margin:0;">' + escapeHtml(ex) + '</h3>' +
+          '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) +
+          ')">Collect ' + escapeHtml(ex) + '</button></div>' +
+          '<div class="card"><table><thead><tr><th>Pair</th><th>Span</th>' +
+          '<th>Format</th><th></th></tr></thead><tbody>' + rows +
+          '</tbody></table></div>';
       }).join('');
-    }).join('') : '<tr><td colspan="5" class="muted">None.</td></tr>';
+    }
 
     const sb = document.getElementById('stream-body');
     sb.innerHTML = data.stream_jobs.length ? data.stream_jobs.map(function (j) {
@@ -82,6 +108,21 @@
 
   async function cancelBf(id) {
     try { await api('DELETE', '/api/backfill/' + id); } catch (e) { alert(e.message); }
+  }
+
+  async function collectNow(exchange, pair) {
+    const body = {};
+    if (exchange) body.exchange = exchange;
+    if (pair) body.pair = pair;
+    const label = pair ? (exchange + ' ' + pair) : (exchange || 'all jobs');
+    try {
+      await api('POST', '/api/collect', body);
+      const m = document.getElementById('j-msg');
+      m.className = 'ok'; m.textContent = 'Collect started for ' + label + '.';
+    } catch (e) {
+      const m = document.getElementById('j-msg');
+      m.className = 'err'; m.textContent = e.message;
+    }
   }
 
   document.body.addEventListener('htmx:afterSwap', function (e) {

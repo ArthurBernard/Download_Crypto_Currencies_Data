@@ -199,6 +199,55 @@ def test_backfill_unknown_404(client):
 
 
 # ---------------------------------------------------------------------------
+# Collect
+# ---------------------------------------------------------------------------
+
+class _SyncThread:
+    """ Drop-in for threading.Thread that runs the target synchronously. """
+
+    def __init__(self, target=None, daemon=None, name=None, args=(), kwargs=None):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs or {}
+
+    def start(self):
+        if self._target:
+            self._target(*self._args, **self._kwargs)
+
+
+def test_collect_all_runs_run_once(tmp_path, monkeypatch):
+    import dccd.daemon.api as api_mod
+    import dccd.daemon.scheduler as sched
+
+    called = {}
+    monkeypatch.setattr(sched, 'run_once',
+                        lambda cfg, health=None: called.setdefault('once', True))
+    monkeypatch.setattr(api_mod.threading, 'Thread', _SyncThread)
+    client = TestClient(create_app(_write_config(tmp_path)))
+    r = client.post('/api/collect')
+    assert r.status_code == 202
+    assert called.get('once') is True
+
+
+def test_collect_filtered_runs_matching_jobs(tmp_path, monkeypatch):
+    import dccd.daemon.api as api_mod
+    import dccd.daemon.scheduler as sched
+
+    runs = []
+    monkeypatch.setattr(sched, 'run_histo_job',
+                        lambda job, pair, path, tz, health: runs.append((job.exchange, pair)))
+    monkeypatch.setattr(api_mod.threading, 'Thread', _SyncThread)
+    client = TestClient(create_app(_write_config(tmp_path)))
+    r = client.post('/api/collect', json={'exchange': 'binance', 'pair': 'BTC/USDT'})
+    assert r.status_code == 202
+    assert runs == [('binance', 'BTC/USDT')]
+
+
+def test_collect_unknown_returns_404(client):
+    assert client.post('/api/collect', json={'exchange': 'kraken'}).status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Logs
 # ---------------------------------------------------------------------------
 
