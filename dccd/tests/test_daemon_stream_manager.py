@@ -445,6 +445,65 @@ def test_stop_one_unknown_key_returns_false(tmp_path):
     assert mgr.stop_one('nope') is False
 
 
+def test_stop_one_frees_slot_for_restart(tmp_path):
+    # A stop immediately followed by a start must spawn a fresh thread rather
+    # than reuse the one still winding down (start-after-stop race).
+    job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+    key = StreamManager._key('binance', 'BTC/USDT', ['trades'])
+
+    winding_down = MagicMock()
+    winding_down.is_alive.return_value = True
+    mgr._threads[key] = winding_down
+    ev = threading.Event()
+    mgr._stops[key] = ev
+
+    assert mgr.stop_one(key) is True
+    assert ev.is_set()
+    assert key not in mgr._threads
+    assert key not in mgr._stops
+
+    with patch.object(mgr, '_run_forever'):
+        new_key = mgr.start_one(job, 'BTC/USDT', ['trades'])
+
+    assert new_key == key
+    assert mgr._threads[key] is not winding_down
+
+
+def test_run_once_finally_keeps_restarted_downloader(tmp_path):
+    # The dying thread must not remove a downloader a restart registered under
+    # the same key (identity-guarded cleanup).
+    import dccd.daemon.stream_manager as sm
+
+    job = _stream_job(exchange='binance', channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+    key = StreamManager._key('binance', 'BTC/USDT', ['trades'])
+
+    fresh = MagicMock()  # downloader registered by the restarted thread
+    mock_cls = MagicMock(return_value=MagicMock())
+
+    original = sm._STREAM_CLASSES.copy()
+    sm._STREAM_CLASSES['binance'] = mock_cls
+    try:
+        with patch('asyncio.new_event_loop') as mock_loop_fn, \
+             patch('asyncio.set_event_loop'), \
+             patch('asyncio.gather'):
+            mock_loop = MagicMock()
+            mock_loop_fn.return_value = mock_loop
+            # Simulate a concurrent restart swapping in a fresh downloader
+            # while this run is inside run_until_complete.
+            def _swap(*a, **k):
+                mgr._downloaders[key] = fresh
+            mock_loop.run_until_complete.side_effect = _swap
+            mgr._run_once(job, 'BTC/USDT', ['trades'])
+    finally:
+        sm._STREAM_CLASSES.update(original)
+
+    assert mgr._downloaders[key] is fresh
+
+
 def test_status_reports_running_state(tmp_path):
     job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
     cfg = _make_config(tmp_path, jobs=[job])

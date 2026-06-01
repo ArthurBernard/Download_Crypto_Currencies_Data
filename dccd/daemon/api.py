@@ -37,7 +37,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from dccd.daemon.backfill import run_backfill
+from dccd.daemon.backfill import has_matching_jobs, run_backfill
 from dccd.daemon.config import CollectorConfig, load_config
 
 if TYPE_CHECKING:
@@ -507,6 +507,12 @@ def _register_api(app: FastAPI) -> None:
     @app.post('/api/backfill', status_code=202, dependencies=[auth])
     def start_backfill(request: Request, body: _BackfillBody) -> dict:
         cfg = _cfg(request)
+        if not has_matching_jobs(cfg, body.exchange, body.pairs):
+            raise HTTPException(
+                status_code=400,
+                detail='No configured histo job matches this exchange/pair. '
+                       'Add one on the Config page first.',
+            )
         job_id = request.app.state.tracker.start(
             cfg, body.exchange, body.pairs, body.start,
         )

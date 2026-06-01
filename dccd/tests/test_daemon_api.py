@@ -198,6 +198,13 @@ def test_backfill_unknown_404(client):
     assert client.delete('/api/backfill/nope').status_code == 404
 
 
+def test_backfill_no_matching_job_400(client):
+    # kraken has no configured histo job → reject instead of a silent no-op.
+    r = client.post('/api/backfill', json={'exchange': 'kraken'})
+    assert r.status_code == 400
+    assert 'histo job' in r.json()['detail']
+
+
 # ---------------------------------------------------------------------------
 # Collect
 # ---------------------------------------------------------------------------

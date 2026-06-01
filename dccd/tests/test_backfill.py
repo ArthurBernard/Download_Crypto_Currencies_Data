@@ -14,6 +14,7 @@ from dccd.daemon.backfill import (
     _EXCHANGE_DEFAULTS,
     KrakenBackfill,
     OHLCBackfill,
+    has_matching_jobs,
     make_job,
     run_backfill,
 )
@@ -153,6 +154,17 @@ def _make_cfg(exchanges=('binance', 'kraken')):
         settings=SettingsConfig(data_path='/tmp/dccd_test', timezone='UTC'),
         histo_jobs=jobs,
     )
+
+
+def test_has_matching_jobs():
+    cfg = _make_cfg(exchanges=('binance', 'kraken'))
+    assert has_matching_jobs(cfg) is True
+    assert has_matching_jobs(cfg, exchange='binance') is True
+    assert has_matching_jobs(cfg, exchange='binance', pairs=['BTC/USDT']) is True
+    # configured exchange but unconfigured pair
+    assert has_matching_jobs(cfg, exchange='binance', pairs=['ETH/USDT']) is False
+    # exchange with no histo job at all
+    assert has_matching_jobs(cfg, exchange='coinbase') is False
 
 
 def test_run_backfill_exchange_filter(tmp_path):

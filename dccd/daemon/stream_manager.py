@@ -365,6 +365,12 @@ class StreamManager:
     def stop_one(self, key: str) -> bool:
         """ Signal a single stream thread (by key) to stop.
 
+        The thread and stop-event slots are freed immediately so a subsequent
+        :meth:`start_one` for the same key always spawns a fresh thread instead
+        of reusing one that is still winding down.  The downloader entry is left
+        in place; the dying thread removes its own (identity-guarded) in
+        :meth:`_run_once`.
+
         Parameters
         ----------
         key : str
@@ -377,9 +383,9 @@ class StreamManager:
 
         """
         with self._lock:
-            ev = self._stops.get(key)
+            ev = self._stops.pop(key, None)
             dl = self._downloaders.get(key)
-            thread = self._threads.get(key)
+            thread = self._threads.pop(key, None)
         if ev is None and thread is None:
             return False
         if ev is not None:
@@ -458,9 +464,9 @@ class StreamManager:
                 until=0,
             )
 
-        ch_tag = '_'.join(channels)
-        key = f'{job.exchange}_{pair.replace("/", "_")}_{ch_tag}'
-        self._downloaders[key] = downloader
+        key = self._key(job.exchange, pair, channels)
+        with self._lock:
+            self._downloaders[key] = downloader
 
         has_trades = 'trades' in channels
         has_book   = 'book'   in channels
@@ -491,5 +497,9 @@ class StreamManager:
             ))
         finally:
             loop.close()
-            self._downloaders.pop(key, None)
+            with self._lock:
+                # Only remove our own downloader: a stop+restart may have
+                # already registered a fresh one under the same key.
+                if self._downloaders.get(key) is downloader:
+                    del self._downloaders[key]
             logger.info('stream ended: %s %s', job.exchange, pair)

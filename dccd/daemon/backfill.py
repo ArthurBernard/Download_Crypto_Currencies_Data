@@ -55,7 +55,10 @@ ProgressCallback = Callable[[int, int], None]
 # Message callback: called with each human-readable log line of a single job.
 MessageCallback = Callable[[str], None]
 
-__all__ = ['OHLCBackfill', 'KrakenBackfill', 'make_job', 'run_backfill']
+__all__ = [
+    'OHLCBackfill', 'KrakenBackfill', 'has_matching_jobs', 'make_job',
+    'run_backfill',
+]
 
 # ---------------------------------------------------------------------------
 # Per-exchange API constraints (not user-configurable — API-level limits)
@@ -622,6 +625,42 @@ def make_job(
         max_retries=max_retries,
         retry_delay=retry_delay,
     )
+
+
+def has_matching_jobs(
+    cfg: CollectorConfig,
+    exchange: str | None = None,
+    pairs: list[str] | None = None,
+) -> bool:
+    """Return ``True`` if any configured histo job matches the filters.
+
+    Mirrors the ``exchange``/``pairs`` filtering of :func:`run_backfill` so
+    callers (e.g. the web UI) can tell, before launching, whether a backfill
+    would actually do anything — a request for an exchange/pair without a
+    configured ``histo_job`` otherwise no-ops silently.
+
+    Parameters
+    ----------
+    cfg : CollectorConfig
+        Loaded daemon configuration.
+    exchange : str or None, optional
+        Filter to a single exchange.  ``None`` matches all.
+    pairs : list of str or None, optional
+        Filter to specific pairs in ``'CRYPTO/FIAT'`` format.  ``None``
+        matches all pairs defined in the config.
+
+    Returns
+    -------
+    bool
+
+    """
+    for histo_job in cfg.histo_jobs:
+        if exchange and histo_job.exchange != exchange:
+            continue
+        wanted_pairs = pairs or histo_job.pairs
+        if any(pair in wanted_pairs for pair in histo_job.pairs):
+            return True
+    return False
 
 
 def run_backfill(
