@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}dccd{% endblock %} — dccd UI</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <script src="/static/htmx.min.js"></script>
   <style>
     :root { --bg:#0f1419; --fg:#e6e6e6; --muted:#8b98a5; --accent:#4a9eff;
@@ -11,13 +12,23 @@
     * { box-sizing: border-box; }
     body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg);
            color:var(--fg); }
-    nav { display:flex; gap:.25rem; flex-wrap:wrap; padding:.5rem 1rem;
-          background:var(--card); border-bottom:1px solid var(--border); }
+    header.topbar { display:flex; align-items:center; gap:.6rem; padding:.6rem 1rem;
+            background:var(--card); border-bottom:1px solid var(--border); }
+    header.topbar img { height:30px; width:auto; display:block; }
+    header.topbar .brand { font-size:1.15rem; font-weight:700; letter-spacing:.02em; }
+    header.topbar .ver { color:var(--muted); font-size:.8rem; font-family:ui-monospace,monospace; }
+    nav { display:flex; gap:.25rem; flex-wrap:wrap; padding:.4rem 1rem;
+          background:var(--card); border-bottom:1px solid var(--border);
+          position:sticky; top:0; z-index:5; }
     nav a { color:var(--muted); text-decoration:none; padding:.4rem .8rem;
             border-radius:6px; }
     nav a:hover { background:var(--border); color:var(--fg); }
-    nav a.active { color:var(--accent); }
+    nav a.active { color:var(--accent); background:rgba(74,158,255,.12);
+            font-weight:600; }
     main { padding:1rem; max-width:1100px; margin:0 auto; }
+    footer { color:var(--muted); font-size:.8rem; text-align:center;
+            padding:1.5rem 1rem; }
+    footer a { color:var(--muted); }
     h1 { font-size:1.3rem; margin:0 0 1rem; }
     h2 { font-size:1.05rem; margin:1.5rem 0 .5rem; }
     table { width:100%; border-collapse:collapse; margin:.5rem 0; }
@@ -47,21 +58,34 @@
                 display:none; align-items:center; justify-content:center; }
     .modal-bg.show { display:flex; }
     .modal { background:var(--card); border:1px solid var(--border);
-             border-radius:8px; padding:1.5rem; min-width:320px; }
+             border-radius:8px; padding:1.5rem; min-width:320px; position:relative; }
+    .modal-close { position:absolute; top:.5rem; right:.5rem; background:transparent;
+             color:var(--muted); border:0; font-size:1.4rem; line-height:1;
+             padding:.2rem .5rem; cursor:pointer; }
+    .modal-close:hover { color:var(--fg); }
   </style>
 </head>
 <body>
+  <header class="topbar">
+    <img src="/static/logo.svg" alt="dccd logo">
+    <span class="brand">dccd</span>
+    <span class="ver">v{{ version }}</span>
+  </header>
   <nav>
-    <a href="/">Dashboard</a>
-    <a href="/inventory">Inventory</a>
-    <a href="/jobs">Jobs</a>
-    <a href="/logs">Logs</a>
-    <a href="/config">Config</a>
-    <a href="/storage">Storage</a>
+    {% set links = [('/', 'Dashboard'), ('/inventory', 'Inventory'),
+                    ('/jobs', 'Jobs'), ('/logs', 'Logs'),
+                    ('/config', 'Config'), ('/storage', 'Storage')] %}
+    {% for href, label in links %}
+    <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ label }}</a>
+    {% endfor %}
   </nav>
   <main>
     {% block content %}{% endblock %}
   </main>
+  <footer>
+    dccd v{{ version }} —
+    <a href="https://github.com/ArthurBernard/Download_Crypto_Currencies_Data">GitHub</a>
+  </footer>
   <script>
     // Minimal vanilla helpers shared across pages — no JS framework.
     function fmtTs(ts) {

@@ -26,6 +26,8 @@ import json
 import threading
 import time
 from datetime import date
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -44,6 +46,11 @@ _TEMPLATES_DIR = _UI_DIR / 'templates'
 _STATIC_DIR = _UI_DIR / 'static'
 
 _DATA_TYPES = ('ohlc', 'trades', 'orderbook')
+
+try:
+    _DCCD_VERSION = _pkg_version('dccd')
+except PackageNotFoundError:  # editable install without metadata
+    _DCCD_VERSION = 'dev'
 
 # Keep at most this many finished backfill records on disk so the tracker
 # file does not grow without bound; running jobs are always kept.
@@ -212,6 +219,11 @@ class _BackfillBody(BaseModel):
     exchange: str | None = None
     pairs: list[str] | None = None
     start: str = '2020-01-01 00:00:00'
+
+
+class _CollectBody(BaseModel):
+    exchange: str | None = None
+    pair: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -487,14 +499,32 @@ def _register_api(app: FastAPI) -> None:
     # --- Collect --------------------------------------------------------
 
     @app.post('/api/collect', status_code=202, dependencies=[auth])
-    def start_collect(request: Request) -> dict:
+    def start_collect(request: Request, body: _CollectBody | None = None) -> dict:
         from dccd.daemon.health import HealthMonitor
-        from dccd.daemon.scheduler import run_once
+        from dccd.daemon.scheduler import run_histo_job, run_once
         cfg = _cfg(request)
         health = HealthMonitor(cfg.storage.local_path, cfg.alerts)
+        exchange = body.exchange if body else None
+        pair = body.pair if body else None
 
-        def _job() -> None:
-            run_once(cfg, health=health)
+        if exchange is None and pair is None:
+            def _job() -> None:
+                run_once(cfg, health=health)
+        else:
+            targets = [
+                (job, p)
+                for job in cfg.histo_jobs
+                if exchange is None or job.exchange == exchange
+                for p in job.pairs
+                if pair is None or p == pair
+            ]
+            if not targets:
+                raise HTTPException(status_code=404, detail='No matching histo job')
+
+            def _job() -> None:
+                for job, p in targets:
+                    run_histo_job(job, p, cfg.storage.local_path,
+                                  cfg.settings.timezone, health)
 
         threading.Thread(target=_job, daemon=True, name='ui-collect').start()
         return {'status': 'started'}
@@ -551,7 +581,9 @@ def _register_pages(app: FastAPI) -> None:
 
     def _page(name: str, request: Request) -> HTMLResponse:
         resp = request.app.state.templates.TemplateResponse(
-            request, name, {'request': request},
+            request, name,
+            {'request': request, 'version': _DCCD_VERSION,
+             'active': request.url.path},
         )
         token = request.query_params.get('token')
         if token and token == request.app.state.auth_token:
