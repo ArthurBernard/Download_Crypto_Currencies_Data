@@ -246,3 +246,17 @@ def test_auth_required_when_token_set(tmp_path):
     assert ok.status_code == 200
     assert client.get('/api/config',
                       headers={'Authorization': 'Bearer wrong'}).status_code == 401
+
+
+def test_openapi_disabled_when_token_set(tmp_path):
+    path = _write_config(tmp_path, extra={
+        'settings': {'data_path': str(tmp_path / 'data'),
+                     'ui_auth_token': 'secret'},
+    })
+    client = TestClient(create_app(path))
+    assert client.get('/openapi.json').status_code == 404
+    assert client.get('/api/docs').status_code == 404
+
+
+def test_openapi_enabled_without_token(client):
+    assert client.get('/openapi.json').status_code == 200

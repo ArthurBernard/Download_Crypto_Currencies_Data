@@ -27,7 +27,6 @@ import threading
 import time
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -45,6 +44,11 @@ _TEMPLATES_DIR = _UI_DIR / 'templates'
 _STATIC_DIR = _UI_DIR / 'static'
 
 _DATA_TYPES = ('ohlc', 'trades', 'orderbook')
+
+# Keep at most this many finished backfill records on disk so the tracker
+# file does not grow without bound; running jobs are always kept.
+_MAX_FINISHED_JOBS = 50
+_FINISHED_STATES = frozenset({'done', 'cancelled', 'error'})
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +89,19 @@ class BackfillTracker:
     def _save(self) -> None:
         self._file.write_text(json.dumps(self._jobs, indent=2))
 
+    def _prune(self) -> None:
+        """ Drop the oldest finished jobs beyond ``_MAX_FINISHED_JOBS``. """
+        finished = [
+            (rec.get('started_at', 0.0), jid)
+            for jid, rec in self._jobs.items()
+            if rec.get('status') in _FINISHED_STATES
+        ]
+        if len(finished) <= _MAX_FINISHED_JOBS:
+            return
+        finished.sort()
+        for _, jid in finished[:-_MAX_FINISHED_JOBS]:
+            self._jobs.pop(jid, None)
+
     def list(self) -> dict[str, dict]:
         """ Return a snapshot of all tracked jobs. """
         with self._lock:
@@ -120,6 +137,7 @@ class BackfillTracker:
         }
         with self._lock:
             self._jobs[job_id] = record
+            self._prune()
             self._save()
 
         event = threading.Event()
@@ -191,8 +209,8 @@ class _HistoJobBody(BaseModel):
 
 
 class _BackfillBody(BaseModel):
-    exchange: Optional[str] = None
-    pairs: Optional[list[str]] = None
+    exchange: str | None = None
+    pairs: list[str] | None = None
     start: str = '2020-01-01 00:00:00'
 
 
@@ -297,7 +315,14 @@ def create_app(cfg_path: str | Path) -> FastAPI:
     cfg = load_config(cfg_path)
     local_path = cfg.storage.local_path
 
-    app = FastAPI(title='dccd UI', docs_url='/api/docs')
+    # When a token is configured, do not expose the unauthenticated OpenAPI
+    # schema/docs — they would leak the API surface past the auth boundary.
+    enable_docs = cfg.settings.ui_auth_token is None
+    app = FastAPI(
+        title='dccd UI',
+        docs_url='/api/docs' if enable_docs else None,
+        openapi_url='/openapi.json' if enable_docs else None,
+    )
     app.state.cfg_path = cfg_path
     app.state.auth_token = cfg.settings.ui_auth_token
     app.state.config_lock = threading.Lock()
@@ -332,11 +357,12 @@ def _register_api(app: FastAPI) -> None:
         except Exception as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         import yaml
+        normalised = validated.model_dump(mode='json')
         with request.app.state.config_lock:
             request.app.state.cfg_path.write_text(
-                yaml.dump(body, default_flow_style=False)
+                yaml.dump(normalised, default_flow_style=False)
             )
-        return validated.model_dump()
+        return normalised
 
     @app.post('/api/config/validate', dependencies=[auth])
     def validate_config(body: dict) -> dict:

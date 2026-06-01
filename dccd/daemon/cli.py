@@ -95,6 +95,24 @@ def _complete_pairs_from_config(incomplete: str) -> list[str]:
         return []
 
 
+_LOOPBACK_HOSTS = frozenset({'127.0.0.1', 'localhost', '::1'})
+
+
+def _warn_open_bind(host: str, token: object) -> None:
+    """ Warn when the UI binds to a non-loopback address without a token.
+
+    Exposing the UI on the network without ``ui_auth_token`` lets anyone
+    edit the config, launch backfills, and trigger syncs unauthenticated.
+    """
+    if host not in _LOOPBACK_HOSTS and not token:
+        typer.echo(
+            f'WARNING: web UI bound to {host} without ui_auth_token — '
+            'anyone on the network can control the daemon. '
+            'Set settings.ui_auth_token or bind to 127.0.0.1.',
+            err=True,
+        )
+
+
 def _load(config_path: Optional[str]) -> object:
     """Load config, exit with code 1 on any error."""
     from dccd.daemon.config import load_config, resolve_config_path
@@ -295,6 +313,7 @@ def _start_ui_thread(config_path: Path, cfg: object) -> object | None:
 
     host = cfg.settings.ui_host  # type: ignore[attr-defined]
     port = cfg.settings.ui_port  # type: ignore[attr-defined]
+    _warn_open_bind(host, cfg.settings.ui_auth_token)  # type: ignore[attr-defined]
     server = uvicorn.Server(uvicorn.Config(
         create_app(config_path), host=host, port=port, log_level='warning',
     ))
@@ -514,6 +533,7 @@ def ui(
     cfg = _load(str(config_path))
     h = host or cfg.settings.ui_host  # type: ignore[attr-defined]
     p = port or cfg.settings.ui_port  # type: ignore[attr-defined]
+    _warn_open_bind(h, cfg.settings.ui_auth_token)  # type: ignore[attr-defined]
     typer.echo(f'dccd UI on http://{h}:{p} (config: {config_path})')
     uvicorn.run(create_app(config_path), host=h, port=p)
 
