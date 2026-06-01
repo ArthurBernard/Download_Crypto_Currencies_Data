@@ -52,6 +52,8 @@ if TYPE_CHECKING:
 
 # Progress callback: called as (windows_done, windows_total) after each window.
 ProgressCallback = Callable[[int, int], None]
+# Message callback: called with each human-readable log line of a single job.
+MessageCallback = Callable[[str], None]
 
 __all__ = ['OHLCBackfill', 'KrakenBackfill', 'make_job', 'run_backfill']
 
@@ -119,8 +121,19 @@ class _BackfillBase(ABC):
         self.form = form
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self._msg_cb: MessageCallback | None = None
         cls_name = type(obj).__name__[4:]  # strip leading 'From'
         self.label = f'{cls_name:8s} {obj.crypto}/{obj.fiat}'
+
+    def _log(self, msg: str) -> None:
+        """Write *msg* to the tqdm stream and the optional message callback.
+
+        ``tqdm.write`` keeps CLI output intact; the callback (set by
+        :meth:`run`) lets the web UI capture the same lines for display.
+        """
+        tqdm.write(msg)
+        if self._msg_cb is not None:
+            self._msg_cb(msg)
 
     # ------------------------------------------------------------------
     # Abstract interface
@@ -173,6 +186,7 @@ class _BackfillBase(ABC):
         position: int = 0,
         progress_callback: ProgressCallback | None = None,
         stop_event: threading.Event | None = None,
+        message_callback: MessageCallback | None = None,
     ) -> None:
         """Run the full backfill for this (exchange, pair).
 
@@ -193,20 +207,25 @@ class _BackfillBase(ABC):
             When set, the backfill stops cleanly at the next window
             boundary.  Used by the web UI to cancel a running backfill;
             ``None`` (default) means the run cannot be interrupted.
+        message_callback : callable, optional
+            Called with each human-readable log line as it is written.
+            Used by the web UI to surface backfill logs; ``None`` (default)
+            keeps CLI behaviour unchanged.
 
         """
+        self._msg_cb = message_callback
         now_ts     = int(time_mod.time())
         user_start = int(date_to_TS(start_str, tz=self.obj.tz))
 
         if dry_run:
             total = max(1, (now_ts - user_start) // self.window_size + 1)
-            tqdm.write(f'[{self.label}] {self._dry_run_summary(total)}')
+            self._log(f'[{self.label}] {self._dry_run_summary(total)}')
             return
 
         intervals = self.obj._store.missing_intervals(user_start, now_ts)
 
         if not intervals:
-            tqdm.write(f'[{self.label}] already up to date')
+            self._log(f'[{self.label}] already up to date')
             if progress_callback is not None:
                 progress_callback(0, 0)
             return
@@ -233,7 +252,7 @@ class _BackfillBase(ABC):
             current = ivl_start
             while current < ivl_end:
                 if stop_event is not None and stop_event.is_set():
-                    tqdm.write(f'[{self.label}] cancelled at window {current}')
+                    self._log(f'[{self.label}] cancelled at window {current}')
                     bar.close()
                     return
 
@@ -249,13 +268,13 @@ class _BackfillBase(ABC):
                         last_exc = exc
                         if attempt < self.max_retries:
                             delay = self.retry_delay * (2 ** (attempt - 1))
-                            tqdm.write(
+                            self._log(
                                 f'[{self.label}] attempt {attempt}/{self.max_retries} '
                                 f'failed: {exc} — retrying in {delay:.1f}s'
                             )
                             time_mod.sleep(delay)
                 else:
-                    tqdm.write(
+                    self._log(
                         f'[{self.label}] window {current} failed after '
                         f'{self.max_retries} attempts: {last_exc} — skipping'
                     )
@@ -283,7 +302,7 @@ class _BackfillBase(ABC):
                 time_mod.sleep(self.sleep)
 
         bar.close()
-        tqdm.write(
+        self._log(
             f'[{self.label}] done — {n_candles:,} candles'
             + (f', {skipped} windows skipped' if skipped else '')
         )
@@ -344,12 +363,12 @@ class OHLCBackfill(_BackfillBase):
         ts_min = df['TS'].min()
         tolerance = self.obj.span * 5
         if ts_min > current + tolerance:
-            tqdm.write(
+            self._log(
                 f'[{self.label}] WARNING: data starts at {ts_min} but window '
                 f'began at {current} (gap={ts_min - current}s > {tolerance}s)'
             )
         if df['TS'].max() > now_ts + 60:
-            tqdm.write(f'[{self.label}] WARNING: future timestamps detected')
+            self._log(f'[{self.label}] WARNING: future timestamps detected')
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +475,7 @@ class KrakenBackfill(_BackfillBase):
             body = r.json()
             errors = body.get('error', [])
             if errors and any('Too many requests' in e for e in errors):
-                tqdm.write(
+                self._log(
                     f'[{self.label}] rate limited — backing off {backoff:.0f}s'
                 )
                 time_mod.sleep(backoff)
@@ -614,6 +633,7 @@ def run_backfill(
     dry_run: bool = False,
     progress_callback: Callable[[str, str, int, int], None] | None = None,
     stop_event: threading.Event | None = None,
+    message_callback: Callable[[str, str, str], None] | None = None,
 ) -> None:
     """Run historical backfill for all matching jobs in *cfg*.
 
@@ -639,6 +659,10 @@ def run_backfill(
     stop_event : threading.Event, optional
         When set, every job stops cleanly at its next window boundary.
         Used by the web UI to cancel a running backfill.
+    message_callback : callable, optional
+        Called as ``message_callback(exchange, pair, line)`` for each log
+        line of each job.  Used by the web UI to surface backfill logs;
+        ``None`` (default) keeps CLI behaviour unchanged.
 
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -681,12 +705,17 @@ def run_backfill(
             return None
         return lambda done, total: progress_callback(exch, pair, done, total)
 
+    def _msg_for(exch: str, pair: str) -> MessageCallback | None:
+        if message_callback is None:
+            return None
+        return lambda line: message_callback(exch, pair, line)
+
     if parallel:
         with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
             futures = {
                 executor.submit(
                     job.run, start, dry_run, pos,
-                    _cb_for(exch, pair), stop_event,
+                    _cb_for(exch, pair), stop_event, _msg_for(exch, pair),
                 ): job
                 for job, pos, exch, pair in jobs
             }
@@ -702,4 +731,5 @@ def run_backfill(
                 start, dry_run=dry_run, position=0,
                 progress_callback=_cb_for(exch, pair),
                 stop_event=stop_event,
+                message_callback=_msg_for(exch, pair),
             )

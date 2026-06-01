@@ -248,6 +248,67 @@ def test_collect_unknown_returns_404(client):
 
 
 # ---------------------------------------------------------------------------
+# Streams
+# ---------------------------------------------------------------------------
+
+_STREAM_EXTRA = {
+    'stream_jobs': [{
+        'exchange': 'binance', 'pairs': ['BTC/USDT'],
+        'channels': ['trades'], 'time_step': 60,
+    }],
+}
+
+
+def test_streams_list_reflects_config(tmp_path):
+    client = TestClient(create_app(_write_config(tmp_path, extra=_STREAM_EXTRA)))
+    rows = client.get('/api/streams').json()
+    assert len(rows) == 1
+    assert rows[0]['exchange'] == 'binance'
+    assert rows[0]['pair'] == 'BTC/USDT'
+    assert rows[0]['channels'] == ['trades']
+    assert rows[0]['running'] is False
+
+
+def test_streams_start_calls_manager(tmp_path):
+    app = create_app(_write_config(tmp_path, extra=_STREAM_EXTRA))
+    started = {}
+    app.state.stream_manager.start_one = (
+        lambda job, pair, channels: started.setdefault(
+            'key', f'{job.exchange}_{pair}_{channels}') or 'k'
+    )
+    client = TestClient(app)
+    r = client.post('/api/streams/start',
+                    json={'exchange': 'binance', 'pair': 'BTC/USDT', 'channels': ['trades']})
+    assert r.status_code == 202
+    assert started['key'] == "binance_BTC/USDT_['trades']"
+
+
+def test_streams_start_unknown_job_404(tmp_path):
+    client = TestClient(create_app(_write_config(tmp_path, extra=_STREAM_EXTRA)))
+    r = client.post('/api/streams/start',
+                    json={'exchange': 'kraken', 'pair': 'BTC/USD', 'channels': ['trades']})
+    assert r.status_code == 404
+
+
+def test_streams_stop_not_running(tmp_path):
+    client = TestClient(create_app(_write_config(tmp_path, extra=_STREAM_EXTRA)))
+    r = client.post('/api/streams/stop',
+                    json={'exchange': 'binance', 'pair': 'BTC/USDT', 'channels': ['trades']})
+    assert r.status_code == 200
+    assert r.json()['status'] == 'not_running'
+
+
+def test_create_app_uses_injected_stream_manager(tmp_path):
+    from dccd.daemon.config import load_config
+    from dccd.daemon.stream_manager import StreamManager
+
+    path = _write_config(tmp_path, extra=_STREAM_EXTRA)
+    sm = StreamManager(load_config(path))
+    app = create_app(path, sm)
+    assert app.state.stream_manager is sm
+
+
+# ---------------------------------------------------------------------------
 # Logs
 # ---------------------------------------------------------------------------
 

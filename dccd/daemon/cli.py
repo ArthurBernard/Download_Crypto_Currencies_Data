@@ -274,7 +274,7 @@ def start(
     scheduler = build_histo_scheduler(cfg, health=health)  # type: ignore[arg-type]
     stream_mgr = StreamManager(cfg, health=health)  # type: ignore[arg-type]
 
-    ui_server = _start_ui_thread(config_path, cfg)
+    ui_server = _start_ui_thread(config_path, cfg, stream_mgr)
 
     stop_event = threading.Event()
 
@@ -296,12 +296,17 @@ def start(
     typer.echo('Daemon stopped.')
 
 
-def _start_ui_thread(config_path: Path, cfg: object) -> Any | None:
+def _start_ui_thread(config_path: Path, cfg: object,
+                     stream_manager: object = None) -> Any | None:
     """ Start the web UI in a background thread, or ``None`` if unavailable.
 
     Returns the ``uvicorn.Server`` instance (so the caller can signal it to
     exit on shutdown), or ``None`` when the ``[ui]`` extra is not installed.
     Signal handlers are disabled because the server runs off the main thread.
+
+    *stream_manager* is the daemon's live
+    :class:`~dccd.daemon.stream_manager.StreamManager`, passed so the UI
+    reflects and controls the streams actually running in this process.
     """
     try:
         import uvicorn
@@ -315,7 +320,8 @@ def _start_ui_thread(config_path: Path, cfg: object) -> Any | None:
     port = cfg.settings.ui_port  # type: ignore[attr-defined]
     _warn_open_bind(host, cfg.settings.ui_auth_token)  # type: ignore[attr-defined]
     server = uvicorn.Server(uvicorn.Config(
-        create_app(config_path), host=host, port=port, log_level='warning',
+        create_app(config_path, stream_manager),  # type: ignore[arg-type]
+        host=host, port=port, log_level='warning',
     ))
     server.install_signal_handlers = False
     threading.Thread(target=server.run, daemon=True, name='dccd-ui').start()

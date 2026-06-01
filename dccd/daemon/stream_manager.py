@@ -291,42 +291,142 @@ class StreamManager:
                  health: HealthMonitor | None = None) -> None:
         self.config = config
         self._health = health
+        self._lock = threading.RLock()
         self._threads:     dict[str, threading.Thread]     = {}
         self._downloaders: dict[str, ContinuousDownloader] = {}
+        self._stops:       dict[str, threading.Event]      = {}
         self._stop_event = threading.Event()
         self._sync = SyncService(config.storage)
+
+    @staticmethod
+    def _key(exchange: str, pair: str, channels: list[str]) -> str:
+        """ Build the thread key for an ``(exchange, pair, channels)`` task. """
+        ch_tag = '_'.join(channels)
+        return f'{exchange}_{pair.replace("/", "_")}_{ch_tag}'
 
     def start(self) -> None:
         """ Start the sync service and all stream threads. """
         self._sync.start()
         for job in self.config.stream_jobs:
             for pair, channels in _iter_tasks(job):
-                ch_tag = '_'.join(channels)
-                key = f'{job.exchange}_{pair.replace("/", "_")}_{ch_tag}'
-                t = threading.Thread(
-                    target=self._run_forever,
-                    args=(job, pair, channels),
-                    name=key,
-                    daemon=True,
-                )
-                self._threads[key] = t
-                t.start()
-                logger.info('stream started: %s %s channels=%s', job.exchange, pair, channels)
+                self._start_thread(job, pair, channels)
+
+    def start_one(self, job: StreamJob, pair: str, channels: list[str]) -> str:
+        """ Start a single stream thread for *(pair, channels)* if not running.
+
+        Parameters
+        ----------
+        job : StreamJob
+            Stream job configuration (only ``exchange``/``time_step`` are used).
+        pair : str
+            Trading pair in ``'CRYPTO/FIAT'`` format.
+        channels : list of str
+            Channels for this thread.
+
+        Returns
+        -------
+        str
+            The thread key (running or freshly started).
+
+        """
+        return self._start_thread(job, pair, channels)
+
+    def _start_thread(self, job: StreamJob, pair: str, channels: list[str]) -> str:
+        key = self._key(job.exchange, pair, channels)
+        with self._lock:
+            existing = self._threads.get(key)
+            if existing is not None and existing.is_alive():
+                return key
+            stop = threading.Event()
+            self._stops[key] = stop
+            t = threading.Thread(
+                target=self._run_forever,
+                args=(job, pair, channels, stop),
+                name=key,
+                daemon=True,
+            )
+            self._threads[key] = t
+            t.start()
+        logger.info('stream started: %s %s channels=%s', job.exchange, pair, channels)
+        return key
 
     def stop(self) -> None:
         """ Signal all streams and the sync service to stop. """
         self._stop_event.set()
         self._sync.stop()
-        for dl in self._downloaders.values():
+        with self._lock:
+            for ev in self._stops.values():
+                ev.set()
+            downloaders = list(self._downloaders.values())
+        for dl in downloaders:
             dl.until = time.time()
             dl.is_connect = False
+
+    def stop_one(self, key: str) -> bool:
+        """ Signal a single stream thread (by key) to stop.
+
+        Parameters
+        ----------
+        key : str
+            Thread key as returned by :meth:`start_one` / :meth:`status`.
+
+        Returns
+        -------
+        bool
+            ``True`` if a matching running thread was found and signalled.
+
+        """
+        with self._lock:
+            ev = self._stops.get(key)
+            dl = self._downloaders.get(key)
+            thread = self._threads.get(key)
+        if ev is None and thread is None:
+            return False
+        if ev is not None:
+            ev.set()
+        if dl is not None:
+            dl.until = time.time()
+            dl.is_connect = False
+        return True
+
+    def running_keys(self) -> list[str]:
+        """ Return the keys of all currently alive stream threads. """
+        with self._lock:
+            return [k for k, t in self._threads.items() if t.is_alive()]
+
+    def status(self) -> list[dict[str, Any]]:
+        """ Return the configured stream tasks with their running state.
+
+        Returns
+        -------
+        list of dict
+            One entry per ``(pair, channels)`` task across all configured
+            ``stream_jobs``, with ``key``, ``exchange``, ``pair``,
+            ``channels``, ``time_step`` and ``running`` fields.
+
+        """
+        running = set(self.running_keys())
+        out: list[dict[str, Any]] = []
+        for job in self.config.stream_jobs:
+            for pair, channels in _iter_tasks(job):
+                key = self._key(job.exchange, pair, channels)
+                out.append({
+                    'key': key,
+                    'exchange': job.exchange,
+                    'pair': pair,
+                    'channels': list(channels),
+                    'time_step': job.time_step,
+                    'running': key in running,
+                })
+        return out
 
     # ------------------------------------------------------------------
     # Thread body
     # ------------------------------------------------------------------
 
-    def _run_forever(self, job: StreamJob, pair: str, channels: list[str]) -> None:
-        while not self._stop_event.is_set():
+    def _run_forever(self, job: StreamJob, pair: str, channels: list[str],
+                     stop: threading.Event) -> None:
+        while not self._stop_event.is_set() and not stop.is_set():
             try:
                 self._run_once(job, pair, channels)
                 if self._health:
@@ -335,8 +435,8 @@ class StreamManager:
                 logger.exception('stream crashed: %s %s', job.exchange, pair)
                 if self._health:
                     self._health.record_failure(job.exchange, pair)
-            if not self._stop_event.is_set():
-                self._stop_event.wait(timeout=_RESTART_DELAY)
+            if not self._stop_event.is_set() and not stop.is_set():
+                stop.wait(timeout=_RESTART_DELAY)
 
     def _run_once(self, job: StreamJob, pair: str, channels: list[str]) -> None:
         cls = _STREAM_CLASSES[job.exchange]
