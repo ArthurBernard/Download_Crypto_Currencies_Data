@@ -54,11 +54,22 @@ Top-level structure
      - Default
      - Description
    * - ``data_path``
-     - *(required)*
+     - ``./data/crypto``
      - Root directory where all data files are stored.
-   * - ``log_level``
-     - ``INFO``
-     - Python log level: ``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``.
+   * - ``timezone``
+     - ``local``
+     - ``local``, ``UTC``, or an IANA name (e.g. ``Europe/Paris``).
+   * - ``ui_host``
+     - ``127.0.0.1``
+     - Bind address for the web UI (``dccd ui``).  Use ``0.0.0.0`` to expose
+       it on the network.
+   * - ``ui_port``
+     - ``8080``
+     - TCP port for the web UI.
+   * - ``ui_auth_token``
+     - ``null``
+     - Bearer token required to access the web UI.  ``null`` disables auth
+       (appropriate only for a local ``127.0.0.1`` bind).
 
 ----
 

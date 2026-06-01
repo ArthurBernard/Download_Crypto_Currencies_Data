@@ -42,6 +42,9 @@ Extras summary
    * - ``daemon``
      - ``pip install dccd[daemon]``
      - CLI (``dccd`` command), APScheduler, PyYAML, Typer, rclone sync
+   * - ``ui``
+     - ``pip install dccd[daemon,ui]``
+     - Web UI / JSON API (``dccd ui``): FastAPI, uvicorn, Jinja2
    * - ``dev``
      - ``pip install dccd[dev]``
      - pytest, ruff, mypy, interrogate — for contributors only

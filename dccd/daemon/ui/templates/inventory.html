@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<h1>Inventory</h1>
+<p class="muted">Stored data series. Launch a backfill from any OHLC row.</p>
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>Exchange</th><th>Pair</th><th>Type</th><th>Span</th>
+          <th>From</th><th>To</th><th>Rows</th><th>Gaps</th><th></th></tr>
+    </thead>
+    <tbody id="inv-body">
+      <tr><td colspan="9" class="muted">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="modal-bg" id="bf-modal">
+  <div class="modal">
+    <h2>Backfill</h2>
+    <p id="bf-target" class="muted"></p>
+    <div class="row">
+      <label>Start date
+        <input type="text" id="bf-start" value="2020-01-01 00:00:00" size="20">
+      </label>
+    </div>
+    <div class="row" style="margin-top:1rem;">
+      <button onclick="launchBackfill()">Launch</button>
+      <button class="ghost" onclick="closeModal('bf-modal')">Cancel</button>
+    </div>
+    <p id="bf-msg" class="muted"></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let bfExchange = null, bfPair = null;
+
+  async function loadInventory() {
+    const body = document.getElementById('inv-body');
+    try {
+      const rows = await api('GET', '/api/inventory');
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="9" class="muted">No data found.</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.map(function (s) {
+        const btn = s.type === 'ohlc'
+          ? '<button class="ghost" onclick="openBackfill(\'' + s.exchange +
+            '\',\'' + s.pair + '\')">Backfill</button>'
+          : '';
+        const gapCls = s.gaps > 0 ? 'err' : 'ok';
+        return '<tr><td>' + s.exchange + '</td><td>' + s.pair + '</td><td>' +
+          s.type + '</td><td>' + s.span + '</td><td>' + (s.first || '-') +
+          '</td><td>' + (s.last || '-') + '</td><td>' + s.rows.toLocaleString() +
+          '</td><td class="' + gapCls + '">' + s.gaps + '</td><td>' + btn +
+          '</td></tr>';
+      }).join('');
+    } catch (e) {
+      body.innerHTML = '<tr><td colspan="9" class="err">' + e.message + '</td></tr>';
+    }
+  }
+
+  function openBackfill(exchange, pair) {
+    bfExchange = exchange; bfPair = pair;
+    document.getElementById('bf-target').textContent = exchange + ' ' + pair;
+    document.getElementById('bf-msg').textContent = '';
+    openModal('bf-modal');
+  }
+
+  async function launchBackfill() {
+    const start = document.getElementById('bf-start').value;
+    const msg = document.getElementById('bf-msg');
+    try {
+      const r = await api('POST', '/api/backfill',
+        { exchange: bfExchange, pairs: [bfPair], start: start });
+      msg.className = 'ok';
+      msg.textContent = 'Started: ' + r.id + ' — see Jobs page.';
+    } catch (e) {
+      msg.className = 'err';
+      msg.textContent = e.message;
+    }
+  }
+
+  loadInventory();
+</script>
+{% endblock %}

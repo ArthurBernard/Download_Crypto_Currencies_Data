@@ -159,7 +159,8 @@ def test_run_backfill_exchange_filter(tmp_path):
     cfg = _make_cfg()
     called = []
 
-    def fake_run(start, dry_run=False, position=0):
+    def fake_run(start, dry_run=False, position=0,
+                 progress_callback=None, stop_event=None):
         called.append(self_label)
 
     with patch('dccd.daemon.backfill.make_job') as mock_make:
@@ -211,6 +212,7 @@ def test_cli_backfill_dry_run(tmp_path):
     assert result.exit_code == 0
     mock_job.run.assert_called_once_with(
         '2020-01-01 00:00:00', dry_run=True, position=0,
+        progress_callback=None, stop_event=None,
     )
 
 

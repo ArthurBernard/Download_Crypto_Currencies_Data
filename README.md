@@ -33,6 +33,12 @@ With autonomous daemon support (APScheduler + PyYAML):
 pip install "dccd[daemon]"
 ```
 
+With the web UI (FastAPI + htmx — `dccd ui`):
+
+```bash
+pip install "dccd[daemon,ui]"
+```
+
 From source:
 
 ```bash
@@ -66,6 +72,9 @@ Stream real-time data (order book, trades) via WebSocket with automatic reconnec
 
 **Daemon** `dccd.daemon`  
 Autonomous, server-side collector driven by a YAML config. Runs REST jobs on a schedule (APScheduler), opens WebSocket streams for real-time collection, and periodically syncs all local data to one or more remote destinations (NAS, S3, SFTP, …) via rclone. Multiple remotes and a configurable sync interval are supported; collection is never blocked by remote availability.
+
+**Web UI** `dccd.daemon.api`  
+Optional browser interface (FastAPI + htmx) mirroring the CLI: dashboard of live health metrics, data inventory, job management (add/remove pairs, launch and cancel backfills), log tail, config editor, and remote-storage status. Runs standalone (`dccd ui`) or embedded in `dccd start`.
 
 ### Output formats
 
@@ -180,6 +189,9 @@ dccd remove --exchange kraken --pair ETH/USD --span 86400 --config config.yml
 
 # Inspect all data on disk (OHLC, trades, orderbook)
 dccd inventory --config config.yml
+
+# Web UI — dashboard, inventory, jobs, logs, config (needs: pip install "dccd[daemon,ui]")
+dccd ui --config config.yml          # http://127.0.0.1:8080
 
 # Enable shell tab-completion (run once after install)
 dccd --install-completion

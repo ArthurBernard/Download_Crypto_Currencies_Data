@@ -4,6 +4,22 @@
 #   dccd validate --config config.yml    # check without running
 #   dccd collect --config config.yml     # one incremental batch, then exit
 #   dccd start --config config.yml       # run as a daemon
+#   dccd ui --config config.yml          # web UI only (monitoring/control)
+
+# ---------------------------------------------------------------------------
+# Settings  (optional — all keys have defaults)
+# ---------------------------------------------------------------------------
+# settings:
+#   data_path: ./data/crypto   # root directory for all local data files
+#   timezone: local            # 'local', 'UTC', or an IANA name (Europe/Paris)
+#
+#   # Web UI (dccd ui / embedded in dccd start). Requires: pip install dccd[ui]
+#   ui_host: 127.0.0.1         # bind address; use 0.0.0.0 to expose on the LAN
+#   ui_port: 8080              # TCP port for the web UI
+#   ui_auth_token: null        # Bearer token required to access the UI;
+#                              # null disables auth (fine for a local 127.0.0.1
+#                              # bind). Set a token before exposing on a network.
+
 
 # ---------------------------------------------------------------------------
 # Storage

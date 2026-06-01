@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Config{% endblock %}
+{% block content %}
+<h1>Config</h1>
+<p class="muted">Edit the raw configuration (JSON). Validate before saving.</p>
+<div class="card">
+  <textarea id="cfg-text" spellcheck="false">Loading…</textarea>
+  <div class="row" style="margin-top:.5rem;">
+    <button class="ghost" onclick="validateCfg()">Validate</button>
+    <button onclick="saveCfg()">Save</button>
+    <button class="ghost" onclick="loadCfg()">Reload</button>
+  </div>
+  <p id="cfg-msg" class="muted"></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  function parseEditor() {
+    return JSON.parse(document.getElementById('cfg-text').value);
+  }
+
+  async function loadCfg() {
+    const cfg = await api('GET', '/api/config');
+    document.getElementById('cfg-text').value = JSON.stringify(cfg, null, 2);
+    setMsg('muted', 'Loaded.');
+  }
+
+  function setMsg(cls, text) {
+    const m = document.getElementById('cfg-msg');
+    m.className = cls; m.textContent = text;
+  }
+
+  async function validateCfg() {
+    let body;
+    try { body = parseEditor(); }
+    catch (e) { setMsg('err', 'Invalid JSON: ' + e.message); return; }
+    const r = await api('POST', '/api/config/validate', body);
+    if (r.valid) setMsg('ok', 'Valid.');
+    else setMsg('err', r.error);
+  }
+
+  async function saveCfg() {
+    let body;
+    try { body = parseEditor(); }
+    catch (e) { setMsg('err', 'Invalid JSON: ' + e.message); return; }
+    try {
+      await api('PUT', '/api/config', body);
+      setMsg('ok', 'Saved.');
+    } catch (e) { setMsg('err', e.message); }
+  }
+
+  loadCfg();
+</script>
+{% endblock %}

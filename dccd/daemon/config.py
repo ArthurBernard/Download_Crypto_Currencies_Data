@@ -55,11 +55,22 @@ class SettingsConfig(BaseModel):
         Timezone used to interpret date strings and label output files.
         ``'local'`` (default) uses the system timezone, ``'UTC'`` uses UTC,
         any other value is an IANA name (e.g. ``'Europe/Paris'``).
+    ui_host : str
+        Network interface the web UI binds to.  Default ``'127.0.0.1'``
+        (local only).  Use ``'0.0.0.0'`` to expose the UI on the network.
+    ui_port : int
+        TCP port for the web UI.  Default ``8080``.
+    ui_auth_token : str or None
+        Bearer token required to access the web UI.  ``None`` (default)
+        disables authentication — appropriate only for a local bind.
 
     """
 
     data_path: str = './data/crypto'
     timezone: str = 'local'
+    ui_host: str = '127.0.0.1'
+    ui_port: int = 8080
+    ui_auth_token: str | None = None
 
     @field_validator('data_path')
     @classmethod

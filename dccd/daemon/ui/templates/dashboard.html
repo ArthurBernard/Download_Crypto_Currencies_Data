@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p class="muted">Per-job health metrics, refreshed every 5&nbsp;s.</p>
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>Job</th><th>Last run</th><th>Last success</th>
+          <th>Rows</th><th>Errors</th></tr>
+    </thead>
+    <tbody id="metrics-body" hx-get="/api/metrics" hx-trigger="load, every 5s"
+           hx-swap="innerHTML"></tbody>
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Render the /api/metrics JSON into the table body after each htmx swap.
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.target.id !== 'metrics-body') return;
+    let data;
+    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
+    const keys = Object.keys(data);
+    if (!keys.length) { e.target.innerHTML =
+      '<tr><td colspan="5" class="muted">No metrics yet.</td></tr>'; return; }
+    e.target.innerHTML = keys.map(function (k) {
+      const m = data[k];
+      const errCls = m.errors_count > 0 ? 'err' : 'ok';
+      return '<tr><td>' + k + '</td><td>' + fmtTs(m.last_run_at) +
+        '</td><td>' + fmtTs(m.last_success_at) + '</td><td>' +
+        (m.rows_collected || 0) + '</td><td class="' + errCls + '">' +
+        (m.errors_count || 0) + '</td></tr>';
+    }).join('');
+  });
+</script>
+{% endblock %}
