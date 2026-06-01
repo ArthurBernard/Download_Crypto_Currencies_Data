@@ -35,10 +35,11 @@ Public entry points
 
 from __future__ import annotations
 
+import threading
 import time as time_mod
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import polars as pl
 from tqdm import tqdm
@@ -48,6 +49,9 @@ from dccd.tools.date_time import date_to_TS
 if TYPE_CHECKING:
     from dccd.daemon.config import CollectorConfig
     from dccd.histo_dl.exchange import ImportDataCryptoCurrencies
+
+# Progress callback: called as (windows_done, windows_total) after each window.
+ProgressCallback = Callable[[int, int], None]
 
 __all__ = ['OHLCBackfill', 'KrakenBackfill', 'make_job', 'run_backfill']
 
@@ -167,6 +171,8 @@ class _BackfillBase(ABC):
         start_str: str,
         dry_run: bool = False,
         position: int = 0,
+        progress_callback: ProgressCallback | None = None,
+        stop_event: threading.Event | None = None,
     ) -> None:
         """Run the full backfill for this (exchange, pair).
 
@@ -179,6 +185,14 @@ class _BackfillBase(ABC):
             Print an estimate without making any API calls.
         position : int, optional
             tqdm bar position (use distinct values for parallel runs).
+        progress_callback : callable, optional
+            Called as ``progress_callback(windows_done, windows_total)``
+            after each window completes.  Used by the web UI to report
+            live progress; ``None`` (default) keeps CLI behaviour unchanged.
+        stop_event : threading.Event, optional
+            When set, the backfill stops cleanly at the next window
+            boundary.  Used by the web UI to cancel a running backfill;
+            ``None`` (default) means the run cannot be interrupted.
 
         """
         now_ts     = int(time_mod.time())
@@ -193,6 +207,8 @@ class _BackfillBase(ABC):
 
         if not intervals:
             tqdm.write(f'[{self.label}] already up to date')
+            if progress_callback is not None:
+                progress_callback(0, 0)
             return
 
         def _iso(ts: int) -> str:
@@ -209,10 +225,18 @@ class _BackfillBase(ABC):
 
         n_candles = 0
         skipped   = 0
+        done      = 0
+        if progress_callback is not None:
+            progress_callback(0, total)
 
         for ivl_start, ivl_end in intervals:
             current = ivl_start
             while current < ivl_end:
+                if stop_event is not None and stop_event.is_set():
+                    tqdm.write(f'[{self.label}] cancelled at window {current}')
+                    bar.close()
+                    return
+
                 end = min(current + self.window_size, ivl_end)
 
                 last_exc: Exception | None = None
@@ -238,6 +262,9 @@ class _BackfillBase(ABC):
                     skipped += 1
                     current += self.window_size
                     bar.update(1)
+                    done += 1
+                    if progress_callback is not None:
+                        progress_callback(done, total)
                     time_mod.sleep(self.sleep)
                     continue
 
@@ -248,8 +275,11 @@ class _BackfillBase(ABC):
                 current_date = _iso(current)
                 current = self._advance(current, end)
                 bar.update(1)
+                done += 1
                 bar.set_description(f'{self.label}  {current_date} → {end_date_str}')
                 bar.set_postfix(candles=n_candles, skipped=skipped)
+                if progress_callback is not None:
+                    progress_callback(done, total)
                 time_mod.sleep(self.sleep)
 
         bar.close()
@@ -582,6 +612,8 @@ def run_backfill(
     start: str = DEFAULT_START,
     parallel: bool = False,
     dry_run: bool = False,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Run historical backfill for all matching jobs in *cfg*.
 
@@ -600,6 +632,13 @@ def run_backfill(
         Run all jobs in parallel threads.
     dry_run : bool, optional
         Print estimates without making any API calls.
+    progress_callback : callable, optional
+        Called as ``progress_callback(exchange, pair, windows_done,
+        windows_total)`` after each window of each job.  Used by the web
+        UI; ``None`` (default) keeps CLI behaviour unchanged.
+    stop_event : threading.Event, optional
+        When set, every job stops cleanly at its next window boundary.
+        Used by the web UI to cancel a running backfill.
 
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -607,7 +646,7 @@ def run_backfill(
     path = cfg.settings.data_path
     tz = cfg.settings.timezone
 
-    jobs: list[tuple[_BackfillBase, int]] = []
+    jobs: list[tuple[_BackfillBase, int, str, str]] = []
     seen_paths: set[str] = set()
     for histo_job in cfg.histo_jobs:
         if exchange and histo_job.exchange != exchange:
@@ -631,17 +670,25 @@ def run_backfill(
                 )
                 continue
             seen_paths.add(job.obj.full_path)
-            jobs.append((job, len(jobs)))
+            jobs.append((job, len(jobs), histo_job.exchange, pair))
 
     if not jobs:
         tqdm.write('No matching jobs — check --exchange / --pairs filters.')
         return
 
+    def _cb_for(exch: str, pair: str) -> ProgressCallback | None:
+        if progress_callback is None:
+            return None
+        return lambda done, total: progress_callback(exch, pair, done, total)
+
     if parallel:
         with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
             futures = {
-                executor.submit(job.run, start, dry_run, pos): job
-                for job, pos in jobs
+                executor.submit(
+                    job.run, start, dry_run, pos,
+                    _cb_for(exch, pair), stop_event,
+                ): job
+                for job, pos, exch, pair in jobs
             }
             for future in as_completed(futures):
                 job = futures[future]
@@ -650,5 +697,9 @@ def run_backfill(
                 except Exception as exc:
                     tqdm.write(f'[{job.label}] FATAL: {exc}')
     else:
-        for job, _ in jobs:
-            job.run(start, dry_run=dry_run, position=0)
+        for job, _, exch, pair in jobs:
+            job.run(
+                start, dry_run=dry_run, position=0,
+                progress_callback=_cb_for(exch, pair),
+                stop_event=stop_event,
+            )

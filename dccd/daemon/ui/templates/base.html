@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}dccd{% endblock %} — dccd UI</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    :root { --bg:#0f1419; --fg:#e6e6e6; --muted:#8b98a5; --accent:#4a9eff;
+            --border:#2a3038; --card:#161b22; --ok:#3fb950; --err:#f85149; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg);
+           color:var(--fg); }
+    nav { display:flex; gap:.25rem; flex-wrap:wrap; padding:.5rem 1rem;
+          background:var(--card); border-bottom:1px solid var(--border); }
+    nav a { color:var(--muted); text-decoration:none; padding:.4rem .8rem;
+            border-radius:6px; }
+    nav a:hover { background:var(--border); color:var(--fg); }
+    nav a.active { color:var(--accent); }
+    main { padding:1rem; max-width:1100px; margin:0 auto; }
+    h1 { font-size:1.3rem; margin:0 0 1rem; }
+    h2 { font-size:1.05rem; margin:1.5rem 0 .5rem; }
+    table { width:100%; border-collapse:collapse; margin:.5rem 0; }
+    th, td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:600; }
+    button { background:var(--accent); color:#fff; border:0; border-radius:6px;
+             padding:.4rem .8rem; cursor:pointer; font-size:.9rem; }
+    button:hover { opacity:.9; }
+    button.ghost { background:transparent; color:var(--muted);
+                   border:1px solid var(--border); }
+    button.danger { background:var(--err); }
+    input, select, textarea { background:var(--bg); color:var(--fg);
+      border:1px solid var(--border); border-radius:6px; padding:.4rem .6rem;
+      font:inherit; }
+    textarea { width:100%; min-height:340px; font-family:ui-monospace, monospace; }
+    pre { background:var(--card); border:1px solid var(--border); border-radius:6px;
+          padding:.8rem; overflow:auto; max-height:70vh; white-space:pre-wrap;
+          word-break:break-word; }
+    .card { background:var(--card); border:1px solid var(--border);
+            border-radius:8px; padding:1rem; margin:.5rem 0; }
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .muted { color:var(--muted); }
+    .ok { color:var(--ok); } .err { color:var(--err); }
+    .bar { height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+    .bar > span { display:block; height:100%; background:var(--accent); }
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6);
+                display:none; align-items:center; justify-content:center; }
+    .modal-bg.show { display:flex; }
+    .modal { background:var(--card); border:1px solid var(--border);
+             border-radius:8px; padding:1.5rem; min-width:320px; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Dashboard</a>
+    <a href="/inventory">Inventory</a>
+    <a href="/jobs">Jobs</a>
+    <a href="/logs">Logs</a>
+    <a href="/config">Config</a>
+    <a href="/storage">Storage</a>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    // Minimal vanilla helpers shared across pages — no JS framework.
+    function fmtTs(ts) {
+      if (ts == null) return '-';
+      return new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ');
+    }
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    async function api(method, url, body) {
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const r = await fetch(url, opts);
+      const text = await r.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+      if (!r.ok) throw new Error((data && data.detail) || r.statusText);
+      return data;
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

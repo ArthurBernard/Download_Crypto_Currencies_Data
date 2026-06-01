@@ -245,14 +245,18 @@ def start(
     Press Ctrl-C or send SIGTERM to stop gracefully.
 
     """
+    from dccd.daemon.config import resolve_config_path
     from dccd.daemon.health import HealthMonitor
     from dccd.daemon.scheduler import build_histo_scheduler
     from dccd.daemon.stream_manager import StreamManager
 
-    cfg = _load(config)
+    config_path = resolve_config_path(config)
+    cfg = _load(str(config_path))
     health = HealthMonitor(cfg.storage.local_path, cfg.alerts)  # type: ignore[attr-defined]
     scheduler = build_histo_scheduler(cfg, health=health)  # type: ignore[arg-type]
     stream_mgr = StreamManager(cfg, health=health)  # type: ignore[arg-type]
+
+    ui_server = _start_ui_thread(config_path, cfg)
 
     stop_event = threading.Event()
 
@@ -269,7 +273,35 @@ def start(
     stop_event.wait()
     scheduler.shutdown(wait=False)
     stream_mgr.stop()
+    if ui_server is not None:
+        ui_server.should_exit = True
     typer.echo('Daemon stopped.')
+
+
+def _start_ui_thread(config_path: Path, cfg: object) -> object | None:
+    """ Start the web UI in a background thread, or ``None`` if unavailable.
+
+    Returns the ``uvicorn.Server`` instance (so the caller can signal it to
+    exit on shutdown), or ``None`` when the ``[ui]`` extra is not installed.
+    Signal handlers are disabled because the server runs off the main thread.
+    """
+    try:
+        import uvicorn
+
+        from dccd.daemon.api import create_app
+    except ImportError:
+        typer.echo('Web UI not available (install dccd[ui]). Continuing without it.')
+        return None
+
+    host = cfg.settings.ui_host  # type: ignore[attr-defined]
+    port = cfg.settings.ui_port  # type: ignore[attr-defined]
+    server = uvicorn.Server(uvicorn.Config(
+        create_app(config_path), host=host, port=port, log_level='warning',
+    ))
+    server.install_signal_handlers = False
+    threading.Thread(target=server.run, daemon=True, name='dccd-ui').start()
+    typer.echo(f'Web UI on http://{host}:{port}')
+    return server
 
 
 @app.command()
@@ -442,6 +474,48 @@ def remove(
     config_path.write_text(yaml.dump(raw, default_flow_style=False))
     typer.echo(f'Removed {pair} from {exchange}/{span}s.')
     typer.echo(f'Config written to {config_path}.')
+
+
+@app.command()
+def ui(
+    config: Optional[str] = typer.Option(
+        None, '--config', '-c',
+        help='Path to the YAML config file (default: ./config.yml or ~/.config/dccd/config.yml).',
+    ),
+    host: Optional[str] = typer.Option(
+        None, '--host', help='Bind address (overrides settings.ui_host).',
+    ),
+    port: Optional[int] = typer.Option(
+        None, '--port', help='TCP port (overrides settings.ui_port).',
+    ),
+) -> None:
+    """ Serve the web UI standalone (no collection, monitoring only).
+
+    Starts a uvicorn server hosting the FastAPI app from
+    :func:`~dccd.daemon.api.create_app`.  The bind address and port default
+    to ``settings.ui_host`` / ``settings.ui_port`` from the config and can be
+    overridden with ``--host`` / ``--port``.
+
+    The UI reads and writes the same config file and data directory as the
+    daemon, so it can run alongside ``dccd start`` (or be embedded in it).
+
+    """
+    import uvicorn
+
+    from dccd.daemon.api import create_app
+    from dccd.daemon.config import resolve_config_path
+
+    try:
+        config_path = resolve_config_path(config)
+    except FileNotFoundError as exc:
+        typer.echo(f'Error: {exc}', err=True)
+        raise typer.Exit(1)
+
+    cfg = _load(str(config_path))
+    h = host or cfg.settings.ui_host  # type: ignore[attr-defined]
+    p = port or cfg.settings.ui_port  # type: ignore[attr-defined]
+    typer.echo(f'dccd UI on http://{h}:{p} (config: {config_path})')
+    uvicorn.run(create_app(config_path), host=h, port=p)
 
 
 @app.command()

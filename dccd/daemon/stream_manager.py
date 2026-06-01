@@ -15,10 +15,12 @@ restarts them automatically on failure.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dccd.continuous_dl.binance import DownloadBinanceData
@@ -236,8 +238,27 @@ class SyncService:
         self._stop.set()
 
     def sync_now(self) -> None:
-        """ Push ``local_path`` to all remotes immediately (blocking). """
+        """ Push ``local_path`` to all remotes immediately (blocking).
+
+        On success, the timestamp and remote list are recorded in
+        ``{local_path}/.dccd/last_sync.json`` so the web UI can display the
+        last sync time without inspecting rclone output.
+        """
         self._storage.push(self.config.local_path)
+        self._record_last_sync()
+
+    def _record_last_sync(self) -> None:
+        """ Write ``last_sync.json`` after a successful push (best effort). """
+        try:
+            d = Path(self.config.local_path) / '.dccd'
+            d.mkdir(parents=True, exist_ok=True)
+            payload = {
+                'last_sync_at': time.time(),
+                'remotes': [r.remote for r in self.config.remotes],
+            }
+            (d / 'last_sync.json').write_text(json.dumps(payload))
+        except Exception:
+            logger.exception('SyncService: failed to write last_sync.json')
 
     def _loop(self) -> None:
         while not self._stop.wait(timeout=self.config.sync_interval):

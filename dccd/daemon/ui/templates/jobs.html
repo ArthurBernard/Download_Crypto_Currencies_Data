@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1>Jobs</h1>
+
+<h2>Histo jobs</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Exchange</th><th>Pairs</th><th>Span</th><th>Format</th><th></th></tr></thead>
+    <tbody id="histo-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+  </table>
+</div>
+
+<h2>Add histo job</h2>
+<div class="card">
+  <div class="row">
+    <input id="j-exchange" placeholder="binance" size="10">
+    <input id="j-pair" placeholder="BTC/USDT" size="12">
+    <input id="j-span" placeholder="3600" size="8" type="number">
+    <input id="j-format" placeholder="parquet" size="8" value="parquet">
+    <button onclick="addJob()">Add</button>
+  </div>
+  <p id="j-msg" class="muted"></p>
+</div>
+
+<h2>Stream jobs</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Exchange</th><th>Pairs</th><th>Channels</th><th>Step</th></tr></thead>
+    <tbody id="stream-body"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+  </table>
+</div>
+
+<h2>Backfill jobs</h2>
+<div class="card">
+  <div id="bf-list" hx-get="/api/backfill" hx-trigger="load, every 5s"
+       hx-swap="innerHTML"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function loadJobs() {
+    const data = await api('GET', '/api/jobs');
+    const hb = document.getElementById('histo-body');
+    hb.innerHTML = data.histo_jobs.length ? data.histo_jobs.map(function (j) {
+      return j.pairs.map(function (p) {
+        return '<tr><td>' + j.exchange + '</td><td>' + p + '</td><td>' + j.span +
+          '</td><td>' + j.format + '</td><td><button class="danger" onclick="rmJob(\'' +
+          j.exchange + '\',\'' + p + '\',' + j.span + ')">Remove</button></td></tr>';
+      }).join('');
+    }).join('') : '<tr><td colspan="5" class="muted">None.</td></tr>';
+
+    const sb = document.getElementById('stream-body');
+    sb.innerHTML = data.stream_jobs.length ? data.stream_jobs.map(function (j) {
+      return '<tr><td>' + j.exchange + '</td><td>' + j.pairs.join(', ') +
+        '</td><td>' + j.channels.join(', ') + '</td><td>' + j.time_step +
+        '</td></tr>';
+    }).join('') : '<tr><td colspan="4" class="muted">None.</td></tr>';
+  }
+
+  async function addJob() {
+    const msg = document.getElementById('j-msg');
+    try {
+      await api('POST', '/api/jobs/histo', {
+        exchange: document.getElementById('j-exchange').value.trim(),
+        pair: document.getElementById('j-pair').value.trim(),
+        span: parseInt(document.getElementById('j-span').value, 10),
+        format: document.getElementById('j-format').value.trim() || 'parquet',
+      });
+      msg.className = 'ok'; msg.textContent = 'Added.';
+      loadJobs();
+    } catch (e) { msg.className = 'err'; msg.textContent = e.message; }
+  }
+
+  async function rmJob(exchange, pair, span) {
+    const slug = pair.replace('/', '-');
+    try {
+      await api('DELETE', '/api/jobs/histo/' + exchange + '/' + slug + '/' + span);
+      loadJobs();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function cancelBf(id) {
+    try { await api('DELETE', '/api/backfill/' + id); } catch (e) { alert(e.message); }
+  }
+
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.target.id !== 'bf-list') return;
+    let data;
+    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
+    const ids = Object.keys(data);
+    if (!ids.length) { e.target.innerHTML = '<p class="muted">No backfill jobs.</p>'; return; }
+    e.target.innerHTML = ids.sort().reverse().map(function (id) {
+      const j = data[id];
+      const prog = Object.keys(j.progress || {}).map(function (p) {
+        const pr = j.progress[p];
+        const pct = pr.total > 0 ? Math.round(100 * pr.done / pr.total) : 0;
+        return '<div class="muted">' + p + ' — ' + pr.done + '/' + pr.total +
+          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
+      }).join('');
+      const cancel = (j.status === 'running')
+        ? '<button class="danger" onclick="cancelBf(\'' + id + '\')">Stop</button>' : '';
+      const statusCls = j.status === 'error' ? 'err'
+        : (j.status === 'done' ? 'ok' : 'muted');
+      return '<div style="margin-bottom:1rem;"><div class="row"><strong>' + id +
+        '</strong> <span class="' + statusCls + '">' + j.status + '</span> ' + cancel +
+        '</div>' + prog + (j.error ? '<div class="err">' + j.error + '</div>' : '') +
+        '</div>';
+    }).join('');
+  });
+
+  loadJobs();
+</script>
+{% endblock %}

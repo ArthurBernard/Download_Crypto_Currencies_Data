@@ -293,6 +293,30 @@ Storage
 
    storage.RemoteStorage -- push local data directories to remote destinations via rclone
 
+Web UI
+------
+
+A FastAPI + htmx web interface mirrors the CLI in the browser: a dashboard of
+live health metrics, the data inventory, job management (add/remove pairs,
+launch and cancel backfills), a log tail, a config editor, and remote-storage
+status.  It requires the ``ui`` extra and is started either standalone with
+``dccd ui`` or automatically by ``dccd start``:
+
+.. code-block:: bash
+
+   pip install "dccd[daemon,ui]"
+   dccd ui --config config.yml          # http://127.0.0.1:8080
+
+The HTTP layer is a thin wrapper over the existing daemon modules — every
+endpoint delegates to the same functions used by the CLI — so the JSON API
+(``/api/*``) and the htmx templates are fully decoupled.
+
+.. autosummary::
+   :toctree: generated/
+
+   api.create_app -- build the FastAPI application from a config path
+   api.BackfillTracker -- track and persist UI-launched backfill jobs
+
 Data Store
 ----------
 

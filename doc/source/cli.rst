@@ -183,6 +183,32 @@ Sample output:
 
 ----
 
+dccd ui
+-------
+
+Serve the web UI (dashboard, inventory, jobs, logs, config, storage) in a
+browser.  Requires the ``ui`` extra:
+
+.. code-block:: bash
+
+   pip install dccd[daemon,ui]
+
+   # Standalone (monitoring/control only — no collection)
+   dccd ui --config config.yml
+
+   # Override the bind address / port from settings.ui_host / ui_port
+   dccd ui --config config.yml --host 0.0.0.0 --port 9000
+
+By default the UI binds to ``127.0.0.1:8080`` (local only).  When the ``ui``
+extra is installed, ``dccd start`` also serves the UI automatically on the same
+address, alongside the scheduler and streams.
+
+To expose the UI on a network, set ``settings.ui_host: 0.0.0.0`` **and** a
+``settings.ui_auth_token`` (a Bearer token required on every request); visit
+``http://HOST:PORT/?token=YOUR_TOKEN`` once to store it in a cookie.
+
+----
+
 Shell auto-completion
 ---------------------
 

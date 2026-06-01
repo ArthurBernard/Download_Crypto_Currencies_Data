@@ -6,6 +6,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dccd/daemon/api.py` — web UI and JSON API (FastAPI + Jinja2 + htmx): a thin
+  HTTP layer over the existing daemon modules exposing dashboard (live health
+  metrics), inventory (stored data coverage), jobs (histo/stream list + add/remove
+  + live backfill progress), logs (tail), config (view/validate/save the YAML),
+  and storage (rclone status + manual sync). JSON-only API (`/api/*`) with
+  dumb-shell templates, so the front-end can be swapped without touching the API.
+  Optional Bearer-token auth via `settings.ui_auth_token`
+- `dccd/daemon/cli.py` — `dccd ui`: serve the web UI standalone; the UI is also
+  started automatically (background thread) by `dccd start` when the `[ui]` extra
+  is installed
+- `dccd/daemon/config.py` — `SettingsConfig.ui_host`, `ui_port`, `ui_auth_token`:
+  web UI bind address, port, and optional auth token
+- `dccd/daemon/backfill.py` — `progress_callback` and `stop_event` on
+  `_BackfillBase.run()` / `run_backfill()`: let the UI report live progress and
+  cancel a running backfill (defaults keep CLI behaviour unchanged)
+- `dccd/daemon/stream_manager.py` — `SyncService` writes
+  `{local_path}/.dccd/last_sync.json` after each successful remote push, so the UI
+  can display the last sync time
+- `pyproject.toml` — new optional extra `[ui]` (`fastapi`, `uvicorn[standard]`,
+  `jinja2`); install with `pip install dccd[daemon,ui]`
+
 ## [2.3.3] - 2026-05-31
 
 ### Added
