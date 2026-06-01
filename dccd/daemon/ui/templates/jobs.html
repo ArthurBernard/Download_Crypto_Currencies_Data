@@ -24,8 +24,9 @@
 <h2>Stream jobs</h2>
 <div class="card">
   <table>
-    <thead><tr><th>Exchange</th><th>Pairs</th><th>Channels</th><th>Step</th></tr></thead>
-    <tbody id="stream-body"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+    <thead><tr><th>Exchange</th><th>Pair</th><th>Channels</th><th>Step</th>
+      <th>Status</th><th></th></tr></thead>
+    <tbody id="stream-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
   </table>
 </div>
 
@@ -37,12 +38,6 @@
 {% endblock %}
 {% block scripts %}
 <script>
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
   async function loadJobs() {
     const data = await api('GET', '/api/jobs');
     const root = document.getElementById('histo-root');
@@ -76,12 +71,43 @@
       }).join('');
     }
 
+  }
+
+  async function loadStreams() {
+    let rows;
+    try { rows = await api('GET', '/api/streams'); } catch (e) { return; }
     const sb = document.getElementById('stream-body');
-    sb.innerHTML = data.stream_jobs.length ? data.stream_jobs.map(function (j) {
-      return '<tr><td>' + j.exchange + '</td><td>' + j.pairs.join(', ') +
-        '</td><td>' + j.channels.join(', ') + '</td><td>' + j.time_step +
-        '</td></tr>';
-    }).join('') : '<tr><td colspan="4" class="muted">None.</td></tr>';
+    if (!rows.length) {
+      sb.innerHTML = '<tr><td colspan="6" class="muted">None.</td></tr>';
+      return;
+    }
+    sb.innerHTML = rows.map(function (j) {
+      const chans = JSON.stringify(j.channels);
+      const status = j.running
+        ? '<span class="ok">running</span>' : '<span class="muted">stopped</span>';
+      const btn = j.running
+        ? '<button class="danger" onclick="stopStream(' + JSON.stringify(j.exchange) +
+          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Stop</button>'
+        : '<button onclick="startStream(' + JSON.stringify(j.exchange) +
+          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Start</button>';
+      return '<tr><td>' + escapeHtml(j.exchange) + '</td><td>' + escapeHtml(j.pair) +
+        '</td><td>' + escapeHtml(j.channels.join(', ')) + '</td><td>' + j.time_step +
+        '</td><td>' + status + '</td><td>' + btn + '</td></tr>';
+    }).join('');
+  }
+
+  async function startStream(exchange, pair, channels) {
+    try {
+      await api('POST', '/api/streams/start', { exchange, pair, channels });
+      loadStreams();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function stopStream(exchange, pair, channels) {
+    try {
+      await api('POST', '/api/streams/stop', { exchange, pair, channels });
+      loadStreams();
+    } catch (e) { alert(e.message); }
   }
 
   async function addJob() {
@@ -143,13 +169,19 @@
         ? '<button class="danger" onclick="cancelBf(\'' + id + '\')">Stop</button>' : '';
       const statusCls = j.status === 'error' ? 'err'
         : (j.status === 'done' ? 'ok' : 'muted');
+      const logLines = (j.log || []);
+      const log = logLines.length
+        ? '<pre style="max-height:8rem; margin:.4rem 0 0;">' +
+          logLines.map(escapeHtml).join('\n') + '</pre>' : '';
       return '<div style="margin-bottom:1rem;"><div class="row"><strong>' + id +
         '</strong> <span class="' + statusCls + '">' + j.status + '</span> ' + cancel +
         '</div>' + prog + (j.error ? '<div class="err">' + j.error + '</div>' : '') +
-        '</div>';
+        log + '</div>';
     }).join('');
   });
 
   loadJobs();
+  loadStreams();
+  setInterval(loadStreams, 5000);
 </script>
 {% endblock %}

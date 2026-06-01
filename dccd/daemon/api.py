@@ -29,6 +29,7 @@ from datetime import date
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -36,8 +37,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from dccd.daemon.backfill import run_backfill
+from dccd.daemon.backfill import has_matching_jobs, run_backfill
 from dccd.daemon.config import CollectorConfig, load_config
+
+if TYPE_CHECKING:
+    from dccd.daemon.stream_manager import StreamManager
 
 __all__ = ['BackfillTracker', 'create_app']
 
@@ -56,6 +60,9 @@ except PackageNotFoundError:  # editable install without metadata
 # file does not grow without bound; running jobs are always kept.
 _MAX_FINISHED_JOBS = 50
 _FINISHED_STATES = frozenset({'done', 'cancelled', 'error'})
+
+# Keep at most this many log lines per backfill job (oldest dropped).
+_MAX_LOG_LINES = 100
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +146,7 @@ class BackfillTracker:
             'start': start,
             'status': 'running',
             'progress': {},
+            'log': [],
             'started_at': time.time(),
             'error': None,
         }
@@ -174,10 +182,19 @@ class BackfillTracker:
                     rec['progress'][pair] = {'done': done, 'total': total}
                     self._save()
 
+        def _msg(exch: str, pair: str, line: str) -> None:
+            with self._lock:
+                rec = self._jobs.get(job_id)
+                if rec is not None:
+                    log = rec['log']
+                    log.append(line)
+                    del log[:-_MAX_LOG_LINES]
+                    self._save()
+
         try:
             run_backfill(
                 cfg, exchange=exchange, pairs=pairs, start=start,
-                progress_callback=_cb, stop_event=event,
+                progress_callback=_cb, stop_event=event, message_callback=_msg,
             )
             status = 'cancelled' if event.is_set() else 'done'
             with self._lock:
@@ -224,6 +241,12 @@ class _BackfillBody(BaseModel):
 class _CollectBody(BaseModel):
     exchange: str | None = None
     pair: str | None = None
+
+
+class _StreamBody(BaseModel):
+    exchange: str
+    pair: str
+    channels: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -308,13 +331,20 @@ def _scan_inventory(data_path: Path) -> list[dict]:
 # App factory
 # ---------------------------------------------------------------------------
 
-def create_app(cfg_path: str | Path) -> FastAPI:
+def create_app(cfg_path: str | Path,
+               stream_manager: StreamManager | None = None) -> FastAPI:
     """ Build the FastAPI application for *cfg_path*.
 
     Parameters
     ----------
     cfg_path : str or pathlib.Path
         Path to the YAML daemon configuration file.
+    stream_manager : StreamManager, optional
+        The live :class:`~dccd.daemon.stream_manager.StreamManager` of an
+        embedding ``dccd start`` process, so the UI reflects and controls the
+        streams actually running.  When ``None`` (standalone ``dccd ui``), a
+        fresh, *non-started* manager is created — its configured stream jobs
+        appear stopped until the user starts them from the UI.
 
     Returns
     -------
@@ -326,6 +356,10 @@ def create_app(cfg_path: str | Path) -> FastAPI:
     cfg_path = Path(cfg_path).expanduser().resolve()
     cfg = load_config(cfg_path)
     local_path = cfg.storage.local_path
+
+    if stream_manager is None:
+        from dccd.daemon.stream_manager import StreamManager
+        stream_manager = StreamManager(cfg)
 
     # When a token is configured, do not expose the unauthenticated OpenAPI
     # schema/docs — they would leak the API surface past the auth boundary.
@@ -339,6 +373,7 @@ def create_app(cfg_path: str | Path) -> FastAPI:
     app.state.auth_token = cfg.settings.ui_auth_token
     app.state.config_lock = threading.Lock()
     app.state.tracker = BackfillTracker(local_path)
+    app.state.stream_manager = stream_manager
     app.state.templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
     app.mount('/static', StaticFiles(directory=str(_STATIC_DIR)), name='static')
@@ -472,6 +507,12 @@ def _register_api(app: FastAPI) -> None:
     @app.post('/api/backfill', status_code=202, dependencies=[auth])
     def start_backfill(request: Request, body: _BackfillBody) -> dict:
         cfg = _cfg(request)
+        if not has_matching_jobs(cfg, body.exchange, body.pairs):
+            raise HTTPException(
+                status_code=400,
+                detail='No configured histo job matches this exchange/pair. '
+                       'Add one on the Config page first.',
+            )
         job_id = request.app.state.tracker.start(
             cfg, body.exchange, body.pairs, body.start,
         )
@@ -528,6 +569,34 @@ def _register_api(app: FastAPI) -> None:
 
         threading.Thread(target=_job, daemon=True, name='ui-collect').start()
         return {'status': 'started'}
+
+    # --- Streams --------------------------------------------------------
+
+    @app.get('/api/streams', dependencies=[auth])
+    def list_streams(request: Request) -> list[dict]:
+        return request.app.state.stream_manager.status()
+
+    @app.post('/api/streams/start', status_code=202, dependencies=[auth])
+    def start_stream(request: Request, body: _StreamBody) -> dict:
+        sm = request.app.state.stream_manager
+        # Read from the on-disk config so stream jobs added after startup
+        # (via the Config page) can be started without restarting the server.
+        job = next(
+            (j for j in _cfg(request).stream_jobs
+             if j.exchange == body.exchange and body.pair in j.pairs),
+            None,
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail='No matching stream job')
+        key = sm.start_one(job, body.pair, body.channels)
+        return {'status': 'started', 'key': key}
+
+    @app.post('/api/streams/stop', dependencies=[auth])
+    def stop_stream(request: Request, body: _StreamBody) -> dict:
+        sm = request.app.state.stream_manager
+        key = sm._key(body.exchange, body.pair, body.channels)
+        live = sm.stop_one(key)
+        return {'status': 'stopping' if live else 'not_running', 'key': key}
 
     # --- Logs -----------------------------------------------------------
 

@@ -37,12 +37,6 @@
 <script>
   let bfExchange = null, bfPair = null, bfJobId = null, bfPoll = null;
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
   function rowHtml(s) {
     const btn = s.type === 'ohlc'
       ? '<button class="ghost" onclick="openBackfill(' +

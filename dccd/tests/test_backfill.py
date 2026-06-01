@@ -14,6 +14,7 @@ from dccd.daemon.backfill import (
     _EXCHANGE_DEFAULTS,
     KrakenBackfill,
     OHLCBackfill,
+    has_matching_jobs,
     make_job,
     run_backfill,
 )
@@ -155,12 +156,23 @@ def _make_cfg(exchanges=('binance', 'kraken')):
     )
 
 
+def test_has_matching_jobs():
+    cfg = _make_cfg(exchanges=('binance', 'kraken'))
+    assert has_matching_jobs(cfg) is True
+    assert has_matching_jobs(cfg, exchange='binance') is True
+    assert has_matching_jobs(cfg, exchange='binance', pairs=['BTC/USDT']) is True
+    # configured exchange but unconfigured pair
+    assert has_matching_jobs(cfg, exchange='binance', pairs=['ETH/USDT']) is False
+    # exchange with no histo job at all
+    assert has_matching_jobs(cfg, exchange='coinbase') is False
+
+
 def test_run_backfill_exchange_filter(tmp_path):
     cfg = _make_cfg()
     called = []
 
     def fake_run(start, dry_run=False, position=0,
-                 progress_callback=None, stop_event=None):
+                 progress_callback=None, stop_event=None, message_callback=None):
         called.append(self_label)
 
     with patch('dccd.daemon.backfill.make_job') as mock_make:
@@ -212,7 +224,7 @@ def test_cli_backfill_dry_run(tmp_path):
     assert result.exit_code == 0
     mock_job.run.assert_called_once_with(
         '2020-01-01 00:00:00', dry_run=True, position=0,
-        progress_callback=None, stop_event=None,
+        progress_callback=None, stop_event=None, message_callback=None,
     )
 
 
@@ -262,6 +274,30 @@ def test_run_iterates_intervals():
 
     assert fetched == [(1_000, 1_120), (1_120, 1_240), (2_000, 2_120)]
     assert obj.save.call_count == 3
+
+
+def test_run_forwards_log_lines_to_message_callback():
+    obj = _mock_obj(span=60)
+    obj._store.missing_intervals.return_value = [(1_000, 1_120)]
+    job = OHLCBackfill(obj, max_candles=2, sleep=0.0, form='parquet')
+    job._fetch_window = lambda current, end: 1  # type: ignore[method-assign]
+    job._advance      = lambda current, end: end  # type: ignore[method-assign]
+
+    lines: list[str] = []
+    with patch('dccd.daemon.backfill.time_mod'):
+        job.run('2020-01-01 00:00:00', message_callback=lines.append)
+
+    assert any('done' in line for line in lines)
+
+
+def test_run_up_to_date_message_callback():
+    obj = _mock_obj()
+    obj._store.missing_intervals.return_value = []
+    job = OHLCBackfill(obj, max_candles=990, sleep=0.0, form='parquet')
+    lines: list[str] = []
+    with patch('dccd.daemon.backfill.time_mod'):
+        job.run('2020-01-01 00:00:00', message_callback=lines.append)
+    assert any('already up to date' in line for line in lines)
 
 
 def test_run_retries_on_fetch_error():
