@@ -69,7 +69,7 @@ import signal
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import typer
 
@@ -296,7 +296,7 @@ def start(
     typer.echo('Daemon stopped.')
 
 
-def _start_ui_thread(config_path: Path, cfg: object) -> object | None:
+def _start_ui_thread(config_path: Path, cfg: object) -> Any | None:
     """ Start the web UI in a background thread, or ``None`` if unavailable.
 
     Returns the ``uvicorn.Server`` instance (so the caller can signal it to

@@ -102,7 +102,7 @@ class BackfillTracker:
         for _, jid in finished[:-_MAX_FINISHED_JOBS]:
             self._jobs.pop(jid, None)
 
-    def list(self) -> dict[str, dict]:
+    def snapshot(self) -> dict[str, dict]:
         """ Return a snapshot of all tracked jobs. """
         with self._lock:
             return json.loads(json.dumps(self._jobs))
@@ -125,7 +125,7 @@ class BackfillTracker:
         slug_pairs = '-'.join(p.replace('/', '') for p in pairs) if pairs else 'all'
         job_id = f'{slug_ex}_{slug_pairs}_{int(time.time())}'
 
-        record = {
+        record: dict[str, object] = {
             'id': job_id,
             'exchange': exchange,
             'pairs': pairs,
@@ -467,7 +467,7 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get('/api/backfill', dependencies=[auth])
     def list_backfill(request: Request) -> dict:
-        return request.app.state.tracker.list()
+        return request.app.state.tracker.snapshot()
 
     @app.get('/api/backfill/{job_id}', dependencies=[auth])
     def get_backfill(request: Request, job_id: str) -> dict:
