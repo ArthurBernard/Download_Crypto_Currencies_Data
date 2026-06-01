@@ -63,6 +63,18 @@
              color:var(--muted); border:0; font-size:1.4rem; line-height:1;
              padding:.2rem .5rem; cursor:pointer; }
     .modal-close:hover { color:var(--fg); }
+    #toast-root { position:fixed; bottom:1rem; right:1rem; z-index:50;
+                  display:flex; flex-direction:column; gap:.5rem; }
+    .toast { background:var(--card); border:1px solid var(--border);
+             border-left-width:4px; border-radius:6px; padding:.6rem .9rem;
+             box-shadow:0 2px 8px rgba(0,0,0,.4); max-width:22rem;
+             animation:toast-in .15s ease-out; }
+    .toast.ok { border-left-color:var(--ok); }
+    .toast.err { border-left-color:var(--err); }
+    @keyframes toast-in { from { opacity:0; transform:translateY(.5rem); }
+                          to { opacity:1; transform:none; } }
+    .j-key { color:#4a9eff; } .j-str { color:#3fb950; }
+    .j-num { color:#d2a8ff; } .j-bool { color:#f0883e; } .j-null { color:#8b98a5; }
   </style>
 </head>
 <body>
@@ -73,7 +85,8 @@
   </header>
   <nav>
     {% set links = [('/', 'Dashboard'), ('/inventory', 'Inventory'),
-                    ('/jobs', 'Jobs'), ('/logs', 'Logs'),
+                    ('/jobs', 'Jobs'), ('/streams', 'Streams'),
+                    ('/backfills', 'Backfills'), ('/logs', 'Logs'),
                     ('/config', 'Config'), ('/storage', 'Storage')] %}
     {% for href, label in links %}
     <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ label }}</a>
@@ -86,6 +99,7 @@
     dccd v{{ version }} —
     <a href="https://github.com/ArthurBernard/Download_Crypto_Currencies_Data">GitHub</a>
   </footer>
+  <div id="toast-root"></div>
   <script>
     // Minimal vanilla helpers shared across pages — no JS framework.
     function fmtTs(ts) {
@@ -97,8 +111,30 @@
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
       });
     }
+    // Home-grown JSON syntax highlighter (no dependency): wraps tokens in
+    // colored <span>s. Input is a JSON string; output is escaped HTML.
+    function highlightJson(json) {
+      const esc = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return esc.replace(
+        /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+        function (m) {
+          let cls = 'j-num';
+          if (/^"/.test(m)) cls = /:$/.test(m) ? 'j-key' : 'j-str';
+          else if (/^(true|false)$/.test(m)) cls = 'j-bool';
+          else if (/^null$/.test(m)) cls = 'j-null';
+          return '<span class="' + cls + '">' + m + '</span>';
+        });
+    }
     function openModal(id) { document.getElementById(id).classList.add('show'); }
     function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function toast(message, kind) {
+      const root = document.getElementById('toast-root');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (kind === 'err' ? 'err' : 'ok');
+      el.textContent = message;
+      root.appendChild(el);
+      setTimeout(function () { el.remove(); }, kind === 'err' ? 6000 : 3500);
+    }
     async function api(method, url, body) {
       const opts = { method, headers: {} };
       if (body !== undefined) {

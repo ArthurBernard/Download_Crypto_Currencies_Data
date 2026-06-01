@@ -55,7 +55,7 @@ Changelog = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/bl
 include = ["dccd*"]
 
 [tool.setuptools.package-data]
-"dccd.daemon.ui" = ["templates/*.html", "static/*"]
+"dccd.daemon.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 addopts = "--doctest-modules --exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing"

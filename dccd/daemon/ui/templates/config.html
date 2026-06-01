@@ -52,11 +52,15 @@
 <h2>Advanced (raw JSON)</h2>
 <div class="card">
   <details>
-    <summary class="muted">Edit the full configuration as JSON
+    <summary class="muted">View the full configuration as JSON
       (histo_jobs, stream_jobs, and every other field).</summary>
-    <p class="muted" style="margin-top:.5rem;">Editing this overrides the form
-      fields above on save.</p>
-    <textarea id="cfg-text" spellcheck="false">Loading…</textarea>
+    <div class="row" style="margin-top:.5rem;">
+      <button id="cfg-edit-btn" class="ghost" onclick="toggleAdvancedEdit()">Edit JSON</button>
+      <span class="muted">Editing here overrides the form fields above on save.</span>
+    </div>
+    <pre id="cfg-pre" style="margin-top:.5rem;">Loading…</pre>
+    <textarea id="cfg-text" spellcheck="false" style="display:none;"
+              oninput="document.getElementById('cfg-pre').innerHTML = highlightJson(this.value);"></textarea>
   </details>
 </div>
 
@@ -71,6 +75,21 @@
 <script>
   let _cfg = {};
   let _remotes = [];
+  let advancedEditMode = false;
+
+  function setAdvancedJson(cfg) {
+    const text = JSON.stringify(cfg, null, 2);
+    document.getElementById('cfg-text').value = text;
+    document.getElementById('cfg-pre').innerHTML = highlightJson(text);
+  }
+
+  function toggleAdvancedEdit() {
+    advancedEditMode = !advancedEditMode;
+    document.getElementById('cfg-text').style.display = advancedEditMode ? '' : 'none';
+    document.getElementById('cfg-pre').style.display = advancedEditMode ? 'none' : '';
+    document.getElementById('cfg-edit-btn').textContent =
+      advancedEditMode ? 'Preview' : 'Edit JSON';
+  }
 
   function setMsg(cls, text) {
     const m = document.getElementById('cfg-msg');
@@ -167,7 +186,7 @@
   function buildBody() {
     const ta = document.getElementById('cfg-text');
     const details = ta.closest('details');
-    if (details && details.open) {
+    if (details && details.open && advancedEditMode) {
       try { return JSON.parse(ta.value); }
       catch (e) { throw new Error('Invalid JSON in Advanced: ' + e.message); }
     }
@@ -177,7 +196,7 @@
   async function loadCfg() {
     _cfg = await api('GET', '/api/config');
     fillForm(_cfg);
-    document.getElementById('cfg-text').value = JSON.stringify(_cfg, null, 2);
+    setAdvancedJson(_cfg);
     setMsg('muted', 'Loaded.');
   }
 
@@ -196,7 +215,7 @@
       const saved = await api('PUT', '/api/config', body);
       _cfg = saved;
       fillForm(_cfg);
-      document.getElementById('cfg-text').value = JSON.stringify(_cfg, null, 2);
+      setAdvancedJson(_cfg);
       setMsg('ok', 'Saved.');
     } catch (e) { setMsg('err', e.message); }
   }

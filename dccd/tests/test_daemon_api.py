@@ -241,8 +241,9 @@ def test_collect_filtered_runs_matching_jobs(tmp_path, monkeypatch):
     import dccd.daemon.scheduler as sched
 
     runs = []
-    monkeypatch.setattr(sched, 'run_histo_job',
-                        lambda job, pair, path, tz, health: runs.append((job.exchange, pair)))
+    monkeypatch.setattr(
+        sched, 'run_histo_job',
+        lambda job, pair, base_path, tz, health: runs.append((job.exchange, pair)))
     monkeypatch.setattr(api_mod.threading, 'Thread', _SyncThread)
     client = TestClient(create_app(_write_config(tmp_path)))
     r = client.post('/api/collect', json={'exchange': 'binance', 'pair': 'BTC/USDT'})
@@ -316,6 +317,46 @@ def test_create_app_uses_injected_stream_manager(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Scheduler
+# ---------------------------------------------------------------------------
+
+def test_scheduler_status_starts_stopped(client):
+    body = client.get('/api/scheduler').json()
+    assert body['running'] is False
+    assert len(body['jobs']) == 1  # one (exchange, pair) histo job
+
+
+def test_scheduler_start_stop_toggle(client):
+    assert client.post('/api/scheduler/start').json()['running'] is True
+    assert client.get('/api/scheduler').json()['running'] is True
+    assert client.post('/api/scheduler/stop').json()['running'] is False
+    assert client.get('/api/scheduler').json()['running'] is False
+    # Resuming a paused scheduler works too.
+    assert client.post('/api/scheduler/start').json()['running'] is True
+
+
+def test_create_app_uses_injected_scheduler_and_health(tmp_path):
+    from dccd.daemon.config import load_config
+    from dccd.daemon.health import HealthMonitor
+    from dccd.daemon.scheduler import build_histo_scheduler
+
+    path = _write_config(tmp_path)
+    cfg = load_config(path)
+    health = HealthMonitor(cfg.storage.local_path, cfg.alerts)
+    scheduler = build_histo_scheduler(cfg, health)
+    app = create_app(path, health=health, scheduler=scheduler)
+    assert app.state.health is health
+    assert app.state.scheduler is scheduler
+
+
+def test_create_app_wires_logging(tmp_path):
+    # Constructing the app must create the log file via HealthMonitor.
+    path = _write_config(tmp_path)
+    create_app(path)
+    assert (tmp_path / 'data' / '.dccd' / 'dccd.log').exists()
+
+
+# ---------------------------------------------------------------------------
 # Logs
 # ---------------------------------------------------------------------------
 
@@ -377,3 +418,17 @@ def test_openapi_disabled_when_token_set(tmp_path):
 
 def test_openapi_enabled_without_token(client):
     assert client.get('/openapi.json').status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# HTML pages
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('path', [
+    '/', '/inventory', '/jobs', '/streams', '/backfills',
+    '/logs', '/config', '/storage',
+])
+def test_pages_render(client, path):
+    r = client.get(path)
+    assert r.status_code == 200
+    assert 'text/html' in r.headers['content-type']

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Backfills{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between; align-items:center;">
+  <div>
+    <h1>Backfills</h1>
+    <p class="muted">Historical OHLC backfill jobs. Launch a new one or watch running jobs.</p>
+  </div>
+  <button onclick="openBackfill(null, null)">New backfill</button>
+</div>
+<div class="card">
+  <div id="bf-list" hx-get="/api/backfill" hx-trigger="load, every 5s"
+       hx-swap="innerHTML"></div>
+</div>
+{% include "partials/backfill_modal.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+  async function cancelBf(id) {
+    try { await api('DELETE', '/api/backfill/' + id); } catch (e) { alert(e.message); }
+  }
+
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.target.id !== 'bf-list') return;
+    let data;
+    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
+    const ids = Object.keys(data);
+    if (!ids.length) { e.target.innerHTML = '<p class="muted">No backfill jobs.</p>'; return; }
+    e.target.innerHTML = ids.sort().reverse().map(function (id) {
+      const j = data[id];
+      const prog = Object.keys(j.progress || {}).map(function (p) {
+        const pr = j.progress[p];
+        const pct = pr.total > 0 ? Math.min(100, Math.round(100 * pr.done / pr.total)) : 0;
+        return '<div class="muted">' + escapeHtml(p) + ' — ' + pr.done + '/' + pr.total +
+          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
+      }).join('');
+      const cancel = (j.status === 'running')
+        ? '<button class="danger" onclick="cancelBf(\'' + id + '\')">Stop</button>' : '';
+      const statusCls = j.status === 'error' ? 'err'
+        : (j.status === 'done' ? 'ok' : 'muted');
+      const logLines = (j.log || []);
+      const log = logLines.length
+        ? '<pre style="max-height:8rem; margin:.4rem 0 0;">' +
+          logLines.map(escapeHtml).join('\n') + '</pre>' : '';
+      return '<div style="margin-bottom:1rem;"><div class="row"><strong>' + escapeHtml(id) +
+        '</strong> <span class="' + statusCls + '">' + j.status + '</span> ' + cancel +
+        '</div>' + prog + (j.error ? '<div class="err">' + escapeHtml(j.error) + '</div>' : '') +
+        log + '</div>';
+    }).join('');
+  });
+</script>
+{% endblock %}

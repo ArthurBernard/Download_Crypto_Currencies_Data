@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Jobs{% endblock %}
 {% block content %}
-<h1>Jobs</h1>
-
 <div class="row" style="justify-content:space-between; align-items:center;">
-  <h2 style="margin:0;">Histo jobs</h2>
+  <div>
+    <h1>Histo jobs</h1>
+    <p class="muted">Scheduled OHLC collection jobs. Run one now or backfill its history.</p>
+  </div>
   <button id="collect-all" onclick="collectNow()" style="display:none;">Collect all now</button>
 </div>
 <div id="histo-root"><p class="muted">Loading…</p></div>
@@ -20,21 +21,6 @@
   </div>
   <p id="j-msg" class="muted"></p>
 </div>
-
-<h2>Stream jobs</h2>
-<div class="card">
-  <table>
-    <thead><tr><th>Exchange</th><th>Pair</th><th>Channels</th><th>Step</th>
-      <th>Status</th><th></th></tr></thead>
-    <tbody id="stream-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
-  </table>
-</div>
-
-<h2>Backfill jobs</h2>
-<div class="card">
-  <div id="bf-list" hx-get="/api/backfill" hx-trigger="load, every 5s"
-       hx-swap="innerHTML"></div>
-</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -44,70 +30,33 @@
     if (!data.histo_jobs.length) {
       root.innerHTML = '<div class="card"><p class="muted">None.</p></div>';
       document.getElementById('collect-all').style.display = 'none';
-    } else {
-      document.getElementById('collect-all').style.display = '';
-      const groups = {};
-      data.histo_jobs.forEach(function (j) {
-        (groups[j.exchange] = groups[j.exchange] || []).push(j);
-      });
-      root.innerHTML = Object.keys(groups).sort().map(function (ex) {
-        const rows = groups[ex].map(function (j) {
-          return j.pairs.map(function (p) {
-            return '<tr><td>' + escapeHtml(p) + '</td><td>' + j.span + '</td><td>' +
-              escapeHtml(j.format) + '</td><td class="row" style="gap:.4rem;">' +
-              '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) + ',' +
-              JSON.stringify(p) + ')">Collect</button>' +
-              '<button class="danger" onclick="rmJob(' + JSON.stringify(ex) + ',' +
-              JSON.stringify(p) + ',' + j.span + ')">Remove</button></td></tr>';
-          }).join('');
-        }).join('');
-        return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1rem;">' +
-          '<h3 style="margin:0;">' + escapeHtml(ex) + '</h3>' +
-          '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) +
-          ')">Collect ' + escapeHtml(ex) + '</button></div>' +
-          '<div class="card"><table><thead><tr><th>Pair</th><th>Span</th>' +
-          '<th>Format</th><th></th></tr></thead><tbody>' + rows +
-          '</tbody></table></div>';
-      }).join('');
-    }
-
-  }
-
-  async function loadStreams() {
-    let rows;
-    try { rows = await api('GET', '/api/streams'); } catch (e) { return; }
-    const sb = document.getElementById('stream-body');
-    if (!rows.length) {
-      sb.innerHTML = '<tr><td colspan="6" class="muted">None.</td></tr>';
       return;
     }
-    sb.innerHTML = rows.map(function (j) {
-      const chans = JSON.stringify(j.channels);
-      const status = j.running
-        ? '<span class="ok">running</span>' : '<span class="muted">stopped</span>';
-      const btn = j.running
-        ? '<button class="danger" onclick="stopStream(' + JSON.stringify(j.exchange) +
-          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Stop</button>'
-        : '<button onclick="startStream(' + JSON.stringify(j.exchange) +
-          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Start</button>';
-      return '<tr><td>' + escapeHtml(j.exchange) + '</td><td>' + escapeHtml(j.pair) +
-        '</td><td>' + escapeHtml(j.channels.join(', ')) + '</td><td>' + j.time_step +
-        '</td><td>' + status + '</td><td>' + btn + '</td></tr>';
+    document.getElementById('collect-all').style.display = '';
+    const groups = {};
+    data.histo_jobs.forEach(function (j) {
+      (groups[j.exchange] = groups[j.exchange] || []).push(j);
+    });
+    root.innerHTML = Object.keys(groups).sort().map(function (ex) {
+      const rows = groups[ex].map(function (j) {
+        return j.pairs.map(function (p) {
+          return '<tr><td>' + escapeHtml(p) + '</td><td>' + j.span + '</td><td>' +
+            escapeHtml(j.format) + '</td><td class="row" style="gap:.4rem;">' +
+            '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) + ',' +
+            JSON.stringify(p) + ')">Collect</button>' +
+            '<button class="ghost" onclick="location.href=\'/inventory\'">Backfill</button>' +
+            '<button class="danger" onclick="rmJob(' + JSON.stringify(ex) + ',' +
+            JSON.stringify(p) + ',' + j.span + ')">Remove</button></td></tr>';
+        }).join('');
+      }).join('');
+      return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1rem;">' +
+        '<h3 style="margin:0;">' + escapeHtml(ex) + '</h3>' +
+        '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) +
+        ')">Collect ' + escapeHtml(ex) + '</button></div>' +
+        '<div class="card"><table><thead><tr><th>Pair</th><th>Span</th>' +
+        '<th>Format</th><th></th></tr></thead><tbody>' + rows +
+        '</tbody></table></div>';
     }).join('');
-  }
-
-  async function startStream(exchange, pair, channels) {
-    try {
-      await api('POST', '/api/streams/start', { exchange, pair, channels });
-      loadStreams();
-    } catch (e) { alert(e.message); }
-  }
-
-  async function stopStream(exchange, pair, channels) {
-    try {
-      await api('POST', '/api/streams/stop', { exchange, pair, channels });
-      loadStreams();
-    } catch (e) { alert(e.message); }
   }
 
   async function addJob() {
@@ -132,10 +81,6 @@
     } catch (e) { alert(e.message); }
   }
 
-  async function cancelBf(id) {
-    try { await api('DELETE', '/api/backfill/' + id); } catch (e) { alert(e.message); }
-  }
-
   async function collectNow(exchange, pair) {
     const body = {};
     if (exchange) body.exchange = exchange;
@@ -143,45 +88,12 @@
     const label = pair ? (exchange + ' ' + pair) : (exchange || 'all jobs');
     try {
       await api('POST', '/api/collect', body);
-      const m = document.getElementById('j-msg');
-      m.className = 'ok'; m.textContent = 'Collect started for ' + label + '.';
+      toast('Collect started for ' + label + '.', 'ok');
     } catch (e) {
-      const m = document.getElementById('j-msg');
-      m.className = 'err'; m.textContent = e.message;
+      toast(e.message, 'err');
     }
   }
 
-  document.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.target.id !== 'bf-list') return;
-    let data;
-    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
-    const ids = Object.keys(data);
-    if (!ids.length) { e.target.innerHTML = '<p class="muted">No backfill jobs.</p>'; return; }
-    e.target.innerHTML = ids.sort().reverse().map(function (id) {
-      const j = data[id];
-      const prog = Object.keys(j.progress || {}).map(function (p) {
-        const pr = j.progress[p];
-        const pct = pr.total > 0 ? Math.round(100 * pr.done / pr.total) : 0;
-        return '<div class="muted">' + p + ' — ' + pr.done + '/' + pr.total +
-          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
-      }).join('');
-      const cancel = (j.status === 'running')
-        ? '<button class="danger" onclick="cancelBf(\'' + id + '\')">Stop</button>' : '';
-      const statusCls = j.status === 'error' ? 'err'
-        : (j.status === 'done' ? 'ok' : 'muted');
-      const logLines = (j.log || []);
-      const log = logLines.length
-        ? '<pre style="max-height:8rem; margin:.4rem 0 0;">' +
-          logLines.map(escapeHtml).join('\n') + '</pre>' : '';
-      return '<div style="margin-bottom:1rem;"><div class="row"><strong>' + id +
-        '</strong> <span class="' + statusCls + '">' + j.status + '</span> ' + cancel +
-        '</div>' + prog + (j.error ? '<div class="err">' + j.error + '</div>' : '') +
-        log + '</div>';
-    }).join('');
-  });
-
   loadJobs();
-  loadStreams();
-  setInterval(loadStreams, 5000);
 </script>
 {% endblock %}
