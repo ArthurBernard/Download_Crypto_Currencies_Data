@@ -573,8 +573,10 @@ def _register_api(app: FastAPI) -> None:
     @app.post('/api/streams/start', status_code=202, dependencies=[auth])
     def start_stream(request: Request, body: _StreamBody) -> dict:
         sm = request.app.state.stream_manager
+        # Read from the on-disk config so stream jobs added after startup
+        # (via the Config page) can be started without restarting the server.
         job = next(
-            (j for j in sm.config.stream_jobs
+            (j for j in _cfg(request).stream_jobs
              if j.exchange == body.exchange and body.pair in j.pairs),
             None,
         )

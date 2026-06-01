@@ -92,9 +92,9 @@
       return;
     }
     tb.innerHTML = _remotes.map(function (r, i) {
-      return '<tr><td>' + (r.provider || 'rclone') + '</td><td>' + r.remote +
-        '</td><td><button class="danger" onclick="rmRemote(' + i +
-        ')">Remove</button></td></tr>';
+      return '<tr><td>' + escapeHtml(r.provider || 'rclone') + '</td><td>' +
+        escapeHtml(r.remote) + '</td><td><button class="danger" onclick="rmRemote(' +
+        i + ')">Remove</button></td></tr>';
     }).join('');
   }
 
@@ -143,6 +143,12 @@
     out.settings.ui_auth_token = tok || null;
 
     out.storage = out.storage || {};
+    // local_path is not a form field; when it merely tracks data_path (empty or
+    // equal to the previously loaded value) keep it in sync with the new data_path.
+    const prevDataPath = (_cfg.settings || {}).data_path || '';
+    if (!out.storage.local_path || out.storage.local_path === prevDataPath) {
+      out.storage.local_path = out.settings.data_path;
+    }
     out.storage.sync_interval =
       parseInt(document.getElementById('st-sync_interval').value, 10);
     out.storage.remotes = _remotes.map(function (r) {

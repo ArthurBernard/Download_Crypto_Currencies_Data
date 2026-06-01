@@ -92,6 +92,11 @@
       if (ts == null) return '-';
       return new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ');
     }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
     function openModal(id) { document.getElementById(id).classList.add('show'); }
     function closeModal(id) { document.getElementById(id).classList.remove('show'); }
     async function api(method, url, body) {
