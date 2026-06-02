@@ -105,14 +105,14 @@
       return;
     }
     sb.innerHTML = rows.map(function (j) {
-      const chans = JSON.stringify(j.channels);
+      const chans = attrJson(j.channels);
       const status = j.running
         ? '<span class="ok">running</span>' : '<span class="muted">stopped</span>';
       const btn = j.running
-        ? '<button class="danger" onclick="stopStream(' + JSON.stringify(j.exchange) +
-          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Stop</button>'
-        : '<button onclick="startStream(' + JSON.stringify(j.exchange) +
-          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Start</button>';
+        ? '<button class="danger" onclick="stopStream(' + attrJson(j.exchange) +
+          ',' + attrJson(j.pair) + ',' + chans + ')">Stop</button>'
+        : '<button onclick="startStream(' + attrJson(j.exchange) +
+          ',' + attrJson(j.pair) + ',' + chans + ')">Start</button>';
       return '<tr><td>' + escapeHtml(j.exchange) + '</td><td>' + escapeHtml(j.pair) +
         '</td><td>' + escapeHtml(j.channels.join(', ')) + '</td><td>' + j.time_step +
         '</td><td>' + status + '</td><td>' + btn + '</td></tr>';

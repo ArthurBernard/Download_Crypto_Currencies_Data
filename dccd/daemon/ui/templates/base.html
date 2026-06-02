@@ -124,6 +124,13 @@
           return '<span class="' + cls + '">' + m + '</span>';
         });
     }
+    // Serialize a JS value for use inside a double-quoted inline onclick="…"
+    // attribute. JSON.stringify emits double quotes that would otherwise
+    // terminate the attribute early and break the handler; &quot; lets the
+    // browser decode them back to real quotes when the attribute is parsed.
+    function attrJson(v) {
+      return JSON.stringify(v).replace(/"/g, '&quot;');
+    }
     function openModal(id) { document.getElementById(id).classList.add('show'); }
     function closeModal(id) { document.getElementById(id).classList.remove('show'); }
     function toast(message, kind) {

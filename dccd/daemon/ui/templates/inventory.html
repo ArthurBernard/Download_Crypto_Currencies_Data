@@ -43,10 +43,10 @@
     let actions = '';
     if (s.type === 'ohlc') {
       actions =
-        '<button class="ghost" onclick="collectSeries(' + JSON.stringify(s.exchange) + ',' +
-        JSON.stringify(s.pair) + ')">Collect</button> ' +
-        '<button class="ghost" onclick="openBackfill(' + JSON.stringify(s.exchange) + ',' +
-        JSON.stringify(s.pair) + ')">Backfill</button>';
+        '<button class="ghost" onclick="collectSeries(' + attrJson(s.exchange) + ',' +
+        attrJson(s.pair) + ')">Collect</button> ' +
+        '<button class="ghost" onclick="openBackfill(' + attrJson(s.exchange) + ',' +
+        attrJson(s.pair) + ')">Backfill</button>';
     }
     const gapCls = s.gaps > 0 ? 'err' : 'ok';
     return '<tr><td>' + escapeHtml(s.pair) + '</td><td>' + escapeHtml(s.type) +
@@ -73,9 +73,9 @@
         const body = groups[ex].map(rowHtml).join('');
         return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1.2rem;">' +
           '<h2 style="margin:0;">' + escapeHtml(ex) + '</h2>' +
-          '<div class="row"><button class="ghost" onclick="collectSeries(' + JSON.stringify(ex) +
+          '<div class="row"><button class="ghost" onclick="collectSeries(' + attrJson(ex) +
           ', null)">Collect ' + escapeHtml(ex) + '</button>' +
-          '<button class="ghost" onclick="openBackfill(' + JSON.stringify(ex) +
+          '<button class="ghost" onclick="openBackfill(' + attrJson(ex) +
           ', null)">Backfill ' + escapeHtml(ex) + '</button></div></div>' +
           '<div class="card"><table><thead><tr><th>Pair</th><th>Type</th>' +
           '<th>Span</th><th>From</th><th>To</th><th>Rows</th><th>Gaps</th><th></th>' +

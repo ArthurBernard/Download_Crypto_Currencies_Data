@@ -69,6 +69,12 @@
     }).join('');
   }
 
+  function bfTitle(j) {
+    const ex = j.exchange || 'all exchanges';
+    const pairs = (j.pairs && j.pairs.length) ? j.pairs.join(', ') : 'all pairs';
+    return ex + ' — ' + pairs;
+  }
+
   function renderBackfills(data) {
     const root = document.getElementById('bf-activity');
     const ids = Object.keys(data || {});
@@ -76,23 +82,27 @@
       root.innerHTML = '<p class="muted">No backfill jobs yet. Launch one from Inventory.</p>';
       return;
     }
-    root.innerHTML = ids.sort().reverse().slice(0, 10).map(function (id) {
+    const rows = ids.sort().reverse().slice(0, 8).map(function (id) {
       const j = data[id];
-      const prog = Object.keys(j.progress || {}).map(function (p) {
-        const pr = j.progress[p];
-        const pct = pr.total > 0 ? Math.min(100, Math.round(100 * pr.done / pr.total)) : 0;
-        return '<div class="muted">' + escapeHtml(p) + ' — ' + pr.done + '/' + pr.total +
-          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
-      }).join('');
+      const prs = Object.values(j.progress || {});
+      let done = 0, total = 0;
+      prs.forEach(function (pr) { done += pr.done || 0; total += pr.total || 0; });
+      const pct = total > 0 ? Math.min(100, Math.round(100 * done / total)) : 0;
       const statusCls = j.status === 'error' ? 'err'
         : (j.status === 'done' ? 'ok' : 'muted');
+      const bar = (j.status === 'running' || total > 0)
+        ? '<div class="bar" style="margin-top:.3rem;"><span style="width:' + pct + '%"></span></div>'
+          + '<div class="muted" style="font-size:.85rem;">' + pct + '% — ' + prs.length + ' pair(s)</div>'
+        : '';
       const last = (j.log || []).slice(-1)[0];
-      return '<div style="margin-bottom:.8rem;"><div class="row"><strong>' +
-        escapeHtml(id) + '</strong> <span class="' + statusCls + '">' + j.status +
-        '</span></div>' + prog +
-        (j.error ? '<div class="err">' + escapeHtml(j.error) + '</div>' : '') +
-        (last ? '<div class="muted">' + escapeHtml(last) + '</div>' : '') + '</div>';
+      return '<tr><td><div><strong>' + escapeHtml(bfTitle(j)) + '</strong> ' +
+        '<span class="' + statusCls + '">' + j.status + '</span></div>' + bar +
+        (j.error ? '<div class="err" style="font-size:.85rem;">' + escapeHtml(j.error) + '</div>' : '') +
+        (last && !j.error ? '<div class="muted" style="font-size:.85rem;">' + escapeHtml(last) + '</div>' : '') +
+        '</td><td style="white-space:nowrap; vertical-align:top;" class="muted">' +
+        (j.started_at ? fmtTs(j.started_at) : '') + '</td></tr>';
     }).join('');
+    root.innerHTML = '<table><tbody>' + rows + '</tbody></table>';
   }
 
   function renderScheduler(s) {
