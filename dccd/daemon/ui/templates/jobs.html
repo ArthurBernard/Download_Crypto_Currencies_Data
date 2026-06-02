@@ -2,30 +2,33 @@
 {% block title %}Jobs{% endblock %}
 {% block content %}
 <h1>Jobs</h1>
-<p class="muted">The collectors defined in your config. To <em>run</em> collection or
-  backfill history, use the <a href="/inventory">Inventory</a> page.</p>
+<p class="muted">The collectors defined in your config. Start the histo
+  <strong>scheduler</strong> to poll OHLC candles periodically, and start/stop
+  live <strong>streams</strong> individually. Edit job definitions on the
+  <a href="/config">Config</a> page.</p>
 
-<h2>Scheduled (histo)</h2>
-<p class="muted">Periodic REST polling of OHLC candles. Edit the schedule on the
-  <a href="/config">Config</a> page; toggle the scheduler on the
-  <a href="/">Dashboard</a>.</p>
-<div id="histo-root"><p class="muted">Loading…</p></div>
-
-<h3>Add histo job</h3>
+<h2>Histo scheduler</h2>
 <div class="card">
-  <div class="row">
-    <input id="j-exchange" placeholder="binance" size="10">
-    <input id="j-pair" placeholder="BTC/USDT" size="12">
-    <input id="j-span" placeholder="3600" size="8" type="number">
-    <input id="j-format" placeholder="parquet" size="8" value="parquet">
-    <button onclick="addJob()">Add</button>
+  <div class="row" style="justify-content:space-between; align-items:center;">
+    <div>
+      <div class="muted">Scheduler</div>
+      <strong id="sched-state" style="font-size:1.3rem;">…</strong>
+      <span id="sched-jobs" class="muted"></span>
+    </div>
+    <button id="sched-toggle" onclick="toggleScheduler()" style="display:none;"></button>
   </div>
-  <p id="j-msg" class="muted"></p>
+  <p id="sched-msg" class="muted" style="min-height:1.2rem; margin:.6rem 0 0;"></p>
 </div>
+
+<h3>Scheduled jobs</h3>
+<p class="muted">Read-only view of the periodic OHLC polls. Add or remove jobs by
+  editing <code>histo_jobs</code> on the <a href="/config">Config</a> page.</p>
+<div id="histo-root"><p class="muted">Loading…</p></div>
 
 <h2>Live streams</h2>
 <p class="muted">Continuous WebSocket collection of trades/orderbook. Start or stop
-  each configured stream.</p>
+  each configured stream. Add streams via <code>stream_jobs</code> on the
+  <a href="/config">Config</a> page.</p>
 <div class="card">
   <table>
     <thead><tr><th>Exchange</th><th>Pair</th><th>Channels</th><th>Step</th>
@@ -36,54 +39,60 @@
 {% endblock %}
 {% block scripts %}
 <script>
-  async function loadJobs() {
-    const data = await api('GET', '/api/jobs');
+  let schedRunning = false;
+
+  function schedMsg(text, cls) {
+    const el = document.getElementById('sched-msg');
+    el.className = cls || 'muted';
+    el.textContent = text;
+  }
+
+  function renderScheduler(s) {
+    schedRunning = !!s.running;
+    const state = document.getElementById('sched-state');
+    state.textContent = schedRunning ? 'running' : 'stopped';
+    state.className = schedRunning ? 'ok' : 'muted';
+    const btn = document.getElementById('sched-toggle');
+    btn.style.display = '';
+    btn.textContent = schedRunning ? 'Stop scheduler' : 'Start scheduler';
+    btn.className = schedRunning ? 'danger' : '';
+    document.getElementById('sched-jobs').textContent =
+      ' — ' + (s.jobs || []).length + ' scheduled job(s)';
+    renderJobs(s.jobs || []);
+  }
+
+  function renderJobs(jobs) {
     const root = document.getElementById('histo-root');
-    if (!data.histo_jobs.length) {
+    if (!jobs.length) {
       root.innerHTML = '<div class="card"><p class="muted">No histo jobs configured. '
-        + 'Add one below or on the Config page.</p></div>';
+        + 'Add a <code>histo_jobs</code> entry on the Config page.</p></div>';
       return;
     }
-    const groups = {};
-    data.histo_jobs.forEach(function (j) {
-      (groups[j.exchange] = groups[j.exchange] || []).push(j);
-    });
-    root.innerHTML = Object.keys(groups).sort().map(function (ex) {
-      const rows = groups[ex].map(function (j) {
-        return j.pairs.map(function (p) {
-          return '<tr><td>' + escapeHtml(p) + '</td><td>' + j.span + '</td><td>' +
-            escapeHtml(j.format) + '</td><td>' +
-            '<button class="danger" onclick="rmJob(' + JSON.stringify(ex) + ',' +
-            JSON.stringify(p) + ',' + j.span + ')">Remove</button></td></tr>';
-        }).join('');
-      }).join('');
-      return '<h3 style="margin:1rem 0 .3rem;">' + escapeHtml(ex) + '</h3>' +
-        '<div class="card"><table><thead><tr><th>Pair</th><th>Span</th>' +
-        '<th>Format</th><th></th></tr></thead><tbody>' + rows +
-        '</tbody></table></div>';
+    const rows = jobs.map(function (j) {
+      const next = j.next_run ? fmtTs(j.next_run) : '<span class="muted">paused</span>';
+      return '<tr><td>' + escapeHtml(j.name || j.id) + '</td><td>' + next + '</td></tr>';
     }).join('');
+    root.innerHTML = '<div class="card"><table><thead><tr><th>Job</th>' +
+      '<th>Next run</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 
-  async function addJob() {
-    const msg = document.getElementById('j-msg');
+  async function toggleScheduler() {
+    const btn = document.getElementById('sched-toggle');
+    btn.disabled = true;
     try {
-      await api('POST', '/api/jobs/histo', {
-        exchange: document.getElementById('j-exchange').value.trim(),
-        pair: document.getElementById('j-pair').value.trim(),
-        span: parseInt(document.getElementById('j-span').value, 10),
-        format: document.getElementById('j-format').value.trim() || 'parquet',
-      });
-      msg.className = 'ok'; msg.textContent = 'Added.';
-      loadJobs();
-    } catch (e) { msg.className = 'err'; msg.textContent = e.message; }
+      await api('POST', schedRunning ? '/api/scheduler/stop' : '/api/scheduler/start');
+      schedMsg(schedRunning ? 'Scheduler stopped.' : 'Scheduler started — jobs will fire on schedule.', 'ok');
+      await loadScheduler();
+    } catch (e) {
+      schedMsg(e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
   }
 
-  async function rmJob(exchange, pair, span) {
-    const slug = pair.replace('/', '-');
-    try {
-      await api('DELETE', '/api/jobs/histo/' + exchange + '/' + slug + '/' + span);
-      loadJobs();
-    } catch (e) { alert(e.message); }
+  async function loadScheduler() {
+    try { renderScheduler(await api('GET', '/api/scheduler')); }
+    catch (e) { schedMsg(e.message, 'err'); }
   }
 
   async function loadStreams() {
@@ -114,18 +123,19 @@
     try {
       await api('POST', '/api/streams/start', { exchange, pair, channels });
       loadStreams();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, 'err'); }
   }
 
   async function stopStream(exchange, pair, channels) {
     try {
       await api('POST', '/api/streams/stop', { exchange, pair, channels });
       loadStreams();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, 'err'); }
   }
 
-  loadJobs();
+  loadScheduler();
   loadStreams();
+  setInterval(loadScheduler, 5000);
   setInterval(loadStreams, 5000);
 </script>
 {% endblock %}

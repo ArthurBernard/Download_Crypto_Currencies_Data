@@ -645,7 +645,9 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get('/api/streams', dependencies=[auth])
     def list_streams(request: Request) -> list[dict]:
-        return request.app.state.stream_manager.status()
+        # Pass the on-disk config so stream jobs added after startup (via the
+        # Config page) appear without restarting the server.
+        return request.app.state.stream_manager.status(_cfg(request))
 
     @app.post('/api/streams/start', status_code=202, dependencies=[auth])
     def start_stream(request: Request, body: _StreamBody) -> dict:
