@@ -400,8 +400,16 @@ class StreamManager:
         with self._lock:
             return [k for k, t in self._threads.items() if t.is_alive()]
 
-    def status(self) -> list[dict[str, Any]]:
+    def status(self, config: CollectorConfig | None = None) -> list[dict[str, Any]]:
         """ Return the configured stream tasks with their running state.
+
+        Parameters
+        ----------
+        config : Config, optional
+            Configuration to read ``stream_jobs`` from.  Defaults to the
+            config captured at construction; callers (e.g. the web UI) pass a
+            freshly-loaded config so stream jobs added at runtime appear here
+            without restarting the process.
 
         Returns
         -------
@@ -411,9 +419,10 @@ class StreamManager:
             ``channels``, ``time_step`` and ``running`` fields.
 
         """
+        cfg = config if config is not None else self.config
         running = set(self.running_keys())
         out: list[dict[str, Any]] = []
-        for job in self.config.stream_jobs:
+        for job in cfg.stream_jobs:
             for pair, channels in _iter_tasks(job):
                 key = self._key(job.exchange, pair, channels)
                 out.append({

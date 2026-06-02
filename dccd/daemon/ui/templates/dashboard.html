@@ -2,36 +2,158 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<p class="muted">Per-job health metrics, refreshed every 5&nbsp;s.</p>
+<p class="muted">Daemon overview, refreshed every 5&nbsp;s.</p>
+
+<div class="row" id="cards" style="align-items:stretch;">
+  <div class="card" style="flex:1; min-width:13rem;">
+    <div class="muted">Scheduler</div>
+    <div class="row" style="justify-content:space-between; align-items:center; margin-top:.4rem;">
+      <strong id="sched-state">…</strong>
+      <button id="sched-toggle" class="ghost" onclick="toggleScheduler()" style="display:none;"></button>
+    </div>
+    <div class="muted" id="sched-jobs" style="margin-top:.4rem;"></div>
+  </div>
+  <div class="card" style="flex:1; min-width:11rem;">
+    <div class="muted">Active streams</div>
+    <strong id="streams-count" style="font-size:1.4rem;">…</strong>
+  </div>
+  <div class="card" style="flex:1; min-width:11rem;">
+    <div class="muted">Stored series</div>
+    <strong id="series-count" style="font-size:1.4rem;">…</strong>
+  </div>
+  <div class="card" style="flex:1; min-width:11rem;">
+    <div class="muted">Running backfills</div>
+    <strong id="bf-count" style="font-size:1.4rem;">…</strong>
+  </div>
+  <div class="card" style="flex:1; min-width:11rem;">
+    <div class="muted">Last sync</div>
+    <strong id="last-sync" style="font-size:1rem;">…</strong>
+  </div>
+</div>
+
+<h2>Backfill activity</h2>
+<p class="muted">Historical backfill jobs launched from Inventory — newest first.</p>
+<div class="card"><div id="bf-activity"><p class="muted">Loading…</p></div></div>
+
+<h2>Last collection per pair</h2>
+<p class="muted">One row per <em>(exchange, pair)</em> that has ever been collected,
+  from <code>metrics.json</code>. Empty until a collect or scheduled run completes.</p>
 <div class="card">
   <table>
     <thead>
-      <tr><th>Job</th><th>Last run</th><th>Last success</th>
+      <tr><th>Exchange / pair</th><th>Last run</th><th>Last success</th>
           <th>Rows</th><th>Errors</th></tr>
     </thead>
-    <tbody id="metrics-body" hx-get="/api/metrics" hx-trigger="load, every 5s"
-           hx-swap="innerHTML"></tbody>
+    <tbody id="metrics-body"></tbody>
   </table>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
-  // Render the /api/metrics JSON into the table body after each htmx swap.
-  document.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.target.id !== 'metrics-body') return;
-    let data;
-    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
-    const keys = Object.keys(data);
-    if (!keys.length) { e.target.innerHTML =
-      '<tr><td colspan="5" class="muted">No metrics yet.</td></tr>'; return; }
-    e.target.innerHTML = keys.map(function (k) {
+  let schedRunning = false;
+
+  function renderMetrics(data) {
+    const body = document.getElementById('metrics-body');
+    const keys = Object.keys(data || {});
+    if (!keys.length) {
+      body.innerHTML = '<tr><td colspan="5" class="muted">No metrics yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = keys.map(function (k) {
       const m = data[k];
       const errCls = m.errors_count > 0 ? 'err' : 'ok';
-      return '<tr><td>' + k + '</td><td>' + fmtTs(m.last_run_at) +
+      return '<tr><td>' + escapeHtml(k) + '</td><td>' + fmtTs(m.last_run_at) +
         '</td><td>' + fmtTs(m.last_success_at) + '</td><td>' +
         (m.rows_collected || 0) + '</td><td class="' + errCls + '">' +
         (m.errors_count || 0) + '</td></tr>';
     }).join('');
-  });
+  }
+
+  function bfTitle(j) {
+    const ex = j.exchange || 'all exchanges';
+    const pairs = (j.pairs && j.pairs.length) ? j.pairs.join(', ') : 'all pairs';
+    return ex + ' — ' + pairs;
+  }
+
+  function renderBackfills(data) {
+    const root = document.getElementById('bf-activity');
+    const ids = Object.keys(data || {});
+    if (!ids.length) {
+      root.innerHTML = '<p class="muted">No backfill jobs yet. Launch one from Inventory.</p>';
+      return;
+    }
+    const rows = ids.sort().reverse().slice(0, 8).map(function (id) {
+      const j = data[id];
+      const prs = Object.values(j.progress || {});
+      let done = 0, total = 0;
+      prs.forEach(function (pr) { done += pr.done || 0; total += pr.total || 0; });
+      const pct = total > 0 ? Math.min(100, Math.round(100 * done / total)) : 0;
+      const statusCls = j.status === 'error' ? 'err'
+        : (j.status === 'done' ? 'ok' : 'muted');
+      const bar = (j.status === 'running' || total > 0)
+        ? '<div class="bar" style="margin-top:.3rem;"><span style="width:' + pct + '%"></span></div>'
+          + '<div class="muted" style="font-size:.85rem;">' + pct + '% — ' + prs.length + ' pair(s)</div>'
+        : '';
+      const last = (j.log || []).slice(-1)[0];
+      return '<tr><td><div><strong>' + escapeHtml(bfTitle(j)) + '</strong> ' +
+        '<span class="' + statusCls + '">' + j.status + '</span></div>' + bar +
+        (j.error ? '<div class="err" style="font-size:.85rem;">' + escapeHtml(j.error) + '</div>' : '') +
+        (last && !j.error ? '<div class="muted" style="font-size:.85rem;">' + escapeHtml(last) + '</div>' : '') +
+        '</td><td style="white-space:nowrap; vertical-align:top;" class="muted">' +
+        (j.started_at ? fmtTs(j.started_at) : '') + '</td></tr>';
+    }).join('');
+    root.innerHTML = '<table><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderScheduler(s) {
+    schedRunning = !!s.running;
+    const state = document.getElementById('sched-state');
+    state.textContent = schedRunning ? 'running' : 'stopped';
+    state.className = schedRunning ? 'ok' : 'muted';
+    const btn = document.getElementById('sched-toggle');
+    btn.style.display = '';
+    btn.textContent = schedRunning ? 'Stop' : 'Start';
+    btn.className = schedRunning ? 'danger' : '';
+    document.getElementById('sched-jobs').textContent =
+      (s.jobs || []).length + ' scheduled job(s)';
+  }
+
+  async function toggleScheduler() {
+    try {
+      await api('POST', schedRunning ? '/api/scheduler/stop' : '/api/scheduler/start');
+      refresh();
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  async function refresh() {
+    try { renderScheduler(await api('GET', '/api/scheduler')); } catch (e) {}
+    try {
+      const streams = await api('GET', '/api/streams');
+      document.getElementById('streams-count').textContent =
+        streams.filter(function (s) { return s.running; }).length + ' / ' + streams.length;
+    } catch (e) {}
+    try {
+      const inv = await api('GET', '/api/inventory');
+      document.getElementById('series-count').textContent = inv.length;
+    } catch (e) {}
+    try {
+      const bf = await api('GET', '/api/backfill');
+      const running = Object.keys(bf).filter(function (id) {
+        return bf[id].status === 'running' || bf[id].status === 'cancelling';
+      }).length;
+      document.getElementById('bf-count').textContent = running;
+      renderBackfills(bf);
+    } catch (e) {}
+    try {
+      const st = await api('GET', '/api/storage');
+      const ls = st.last_sync;
+      document.getElementById('last-sync').textContent =
+        ls && ls.last_sync_at ? fmtTs(ls.last_sync_at) : '—';
+    } catch (e) {}
+    try { renderMetrics(await api('GET', '/api/metrics')); } catch (e) {}
+  }
+
+  refresh();
+  setInterval(refresh, 5000);
 </script>
 {% endblock %}

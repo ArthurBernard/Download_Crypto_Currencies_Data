@@ -2,26 +2,33 @@
 {% block title %}Jobs{% endblock %}
 {% block content %}
 <h1>Jobs</h1>
+<p class="muted">The collectors defined in your config. Start the histo
+  <strong>scheduler</strong> to poll OHLC candles periodically, and start/stop
+  live <strong>streams</strong> individually. Edit job definitions on the
+  <a href="/config">Config</a> page.</p>
 
-<div class="row" style="justify-content:space-between; align-items:center;">
-  <h2 style="margin:0;">Histo jobs</h2>
-  <button id="collect-all" onclick="collectNow()" style="display:none;">Collect all now</button>
+<h2>Histo scheduler</h2>
+<div class="card">
+  <div class="row" style="justify-content:space-between; align-items:center;">
+    <div>
+      <div class="muted">Scheduler</div>
+      <strong id="sched-state" style="font-size:1.3rem;">…</strong>
+      <span id="sched-jobs" class="muted"></span>
+    </div>
+    <button id="sched-toggle" onclick="toggleScheduler()" style="display:none;"></button>
+  </div>
+  <p id="sched-msg" class="muted" style="min-height:1.2rem; margin:.6rem 0 0;"></p>
 </div>
+
+<h3>Scheduled jobs</h3>
+<p class="muted">Read-only view of the periodic OHLC polls. Add or remove jobs by
+  editing <code>histo_jobs</code> on the <a href="/config">Config</a> page.</p>
 <div id="histo-root"><p class="muted">Loading…</p></div>
 
-<h2>Add histo job</h2>
-<div class="card">
-  <div class="row">
-    <input id="j-exchange" placeholder="binance" size="10">
-    <input id="j-pair" placeholder="BTC/USDT" size="12">
-    <input id="j-span" placeholder="3600" size="8" type="number">
-    <input id="j-format" placeholder="parquet" size="8" value="parquet">
-    <button onclick="addJob()">Add</button>
-  </div>
-  <p id="j-msg" class="muted"></p>
-</div>
-
-<h2>Stream jobs</h2>
+<h2>Live streams</h2>
+<p class="muted">Continuous WebSocket collection of trades/orderbook. Start or stop
+  each configured stream. Add streams via <code>stream_jobs</code> on the
+  <a href="/config">Config</a> page.</p>
 <div class="card">
   <table>
     <thead><tr><th>Exchange</th><th>Pair</th><th>Channels</th><th>Step</th>
@@ -29,48 +36,63 @@
     <tbody id="stream-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
   </table>
 </div>
-
-<h2>Backfill jobs</h2>
-<div class="card">
-  <div id="bf-list" hx-get="/api/backfill" hx-trigger="load, every 5s"
-       hx-swap="innerHTML"></div>
-</div>
 {% endblock %}
 {% block scripts %}
 <script>
-  async function loadJobs() {
-    const data = await api('GET', '/api/jobs');
-    const root = document.getElementById('histo-root');
-    if (!data.histo_jobs.length) {
-      root.innerHTML = '<div class="card"><p class="muted">None.</p></div>';
-      document.getElementById('collect-all').style.display = 'none';
-    } else {
-      document.getElementById('collect-all').style.display = '';
-      const groups = {};
-      data.histo_jobs.forEach(function (j) {
-        (groups[j.exchange] = groups[j.exchange] || []).push(j);
-      });
-      root.innerHTML = Object.keys(groups).sort().map(function (ex) {
-        const rows = groups[ex].map(function (j) {
-          return j.pairs.map(function (p) {
-            return '<tr><td>' + escapeHtml(p) + '</td><td>' + j.span + '</td><td>' +
-              escapeHtml(j.format) + '</td><td class="row" style="gap:.4rem;">' +
-              '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) + ',' +
-              JSON.stringify(p) + ')">Collect</button>' +
-              '<button class="danger" onclick="rmJob(' + JSON.stringify(ex) + ',' +
-              JSON.stringify(p) + ',' + j.span + ')">Remove</button></td></tr>';
-          }).join('');
-        }).join('');
-        return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1rem;">' +
-          '<h3 style="margin:0;">' + escapeHtml(ex) + '</h3>' +
-          '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) +
-          ')">Collect ' + escapeHtml(ex) + '</button></div>' +
-          '<div class="card"><table><thead><tr><th>Pair</th><th>Span</th>' +
-          '<th>Format</th><th></th></tr></thead><tbody>' + rows +
-          '</tbody></table></div>';
-      }).join('');
-    }
+  let schedRunning = false;
 
+  function schedMsg(text, cls) {
+    const el = document.getElementById('sched-msg');
+    el.className = cls || 'muted';
+    el.textContent = text;
+  }
+
+  function renderScheduler(s) {
+    schedRunning = !!s.running;
+    const state = document.getElementById('sched-state');
+    state.textContent = schedRunning ? 'running' : 'stopped';
+    state.className = schedRunning ? 'ok' : 'muted';
+    const btn = document.getElementById('sched-toggle');
+    btn.style.display = '';
+    btn.textContent = schedRunning ? 'Stop scheduler' : 'Start scheduler';
+    btn.className = schedRunning ? 'danger' : '';
+    document.getElementById('sched-jobs').textContent =
+      ' — ' + (s.jobs || []).length + ' scheduled job(s)';
+    renderJobs(s.jobs || []);
+  }
+
+  function renderJobs(jobs) {
+    const root = document.getElementById('histo-root');
+    if (!jobs.length) {
+      root.innerHTML = '<div class="card"><p class="muted">No histo jobs configured. '
+        + 'Add a <code>histo_jobs</code> entry on the Config page.</p></div>';
+      return;
+    }
+    const rows = jobs.map(function (j) {
+      const next = j.next_run ? fmtTs(j.next_run) : '<span class="muted">paused</span>';
+      return '<tr><td>' + escapeHtml(j.name || j.id) + '</td><td>' + next + '</td></tr>';
+    }).join('');
+    root.innerHTML = '<div class="card"><table><thead><tr><th>Job</th>' +
+      '<th>Next run</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  async function toggleScheduler() {
+    const btn = document.getElementById('sched-toggle');
+    btn.disabled = true;
+    try {
+      await api('POST', schedRunning ? '/api/scheduler/stop' : '/api/scheduler/start');
+      schedMsg(schedRunning ? 'Scheduler stopped.' : 'Scheduler started — jobs will fire on schedule.', 'ok');
+      await loadScheduler();
+    } catch (e) {
+      schedMsg(e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function loadScheduler() {
+    try { renderScheduler(await api('GET', '/api/scheduler')); }
+    catch (e) { schedMsg(e.message, 'err'); }
   }
 
   async function loadStreams() {
@@ -78,18 +100,19 @@
     try { rows = await api('GET', '/api/streams'); } catch (e) { return; }
     const sb = document.getElementById('stream-body');
     if (!rows.length) {
-      sb.innerHTML = '<tr><td colspan="6" class="muted">None.</td></tr>';
+      sb.innerHTML = '<tr><td colspan="6" class="muted">No streams configured. '
+        + 'Add a <code>stream_jobs</code> entry on the Config page, then start it here.</td></tr>';
       return;
     }
     sb.innerHTML = rows.map(function (j) {
-      const chans = JSON.stringify(j.channels);
+      const chans = attrJson(j.channels);
       const status = j.running
         ? '<span class="ok">running</span>' : '<span class="muted">stopped</span>';
       const btn = j.running
-        ? '<button class="danger" onclick="stopStream(' + JSON.stringify(j.exchange) +
-          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Stop</button>'
-        : '<button onclick="startStream(' + JSON.stringify(j.exchange) +
-          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Start</button>';
+        ? '<button class="danger" onclick="stopStream(' + attrJson(j.exchange) +
+          ',' + attrJson(j.pair) + ',' + chans + ')">Stop</button>'
+        : '<button onclick="startStream(' + attrJson(j.exchange) +
+          ',' + attrJson(j.pair) + ',' + chans + ')">Start</button>';
       return '<tr><td>' + escapeHtml(j.exchange) + '</td><td>' + escapeHtml(j.pair) +
         '</td><td>' + escapeHtml(j.channels.join(', ')) + '</td><td>' + j.time_step +
         '</td><td>' + status + '</td><td>' + btn + '</td></tr>';
@@ -100,88 +123,19 @@
     try {
       await api('POST', '/api/streams/start', { exchange, pair, channels });
       loadStreams();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, 'err'); }
   }
 
   async function stopStream(exchange, pair, channels) {
     try {
       await api('POST', '/api/streams/stop', { exchange, pair, channels });
       loadStreams();
-    } catch (e) { alert(e.message); }
+    } catch (e) { toast(e.message, 'err'); }
   }
 
-  async function addJob() {
-    const msg = document.getElementById('j-msg');
-    try {
-      await api('POST', '/api/jobs/histo', {
-        exchange: document.getElementById('j-exchange').value.trim(),
-        pair: document.getElementById('j-pair').value.trim(),
-        span: parseInt(document.getElementById('j-span').value, 10),
-        format: document.getElementById('j-format').value.trim() || 'parquet',
-      });
-      msg.className = 'ok'; msg.textContent = 'Added.';
-      loadJobs();
-    } catch (e) { msg.className = 'err'; msg.textContent = e.message; }
-  }
-
-  async function rmJob(exchange, pair, span) {
-    const slug = pair.replace('/', '-');
-    try {
-      await api('DELETE', '/api/jobs/histo/' + exchange + '/' + slug + '/' + span);
-      loadJobs();
-    } catch (e) { alert(e.message); }
-  }
-
-  async function cancelBf(id) {
-    try { await api('DELETE', '/api/backfill/' + id); } catch (e) { alert(e.message); }
-  }
-
-  async function collectNow(exchange, pair) {
-    const body = {};
-    if (exchange) body.exchange = exchange;
-    if (pair) body.pair = pair;
-    const label = pair ? (exchange + ' ' + pair) : (exchange || 'all jobs');
-    try {
-      await api('POST', '/api/collect', body);
-      const m = document.getElementById('j-msg');
-      m.className = 'ok'; m.textContent = 'Collect started for ' + label + '.';
-    } catch (e) {
-      const m = document.getElementById('j-msg');
-      m.className = 'err'; m.textContent = e.message;
-    }
-  }
-
-  document.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.target.id !== 'bf-list') return;
-    let data;
-    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
-    const ids = Object.keys(data);
-    if (!ids.length) { e.target.innerHTML = '<p class="muted">No backfill jobs.</p>'; return; }
-    e.target.innerHTML = ids.sort().reverse().map(function (id) {
-      const j = data[id];
-      const prog = Object.keys(j.progress || {}).map(function (p) {
-        const pr = j.progress[p];
-        const pct = pr.total > 0 ? Math.round(100 * pr.done / pr.total) : 0;
-        return '<div class="muted">' + p + ' — ' + pr.done + '/' + pr.total +
-          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
-      }).join('');
-      const cancel = (j.status === 'running')
-        ? '<button class="danger" onclick="cancelBf(\'' + id + '\')">Stop</button>' : '';
-      const statusCls = j.status === 'error' ? 'err'
-        : (j.status === 'done' ? 'ok' : 'muted');
-      const logLines = (j.log || []);
-      const log = logLines.length
-        ? '<pre style="max-height:8rem; margin:.4rem 0 0;">' +
-          logLines.map(escapeHtml).join('\n') + '</pre>' : '';
-      return '<div style="margin-bottom:1rem;"><div class="row"><strong>' + id +
-        '</strong> <span class="' + statusCls + '">' + j.status + '</span> ' + cancel +
-        '</div>' + prog + (j.error ? '<div class="err">' + j.error + '</div>' : '') +
-        log + '</div>';
-    }).join('');
-  });
-
-  loadJobs();
+  loadScheduler();
   loadStreams();
+  setInterval(loadScheduler, 5000);
   setInterval(loadStreams, 5000);
 </script>
 {% endblock %}

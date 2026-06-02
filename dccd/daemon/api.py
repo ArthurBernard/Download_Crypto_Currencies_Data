@@ -41,6 +41,9 @@ from dccd.daemon.backfill import has_matching_jobs, run_backfill
 from dccd.daemon.config import CollectorConfig, load_config
 
 if TYPE_CHECKING:
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    from dccd.daemon.health import HealthMonitor
     from dccd.daemon.stream_manager import StreamManager
 
 __all__ = ['BackfillTracker', 'create_app']
@@ -133,6 +136,7 @@ class BackfillTracker:
         exchange: str | None,
         pairs: list[str] | None,
         start: str,
+        parallel: bool = False,
     ) -> str:
         """ Launch a backfill in a background thread and return its id. """
         slug_ex = exchange or 'all'
@@ -159,7 +163,7 @@ class BackfillTracker:
         self._events[job_id] = event
         thread = threading.Thread(
             target=self._run,
-            args=(job_id, cfg, exchange, pairs, start, event),
+            args=(job_id, cfg, exchange, pairs, start, event, parallel),
             daemon=True,
             name=f'backfill-{job_id}',
         )
@@ -174,6 +178,7 @@ class BackfillTracker:
         pairs: list[str] | None,
         start: str,
         event: threading.Event,
+        parallel: bool = False,
     ) -> None:
         def _cb(exch: str, pair: str, done: int, total: int) -> None:
             with self._lock:
@@ -194,6 +199,7 @@ class BackfillTracker:
         try:
             run_backfill(
                 cfg, exchange=exchange, pairs=pairs, start=start,
+                parallel=parallel,
                 progress_callback=_cb, stop_event=event, message_callback=_msg,
             )
             status = 'cancelled' if event.is_set() else 'done'
@@ -225,17 +231,11 @@ class BackfillTracker:
 # Request bodies
 # ---------------------------------------------------------------------------
 
-class _HistoJobBody(BaseModel):
-    exchange: str
-    pair: str
-    span: int
-    format: str = 'parquet'
-
-
 class _BackfillBody(BaseModel):
     exchange: str | None = None
     pairs: list[str] | None = None
     start: str = '2020-01-01 00:00:00'
+    parallel: bool = False
 
 
 class _CollectBody(BaseModel):
@@ -332,7 +332,9 @@ def _scan_inventory(data_path: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def create_app(cfg_path: str | Path,
-               stream_manager: StreamManager | None = None) -> FastAPI:
+               stream_manager: StreamManager | None = None,
+               health: HealthMonitor | None = None,
+               scheduler: BackgroundScheduler | None = None) -> FastAPI:
     """ Build the FastAPI application for *cfg_path*.
 
     Parameters
@@ -345,6 +347,16 @@ def create_app(cfg_path: str | Path,
         streams actually running.  When ``None`` (standalone ``dccd ui``), a
         fresh, *non-started* manager is created — its configured stream jobs
         appear stopped until the user starts them from the UI.
+    health : HealthMonitor, optional
+        The live :class:`~dccd.daemon.health.HealthMonitor` of an embedding
+        ``dccd start`` process.  When ``None`` (standalone ``dccd ui``), a
+        fresh monitor is created — constructing it wires file logging
+        (``.dccd/dccd.log``) and metrics so the Logs/Dashboard pages have data
+        to show.
+    scheduler : BackgroundScheduler, optional
+        The live histo scheduler of an embedding ``dccd start`` process.  When
+        ``None``, a *non-started* one is built so the UI can start/stop
+        periodic collection itself.
 
     Returns
     -------
@@ -357,9 +369,20 @@ def create_app(cfg_path: str | Path,
     cfg = load_config(cfg_path)
     local_path = cfg.storage.local_path
 
+    if health is None:
+        # Constructing the monitor attaches the rotating file handler to the
+        # root logger (→ .dccd/dccd.log) and initialises metrics, so a
+        # standalone `dccd ui` surfaces logs and dashboard data too.
+        from dccd.daemon.health import HealthMonitor
+        health = HealthMonitor(local_path, cfg.alerts)
+
     if stream_manager is None:
         from dccd.daemon.stream_manager import StreamManager
-        stream_manager = StreamManager(cfg)
+        stream_manager = StreamManager(cfg, health=health)
+
+    if scheduler is None:
+        from dccd.daemon.scheduler import build_histo_scheduler
+        scheduler = build_histo_scheduler(cfg, health)
 
     # When a token is configured, do not expose the unauthenticated OpenAPI
     # schema/docs — they would leak the API surface past the auth boundary.
@@ -374,6 +397,8 @@ def create_app(cfg_path: str | Path,
     app.state.config_lock = threading.Lock()
     app.state.tracker = BackfillTracker(local_path)
     app.state.stream_manager = stream_manager
+    app.state.health = health
+    app.state.scheduler = scheduler
     app.state.templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
     app.mount('/static', StaticFiles(directory=str(_STATIC_DIR)), name='static')
@@ -450,58 +475,6 @@ def _register_api(app: FastAPI) -> None:
             'stream_jobs': [j.model_dump() for j in cfg.stream_jobs],
         }
 
-    @app.post('/api/jobs/histo', status_code=201, dependencies=[auth])
-    def add_histo_job(request: Request, body: _HistoJobBody) -> dict:
-        import yaml
-        path = request.app.state.cfg_path
-        with request.app.state.config_lock:
-            raw: dict = yaml.safe_load(path.read_text()) or {}
-            raw.setdefault('histo_jobs', [])
-            raw['histo_jobs'].append({
-                'exchange': body.exchange,
-                'pairs': [body.pair],
-                'span': body.span,
-                'format': body.format,
-            })
-            try:
-                CollectorConfig.model_validate(raw)
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=str(exc))
-            path.write_text(yaml.dump(raw, default_flow_style=False))
-        return {'status': 'added', 'exchange': body.exchange,
-                'pair': body.pair, 'span': body.span}
-
-    @app.delete('/api/jobs/histo/{exchange}/{pair_slug}/{span}', dependencies=[auth])
-    def remove_histo_job(
-        request: Request, exchange: str, pair_slug: str, span: int,
-    ) -> dict:
-        import yaml
-        pair = pair_slug.replace('-', '/', 1)
-        path = request.app.state.cfg_path
-        with request.app.state.config_lock:
-            raw: dict = yaml.safe_load(path.read_text()) or {}
-            jobs: list = raw.get('histo_jobs', [])
-            target = next(
-                (j for j in jobs if j.get('exchange') == exchange
-                 and j.get('span') == span and pair in j.get('pairs', [])),
-                None,
-            )
-            if target is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f'No job: {exchange} {pair} {span}s',
-                )
-            target['pairs'].remove(pair)
-            if not target['pairs']:
-                jobs.remove(target)
-            try:
-                CollectorConfig.model_validate(raw)
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=str(exc))
-            path.write_text(yaml.dump(raw, default_flow_style=False))
-        return {'status': 'removed', 'exchange': exchange,
-                'pair': pair, 'span': span}
-
     # --- Backfill -------------------------------------------------------
 
     @app.post('/api/backfill', status_code=202, dependencies=[auth])
@@ -514,7 +487,7 @@ def _register_api(app: FastAPI) -> None:
                        'Add one on the Config page first.',
             )
         job_id = request.app.state.tracker.start(
-            cfg, body.exchange, body.pairs, body.start,
+            cfg, body.exchange, body.pairs, body.start, body.parallel,
         )
         return {'id': job_id}
 
@@ -541,16 +514,21 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post('/api/collect', status_code=202, dependencies=[auth])
     def start_collect(request: Request, body: _CollectBody | None = None) -> dict:
-        from dccd.daemon.health import HealthMonitor
+        import logging
+
         from dccd.daemon.scheduler import run_histo_job, run_once
         cfg = _cfg(request)
-        health = HealthMonitor(cfg.storage.local_path, cfg.alerts)
+        health = request.app.state.health
+        log = logging.getLogger('dccd.daemon.api')
         exchange = body.exchange if body else None
         pair = body.pair if body else None
+        label = ' '.join(filter(None, [exchange or 'all', pair])) or 'all'
 
         if exchange is None and pair is None:
             def _job() -> None:
+                log.info('collect started: %s', label)
                 run_once(cfg, health=health)
+                log.info('collect finished: %s', label)
         else:
             targets = [
                 (job, p)
@@ -563,18 +541,58 @@ def _register_api(app: FastAPI) -> None:
                 raise HTTPException(status_code=404, detail='No matching histo job')
 
             def _job() -> None:
+                log.info('collect started: %s', label)
                 for job, p in targets:
                     run_histo_job(job, p, cfg.storage.local_path,
                                   cfg.settings.timezone, health)
+                log.info('collect finished: %s', label)
 
         threading.Thread(target=_job, daemon=True, name='ui-collect').start()
         return {'status': 'started'}
+
+    # --- Scheduler ------------------------------------------------------
+
+    def _sched_active(sched: BackgroundScheduler) -> bool:
+        # `.running` stays True while paused, so check the actual state:
+        # jobs only fire in STATE_RUNNING.
+        from apscheduler.schedulers.base import STATE_RUNNING
+        return sched.state == STATE_RUNNING
+
+    @app.get('/api/scheduler', dependencies=[auth])
+    def get_scheduler(request: Request) -> dict:
+        sched = request.app.state.scheduler
+        active = _sched_active(sched)
+        jobs = [
+            {'id': j.id, 'name': j.name,
+             'next_run': j.next_run_time.timestamp()
+             if active and j.next_run_time else None}
+            for j in sched.get_jobs()
+        ]
+        return {'running': active, 'jobs': jobs}
+
+    @app.post('/api/scheduler/start', status_code=202, dependencies=[auth])
+    def start_scheduler(request: Request) -> dict:
+        sched = request.app.state.scheduler
+        if not sched.running:
+            sched.start()
+        elif not _sched_active(sched):
+            sched.resume()
+        return {'running': True}
+
+    @app.post('/api/scheduler/stop', dependencies=[auth])
+    def stop_scheduler(request: Request) -> dict:
+        sched = request.app.state.scheduler
+        if _sched_active(sched):
+            sched.pause()
+        return {'running': _sched_active(sched)}
 
     # --- Streams --------------------------------------------------------
 
     @app.get('/api/streams', dependencies=[auth])
     def list_streams(request: Request) -> list[dict]:
-        return request.app.state.stream_manager.status()
+        # Pass the on-disk config so stream jobs added after startup (via the
+        # Config page) appear without restarting the server.
+        return request.app.state.stream_manager.status(_cfg(request))
 
     @app.post('/api/streams/start', status_code=202, dependencies=[auth])
     def start_stream(request: Request, body: _StreamBody) -> dict:
