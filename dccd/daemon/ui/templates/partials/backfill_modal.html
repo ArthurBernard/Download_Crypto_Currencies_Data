@@ -8,6 +8,10 @@
         <input type="text" id="bf-start" value="2020-01-01 00:00:00" size="20">
       </label>
     </div>
+    <label class="row" style="gap:.4rem; align-items:center; margin-top:.6rem;">
+      <input type="checkbox" id="bf-parallel">
+      <span>Run pairs in parallel <span class="muted">(faster for multiple pairs)</span></span>
+    </label>
     <div class="row" style="margin-top:1rem;">
       <button id="bf-launch" onclick="launchBackfill()">Launch</button>
       <button id="bf-stop" class="danger" onclick="stopBackfill()" style="display:none;">Stop</button>
@@ -17,7 +21,7 @@
     <p id="bf-msg" class="muted"></p>
     <pre id="bf-log" style="max-height:8rem; margin:.4rem 0 0; display:none;"></pre>
     <p id="bf-link" style="display:none;">
-      <a href="/backfills">View in Backfills →</a>
+      <a href="/">View activity on Dashboard →</a>
     </p>
   </div>
 </div>
@@ -96,6 +100,7 @@
       const payload = { start: start };
       if (bfExchange) payload.exchange = bfExchange;
       if (bfPair) payload.pairs = [bfPair];
+      payload.parallel = document.getElementById('bf-parallel').checked;
       const r = await api('POST', '/api/backfill', payload);
       bfJobId = r.id;
       launch.style.display = 'none';

@@ -136,6 +136,7 @@ class BackfillTracker:
         exchange: str | None,
         pairs: list[str] | None,
         start: str,
+        parallel: bool = False,
     ) -> str:
         """ Launch a backfill in a background thread and return its id. """
         slug_ex = exchange or 'all'
@@ -162,7 +163,7 @@ class BackfillTracker:
         self._events[job_id] = event
         thread = threading.Thread(
             target=self._run,
-            args=(job_id, cfg, exchange, pairs, start, event),
+            args=(job_id, cfg, exchange, pairs, start, event, parallel),
             daemon=True,
             name=f'backfill-{job_id}',
         )
@@ -177,6 +178,7 @@ class BackfillTracker:
         pairs: list[str] | None,
         start: str,
         event: threading.Event,
+        parallel: bool = False,
     ) -> None:
         def _cb(exch: str, pair: str, done: int, total: int) -> None:
             with self._lock:
@@ -197,6 +199,7 @@ class BackfillTracker:
         try:
             run_backfill(
                 cfg, exchange=exchange, pairs=pairs, start=start,
+                parallel=parallel,
                 progress_callback=_cb, stop_event=event, message_callback=_msg,
             )
             status = 'cancelled' if event.is_set() else 'done'
@@ -239,6 +242,7 @@ class _BackfillBody(BaseModel):
     exchange: str | None = None
     pairs: list[str] | None = None
     start: str = '2020-01-01 00:00:00'
+    parallel: bool = False
 
 
 class _CollectBody(BaseModel):
@@ -542,7 +546,7 @@ def _register_api(app: FastAPI) -> None:
                        'Add one on the Config page first.',
             )
         job_id = request.app.state.tracker.start(
-            cfg, body.exchange, body.pairs, body.start,
+            cfg, body.exchange, body.pairs, body.start, body.parallel,
         )
         return {'id': job_id}
 

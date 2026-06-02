@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import polars as pl
 import pytest
@@ -191,6 +192,28 @@ def test_backfill_lifecycle(tmp_path, monkeypatch):
     got = client.get(f'/api/backfill/{job_id}')
     assert got.status_code == 200
     assert started['exchange'] == 'binance'
+
+
+def test_backfill_forwards_parallel(tmp_path, monkeypatch):
+    import dccd.daemon.api as api_mod
+
+    seen = {}
+
+    def fake_run_backfill(cfg, exchange=None, pairs=None, start='', **kw):
+        seen['parallel'] = kw.get('parallel')
+
+    monkeypatch.setattr(api_mod, 'run_backfill', fake_run_backfill)
+    client = TestClient(create_app(_write_config(tmp_path)))
+
+    r = client.post('/api/backfill',
+                    json={'exchange': 'binance', 'pairs': ['BTC/USDT'],
+                          'parallel': True})
+    assert r.status_code == 202
+    for _ in range(50):
+        if 'parallel' in seen:
+            break
+        time.sleep(0.02)
+    assert seen['parallel'] is True
 
 
 def test_backfill_unknown_404(client):
