@@ -231,13 +231,6 @@ class BackfillTracker:
 # Request bodies
 # ---------------------------------------------------------------------------
 
-class _HistoJobBody(BaseModel):
-    exchange: str
-    pair: str
-    span: int
-    format: str = 'parquet'
-
-
 class _BackfillBody(BaseModel):
     exchange: str | None = None
     pairs: list[str] | None = None
@@ -481,58 +474,6 @@ def _register_api(app: FastAPI) -> None:
             'histo_jobs': [j.model_dump() for j in cfg.histo_jobs],
             'stream_jobs': [j.model_dump() for j in cfg.stream_jobs],
         }
-
-    @app.post('/api/jobs/histo', status_code=201, dependencies=[auth])
-    def add_histo_job(request: Request, body: _HistoJobBody) -> dict:
-        import yaml
-        path = request.app.state.cfg_path
-        with request.app.state.config_lock:
-            raw: dict = yaml.safe_load(path.read_text()) or {}
-            raw.setdefault('histo_jobs', [])
-            raw['histo_jobs'].append({
-                'exchange': body.exchange,
-                'pairs': [body.pair],
-                'span': body.span,
-                'format': body.format,
-            })
-            try:
-                CollectorConfig.model_validate(raw)
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=str(exc))
-            path.write_text(yaml.dump(raw, default_flow_style=False))
-        return {'status': 'added', 'exchange': body.exchange,
-                'pair': body.pair, 'span': body.span}
-
-    @app.delete('/api/jobs/histo/{exchange}/{pair_slug}/{span}', dependencies=[auth])
-    def remove_histo_job(
-        request: Request, exchange: str, pair_slug: str, span: int,
-    ) -> dict:
-        import yaml
-        pair = pair_slug.replace('-', '/', 1)
-        path = request.app.state.cfg_path
-        with request.app.state.config_lock:
-            raw: dict = yaml.safe_load(path.read_text()) or {}
-            jobs: list = raw.get('histo_jobs', [])
-            target = next(
-                (j for j in jobs if j.get('exchange') == exchange
-                 and j.get('span') == span and pair in j.get('pairs', [])),
-                None,
-            )
-            if target is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f'No job: {exchange} {pair} {span}s',
-                )
-            target['pairs'].remove(pair)
-            if not target['pairs']:
-                jobs.remove(target)
-            try:
-                CollectorConfig.model_validate(raw)
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=str(exc))
-            path.write_text(yaml.dump(raw, default_flow_style=False))
-        return {'status': 'removed', 'exchange': exchange,
-                'pair': pair, 'span': span}
 
     # --- Backfill -------------------------------------------------------
 

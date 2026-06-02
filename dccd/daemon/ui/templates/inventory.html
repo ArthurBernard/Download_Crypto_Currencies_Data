@@ -4,11 +4,12 @@
 <div class="row" style="justify-content:space-between; align-items:flex-end;">
   <div>
     <h1>Inventory</h1>
-    <p class="muted">Stored data, grouped by exchange. <strong>Collect</strong> fetches
-      the latest candles; <strong>Backfill</strong> fills missing history.</p>
+    <p class="muted">Stored data, grouped by exchange. <strong>Update</strong> fetches
+      candles up to now; <strong>Backfill</strong> fills missing history from a
+      chosen start date.</p>
   </div>
   <div class="row">
-    <button id="collect-all-btn" class="ghost" onclick="collectSeries(null, null)" style="display:none;">Collect all</button>
+    <button id="collect-all-btn" class="ghost" onclick="updateSeries(null, null)" style="display:none;">Update all</button>
     <button id="bf-all-btn" onclick="openBackfill(null, null)" style="display:none;">Backfill all</button>
   </div>
 </div>
@@ -24,16 +25,16 @@
     el.textContent = text;
   }
 
-  async function collectSeries(exchange, pair) {
+  async function updateSeries(exchange, pair) {
     const label = pair ? (exchange + ' ' + pair) : (exchange || 'all jobs');
-    invStatus('Collecting ' + label + '…', 'muted');
+    invStatus('Updating ' + label + '…', 'muted');
     try {
       const body = {};
       if (exchange) body.exchange = exchange;
       if (pair) body.pair = pair;
       await api('POST', '/api/collect', body);
-      invStatus('Collect started for ' + label +
-        '. Latest candles are being fetched — check the Dashboard for updated metrics.', 'ok');
+      invStatus('Update started for ' + label +
+        '. Candles up to now are being fetched — check the Dashboard for updated metrics.', 'ok');
     } catch (e) {
       invStatus(e.message, 'err');
     }
@@ -43,8 +44,8 @@
     let actions = '';
     if (s.type === 'ohlc') {
       actions =
-        '<button class="ghost" onclick="collectSeries(' + attrJson(s.exchange) + ',' +
-        attrJson(s.pair) + ')">Collect</button> ' +
+        '<button class="ghost" onclick="updateSeries(' + attrJson(s.exchange) + ',' +
+        attrJson(s.pair) + ')">Update</button> ' +
         '<button class="ghost" onclick="openBackfill(' + attrJson(s.exchange) + ',' +
         attrJson(s.pair) + ')">Backfill</button>';
     }
@@ -73,8 +74,8 @@
         const body = groups[ex].map(rowHtml).join('');
         return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1.2rem;">' +
           '<h2 style="margin:0;">' + escapeHtml(ex) + '</h2>' +
-          '<div class="row"><button class="ghost" onclick="collectSeries(' + attrJson(ex) +
-          ', null)">Collect ' + escapeHtml(ex) + '</button>' +
+          '<div class="row"><button class="ghost" onclick="updateSeries(' + attrJson(ex) +
+          ', null)">Update ' + escapeHtml(ex) + '</button>' +
           '<button class="ghost" onclick="openBackfill(' + attrJson(ex) +
           ', null)">Backfill ' + escapeHtml(ex) + '</button></div></div>' +
           '<div class="card"><table><thead><tr><th>Pair</th><th>Type</th>' +

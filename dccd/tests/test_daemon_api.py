@@ -136,31 +136,13 @@ def test_metrics_populated(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Jobs CRUD
+# Jobs
 # ---------------------------------------------------------------------------
 
 def test_jobs_list(client):
     data = client.get('/api/jobs').json()
     assert data['histo_jobs'][0]['pairs'] == ['BTC/USDT']
     assert data['stream_jobs'] == []
-
-
-def test_add_and_remove_histo_job(tmp_path, cfg_path):
-    client = TestClient(create_app(cfg_path))
-    r = client.post('/api/jobs/histo',
-                    json={'exchange': 'kraken', 'pair': 'ETH/USD', 'span': 3600})
-    assert r.status_code == 201
-    assert any(j['exchange'] == 'kraken'
-               for j in yaml.safe_load(cfg_path.read_text())['histo_jobs'])
-
-    r = client.delete('/api/jobs/histo/kraken/ETH-USD/3600')
-    assert r.status_code == 200
-    assert all(j['exchange'] != 'kraken'
-               for j in yaml.safe_load(cfg_path.read_text())['histo_jobs'])
-
-
-def test_remove_unknown_job_404(client):
-    assert client.delete('/api/jobs/histo/kraken/ETH-USD/3600').status_code == 404
 
 
 # ---------------------------------------------------------------------------
