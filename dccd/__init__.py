@@ -12,7 +12,8 @@ Examples
 True
 """
 
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 try:
     __version__: str = _pkg_version("dccd")
@@ -48,12 +49,12 @@ class Client:
     async def __aenter__(self) -> "Client":
         from dccd.application.config import AppConfig, load_config, resolve_config_path
         from dccd.sources.binance import BinanceSource
-        from dccd.sources.coinbase import CoinbaseSource
-        from dccd.sources.kraken import KrakenSource
-        from dccd.sources.bybit import BybitSource
-        from dccd.sources.okx import OKXSource
         from dccd.sources.bitfinex import BitfinexSource
         from dccd.sources.bitmex import BitMEXSource
+        from dccd.sources.bybit import BybitSource
+        from dccd.sources.coinbase import CoinbaseSource
+        from dccd.sources.kraken import KrakenSource
+        from dccd.sources.okx import OKXSource
         from dccd.sources.registry import SourceRegistry
         from dccd.storage.parquet import ParquetStore
 

@@ -87,8 +87,8 @@ include = ["dccd*"]
 "dccd.daemon.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
 
 [tool.pytest.ini_options]
-addopts = "--exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing --ignore=dccd/tests"
-testpaths = ["dccd/tests/v3", "dccd/domain", "dccd/storage", "dccd/application"]
+addopts = "--exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing"
+testpaths = ["dccd"]
 asyncio_mode = "auto"
 
 [tool.ruff]

@@ -1,7 +1,5 @@
 """Tests for FastAPI HTTP interface."""
 
-import pathlib
-import tempfile
 
 import pytest
 from fastapi.testclient import TestClient

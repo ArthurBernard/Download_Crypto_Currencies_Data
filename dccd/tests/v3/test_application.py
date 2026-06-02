@@ -1,15 +1,13 @@
 """Tests for application layer — config, events, jobs, registry."""
 
 import pytest
-from pydantic import ValidationError
 
-from dccd.application.config import AppConfig, load_config, JobConfig
-from dccd.application.events import EventBus, ProgressEvent, LogEvent, StatusEvent
-from dccd.application.jobs import JobSpec, JobTarget, JobParams, Trigger, RunState
+from dccd.application.config import AppConfig, JobConfig
+from dccd.application.events import EventBus, LogEvent, ProgressEvent, StatusEvent
+from dccd.application.jobs import JobParams, JobSpec, JobTarget, RunState, Trigger
 from dccd.application.registry import REGISTRY
 from dccd.domain.symbol import Symbol
 from dccd.domain.types import DataType
-
 
 # ---------------------------------------------------------------------------
 # Config

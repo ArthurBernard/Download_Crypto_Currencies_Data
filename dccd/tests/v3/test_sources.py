@@ -1,20 +1,26 @@
 """Tests for source adapters — contract tests with mocked HTTP."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from dccd.domain.errors import NoCapability
 from dccd.domain.symbol import Symbol
-from dccd.domain.types import DataType
 from dccd.domain.timeutils import NS
-from dccd.sources.base import OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, TradesLive, OrderBookLive
+from dccd.domain.types import DataType
+from dccd.sources.base import (
+    OHLCHistory,
+    OHLCLive,
+    OrderBookLive,
+    OrderBookSnapshotREST,
+    TradesHistory,
+    TradesLive,
+)
 from dccd.sources.binance import BinanceSource
+from dccd.sources.bybit import BybitSource
 from dccd.sources.coinbase import CoinbaseSource
 from dccd.sources.kraken import KrakenSource
-from dccd.sources.bybit import BybitSource
-from dccd.sources.okx import OKXSource
 from dccd.sources.registry import SourceRegistry
-from dccd.domain.errors import NoCapability
-
 
 BTC_USDT = Symbol(base="BTC", quote="USDT")
 BTC_USD = Symbol(base="BTC", quote="USD")

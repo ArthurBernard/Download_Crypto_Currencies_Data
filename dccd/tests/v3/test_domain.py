@@ -1,18 +1,27 @@
 """Tests for the domain layer."""
 
 import pytest
-from dccd.domain.symbol import Symbol
-from dccd.domain.types import DataType
-from dccd.domain.records import OHLCBar, Trade, OrderBookLevel, OrderBookSnapshot
-from dccd.domain.dataset import DatasetId, Provenance
+
 from dccd.domain.capability import Capability
-from dccd.domain.errors import NoCapability, CoverageError
+from dccd.domain.dataset import DatasetId, Provenance
+from dccd.domain.errors import CoverageError, NoCapability
+from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import (
-    NS, s_to_ns, ns_to_s, align_ns, str_to_span, span_label,
-    binance_interval, bybit_interval, okx_interval, kraken_interval, coinbase_granularity,
+    NS,
+    align_ns,
+    binance_interval,
+    bybit_interval,
+    coinbase_granularity,
+    kraken_interval,
+    ns_to_s,
+    okx_interval,
+    s_to_ns,
+    span_label,
+    str_to_span,
 )
 from dccd.domain.transforms import aggregate_ohlc
-
+from dccd.domain.types import DataType
 
 # ---------------------------------------------------------------------------
 # Symbol
@@ -120,12 +129,6 @@ class TestDatasetId:
         {ds}  # hashable
 
     def test_provenance(self):
-        ds = DatasetId(
-            exchange="binance",
-            symbol=Symbol(base="BTC", quote="USDT"),
-            data_type=DataType.OHLC,
-            span=3600,
-        )
         prov = Provenance(source="binance:rest", derived_from=None)
         assert prov.source == "binance:rest"
 
