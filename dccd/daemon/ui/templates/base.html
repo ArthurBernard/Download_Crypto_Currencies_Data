@@ -85,8 +85,7 @@
   </header>
   <nav>
     {% set links = [('/', 'Dashboard'), ('/inventory', 'Inventory'),
-                    ('/jobs', 'Jobs'), ('/streams', 'Streams'),
-                    ('/backfills', 'Backfills'), ('/logs', 'Logs'),
+                    ('/jobs', 'Jobs'), ('/logs', 'Logs'),
                     ('/config', 'Config'), ('/storage', 'Storage')] %}
     {% for href, label in links %}
     <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ label }}</a>

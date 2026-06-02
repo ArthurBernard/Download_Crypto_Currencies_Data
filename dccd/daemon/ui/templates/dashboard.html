@@ -31,11 +31,17 @@
   </div>
 </div>
 
-<h2>Job health</h2>
+<h2>Backfill activity</h2>
+<p class="muted">Historical backfill jobs launched from Inventory — newest first.</p>
+<div class="card"><div id="bf-activity"><p class="muted">Loading…</p></div></div>
+
+<h2>Last collection per pair</h2>
+<p class="muted">One row per <em>(exchange, pair)</em> that has ever been collected,
+  from <code>metrics.json</code>. Empty until a collect or scheduled run completes.</p>
 <div class="card">
   <table>
     <thead>
-      <tr><th>Job</th><th>Last run</th><th>Last success</th>
+      <tr><th>Exchange / pair</th><th>Last run</th><th>Last success</th>
           <th>Rows</th><th>Errors</th></tr>
     </thead>
     <tbody id="metrics-body"></tbody>
@@ -60,6 +66,32 @@
         '</td><td>' + fmtTs(m.last_success_at) + '</td><td>' +
         (m.rows_collected || 0) + '</td><td class="' + errCls + '">' +
         (m.errors_count || 0) + '</td></tr>';
+    }).join('');
+  }
+
+  function renderBackfills(data) {
+    const root = document.getElementById('bf-activity');
+    const ids = Object.keys(data || {});
+    if (!ids.length) {
+      root.innerHTML = '<p class="muted">No backfill jobs yet. Launch one from Inventory.</p>';
+      return;
+    }
+    root.innerHTML = ids.sort().reverse().slice(0, 10).map(function (id) {
+      const j = data[id];
+      const prog = Object.keys(j.progress || {}).map(function (p) {
+        const pr = j.progress[p];
+        const pct = pr.total > 0 ? Math.min(100, Math.round(100 * pr.done / pr.total)) : 0;
+        return '<div class="muted">' + escapeHtml(p) + ' — ' + pr.done + '/' + pr.total +
+          '</div><div class="bar"><span style="width:' + pct + '%"></span></div>';
+      }).join('');
+      const statusCls = j.status === 'error' ? 'err'
+        : (j.status === 'done' ? 'ok' : 'muted');
+      const last = (j.log || []).slice(-1)[0];
+      return '<div style="margin-bottom:.8rem;"><div class="row"><strong>' +
+        escapeHtml(id) + '</strong> <span class="' + statusCls + '">' + j.status +
+        '</span></div>' + prog +
+        (j.error ? '<div class="err">' + escapeHtml(j.error) + '</div>' : '') +
+        (last ? '<div class="muted">' + escapeHtml(last) + '</div>' : '') + '</div>';
     }).join('');
   }
 
@@ -100,6 +132,7 @@
         return bf[id].status === 'running' || bf[id].status === 'cancelling';
       }).length;
       document.getElementById('bf-count').textContent = running;
+      renderBackfills(bf);
     } catch (e) {}
     try {
       const st = await api('GET', '/api/storage');

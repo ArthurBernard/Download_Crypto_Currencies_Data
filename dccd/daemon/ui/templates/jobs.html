@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Jobs{% endblock %}
 {% block content %}
-<div class="row" style="justify-content:space-between; align-items:center;">
-  <div>
-    <h1>Histo jobs</h1>
-    <p class="muted">Scheduled OHLC collection jobs. Run one now or backfill its history.</p>
-  </div>
-  <button id="collect-all" onclick="collectNow()" style="display:none;">Collect all now</button>
-</div>
+<h1>Jobs</h1>
+<p class="muted">The collectors defined in your config. To <em>run</em> collection or
+  backfill history, use the <a href="/inventory">Inventory</a> page.</p>
+
+<h2>Scheduled (histo)</h2>
+<p class="muted">Periodic REST polling of OHLC candles. Edit the schedule on the
+  <a href="/config">Config</a> page; toggle the scheduler on the
+  <a href="/">Dashboard</a>.</p>
 <div id="histo-root"><p class="muted">Loading…</p></div>
 
-<h2>Add histo job</h2>
+<h3>Add histo job</h3>
 <div class="card">
   <div class="row">
     <input id="j-exchange" placeholder="binance" size="10">
@@ -21,6 +22,17 @@
   </div>
   <p id="j-msg" class="muted"></p>
 </div>
+
+<h2>Live streams</h2>
+<p class="muted">Continuous WebSocket collection of trades/orderbook. Start or stop
+  each configured stream.</p>
+<div class="card">
+  <table>
+    <thead><tr><th>Exchange</th><th>Pair</th><th>Channels</th><th>Step</th>
+      <th>Status</th><th></th></tr></thead>
+    <tbody id="stream-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+  </table>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -28,11 +40,10 @@
     const data = await api('GET', '/api/jobs');
     const root = document.getElementById('histo-root');
     if (!data.histo_jobs.length) {
-      root.innerHTML = '<div class="card"><p class="muted">None.</p></div>';
-      document.getElementById('collect-all').style.display = 'none';
+      root.innerHTML = '<div class="card"><p class="muted">No histo jobs configured. '
+        + 'Add one below or on the Config page.</p></div>';
       return;
     }
-    document.getElementById('collect-all').style.display = '';
     const groups = {};
     data.histo_jobs.forEach(function (j) {
       (groups[j.exchange] = groups[j.exchange] || []).push(j);
@@ -41,18 +52,12 @@
       const rows = groups[ex].map(function (j) {
         return j.pairs.map(function (p) {
           return '<tr><td>' + escapeHtml(p) + '</td><td>' + j.span + '</td><td>' +
-            escapeHtml(j.format) + '</td><td class="row" style="gap:.4rem;">' +
-            '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) + ',' +
-            JSON.stringify(p) + ')">Collect</button>' +
-            '<button class="ghost" onclick="location.href=\'/inventory\'">Backfill</button>' +
+            escapeHtml(j.format) + '</td><td>' +
             '<button class="danger" onclick="rmJob(' + JSON.stringify(ex) + ',' +
             JSON.stringify(p) + ',' + j.span + ')">Remove</button></td></tr>';
         }).join('');
       }).join('');
-      return '<div class="row" style="justify-content:space-between; align-items:center; margin-top:1rem;">' +
-        '<h3 style="margin:0;">' + escapeHtml(ex) + '</h3>' +
-        '<button class="ghost" onclick="collectNow(' + JSON.stringify(ex) +
-        ')">Collect ' + escapeHtml(ex) + '</button></div>' +
+      return '<h3 style="margin:1rem 0 .3rem;">' + escapeHtml(ex) + '</h3>' +
         '<div class="card"><table><thead><tr><th>Pair</th><th>Span</th>' +
         '<th>Format</th><th></th></tr></thead><tbody>' + rows +
         '</tbody></table></div>';
@@ -81,19 +86,46 @@
     } catch (e) { alert(e.message); }
   }
 
-  async function collectNow(exchange, pair) {
-    const body = {};
-    if (exchange) body.exchange = exchange;
-    if (pair) body.pair = pair;
-    const label = pair ? (exchange + ' ' + pair) : (exchange || 'all jobs');
-    try {
-      await api('POST', '/api/collect', body);
-      toast('Collect started for ' + label + '.', 'ok');
-    } catch (e) {
-      toast(e.message, 'err');
+  async function loadStreams() {
+    let rows;
+    try { rows = await api('GET', '/api/streams'); } catch (e) { return; }
+    const sb = document.getElementById('stream-body');
+    if (!rows.length) {
+      sb.innerHTML = '<tr><td colspan="6" class="muted">No streams configured. '
+        + 'Add a <code>stream_jobs</code> entry on the Config page, then start it here.</td></tr>';
+      return;
     }
+    sb.innerHTML = rows.map(function (j) {
+      const chans = JSON.stringify(j.channels);
+      const status = j.running
+        ? '<span class="ok">running</span>' : '<span class="muted">stopped</span>';
+      const btn = j.running
+        ? '<button class="danger" onclick="stopStream(' + JSON.stringify(j.exchange) +
+          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Stop</button>'
+        : '<button onclick="startStream(' + JSON.stringify(j.exchange) +
+          ',' + JSON.stringify(j.pair) + ',' + chans + ')">Start</button>';
+      return '<tr><td>' + escapeHtml(j.exchange) + '</td><td>' + escapeHtml(j.pair) +
+        '</td><td>' + escapeHtml(j.channels.join(', ')) + '</td><td>' + j.time_step +
+        '</td><td>' + status + '</td><td>' + btn + '</td></tr>';
+    }).join('');
+  }
+
+  async function startStream(exchange, pair, channels) {
+    try {
+      await api('POST', '/api/streams/start', { exchange, pair, channels });
+      loadStreams();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function stopStream(exchange, pair, channels) {
+    try {
+      await api('POST', '/api/streams/stop', { exchange, pair, channels });
+      loadStreams();
+    } catch (e) { alert(e.message); }
   }
 
   loadJobs();
+  loadStreams();
+  setInterval(loadStreams, 5000);
 </script>
 {% endblock %}

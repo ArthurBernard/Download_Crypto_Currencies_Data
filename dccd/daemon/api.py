@@ -742,14 +742,6 @@ def _register_pages(app: FastAPI) -> None:
     def page_jobs(request: Request) -> HTMLResponse:
         return _page('jobs.html', request)
 
-    @app.get('/streams', response_class=HTMLResponse, dependencies=[auth])
-    def page_streams(request: Request) -> HTMLResponse:
-        return _page('streams.html', request)
-
-    @app.get('/backfills', response_class=HTMLResponse, dependencies=[auth])
-    def page_backfills(request: Request) -> HTMLResponse:
-        return _page('backfills.html', request)
-
     @app.get('/logs', response_class=HTMLResponse, dependencies=[auth])
     def page_logs(request: Request) -> HTMLResponse:
         return _page('logs.html', request)

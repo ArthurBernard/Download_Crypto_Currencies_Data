@@ -425,8 +425,7 @@ def test_openapi_enabled_without_token(client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize('path', [
-    '/', '/inventory', '/jobs', '/streams', '/backfills',
-    '/logs', '/config', '/storage',
+    '/', '/inventory', '/jobs', '/logs', '/config', '/storage',
 ])
 def test_pages_render(client, path):
     r = client.get(path)
