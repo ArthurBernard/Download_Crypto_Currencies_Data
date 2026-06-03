@@ -118,7 +118,10 @@ class Scheduler:
                 task = asyncio.create_task(self._interval_loop(spec))
                 self._interval_tasks.append(task)
             elif spec.trigger.kind == "once":
-                asyncio.create_task(self._run_once(spec))
+                # Store the task reference so it is tracked by stop() and cannot
+                # be silently GC'd by the event loop before it finishes.
+                task = asyncio.create_task(self._run_once(spec))
+                self._interval_tasks.append(task)
 
     async def stop(self) -> None:
         """Stop all running jobs."""

@@ -30,7 +30,7 @@ _XDG_CONFIG_HOME = pathlib.Path(
 
 DEFAULT_CONFIG_PATH = _XDG_CONFIG_HOME / "dccd" / "config.yml"
 
-SUPPORTED_EXCHANGES = frozenset(
+SUPPORTED_EXCHANGES: frozenset[str] = frozenset(
     {"binance", "kraken", "bybit", "okx", "coinbase", "bitfinex", "bitmex"}
 )
 
@@ -77,7 +77,13 @@ class AlertConfig(BaseModel):
 
 
 class JobConfig(BaseModel):
-    """YAML job definition — more human-friendly than JobSpec."""
+    """YAML job definition — more human-friendly than JobSpec.
+
+    Validation enforces:
+    - ``exchange`` must be a known exchange name.
+    - ``data_type='ohlc'`` requires ``span`` to be set.
+    - ``pairs`` must be non-empty and use ``BASE/QUOTE`` format.
+    """
 
     exchange: str
     pairs: list[str]
@@ -90,6 +96,33 @@ class JobConfig(BaseModel):
     start: str = "last"
     depth: int | None = None
     snapshot_interval: int | None = None
+
+    @field_validator("exchange")
+    @classmethod
+    def _validate_exchange(cls, v: str) -> str:
+        if v.lower() not in SUPPORTED_EXCHANGES:
+            raise ValueError(
+                f"Unknown exchange {v!r}. Supported: {sorted(SUPPORTED_EXCHANGES)}"
+            )
+        return v.lower()
+
+    @field_validator("pairs")
+    @classmethod
+    def _validate_pairs(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("'pairs' must not be empty")
+        for pair in v:
+            if "/" not in pair and "-" not in pair:
+                raise ValueError(
+                    f"Pair {pair!r} must use 'BASE/QUOTE' or 'BASE-QUOTE' format"
+                )
+        return v
+
+    @model_validator(mode="after")
+    def _validate_span_for_ohlc(self) -> "JobConfig":
+        if self.data_type == "ohlc" and self.span is None:
+            raise ValueError("'span' is required when data_type='ohlc'")
+        return self
 
     def to_job_specs(self) -> list[JobSpec]:
         """Expand a multi-pair JobConfig into a list of JobSpecs."""

@@ -1,4 +1,4 @@
-"""dccd v3 CLI — Typer commands mapped 1:1 on operations."""
+"""dccd v3 CLI — Typer commands mapped 1:1 on the Operation Registry."""
 
 from __future__ import annotations
 
@@ -15,26 +15,6 @@ def _load_cfg(config: Optional[pathlib.Path]):
     from dccd.application.config import load_config, resolve_config_path
     path = resolve_config_path(config)
     return load_config(path), path
-
-
-def _build_registry():
-    from dccd.sources.binance import BinanceSource
-    from dccd.sources.bitfinex import BitfinexSource
-    from dccd.sources.bitmex import BitMEXSource
-    from dccd.sources.bybit import BybitSource
-    from dccd.sources.coinbase import CoinbaseSource
-    from dccd.sources.kraken import KrakenSource
-    from dccd.sources.okx import OKXSource
-    from dccd.sources.registry import SourceRegistry
-    reg = SourceRegistry()
-    reg.register("binance", BinanceSource())
-    reg.register("coinbase", CoinbaseSource())
-    reg.register("kraken", KrakenSource())
-    reg.register("bybit", BybitSource())
-    reg.register("okx", OKXSource())
-    reg.register("bitfinex", BitfinexSource())
-    reg.register("bitmex", BitMEXSource())
-    return reg
 
 
 @app.command("validate")
@@ -62,28 +42,26 @@ def cmd_backfill(
     start: str = typer.Option("last", "--start"),
     parallel: bool = typer.Option(False, "--parallel"),
 ) -> None:
-    """Backfill historical data."""
+    """Backfill historical data for one or all configured jobs."""
     from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
     from dccd.application.operations import backfill as do_backfill
+    from dccd.application.service_factory import (
+        build_registry,
+        build_runs_store,
+        build_store,
+    )
     from dccd.domain.symbol import Symbol
     from dccd.domain.types import DataType
-    from dccd.storage.parquet import ParquetStore
-    from dccd.storage.runs_sqlite import RunsStore
 
     cfg, _ = _load_cfg(config)
-    store = ParquetStore(cfg.settings.data_path)
-    runs_store = RunsStore(
-        pathlib.Path(cfg.settings.data_path) / ".dccd" / "runs.db"
-    )
-    registry = _build_registry()
+    store = build_store(cfg.settings.data_path)
+    runs_store = build_runs_store(cfg.settings.data_path)
+    registry = build_registry()
 
     specs: list[JobSpec] = []
     if exchange and symbol:
         sym = Symbol.parse(symbol)
-        target = JobTarget(
-            exchange=exchange, symbol=sym,
-            data_type=DataType(data_type), span=span
-        )
+        target = JobTarget(exchange=exchange, symbol=sym, data_type=DataType(data_type), span=span)
         specs = [JobSpec(
             id=JobSpec.make_id("backfill", target),
             operation="backfill",
@@ -103,14 +81,12 @@ def cmd_backfill(
 
     async def _run():
         for spec in specs:
-            typer.echo(f"Backfilling {spec.id}...")
+            typer.echo(f"Backfilling {spec.id}…")
             result = await do_backfill(spec, registry=registry, store=store, runs_store=runs_store)
-            rows = result.get("rows_written", 0)
-            err = result.get("error")
-            if err:
+            if err := result.get("error"):
                 typer.echo(f"  ✗ {err}", err=True)
             else:
-                typer.echo(f"  ✓ {rows} rows written")
+                typer.echo(f"  ✓ {result.get('rows_written', 0)} rows written")
 
     asyncio.run(_run())
 
@@ -119,16 +95,19 @@ def cmd_backfill(
 def cmd_stream(
     config: Optional[pathlib.Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
-    """Start WebSocket stream jobs."""
+    """Start WebSocket stream jobs defined in config."""
     from dccd.application.events import EventBus
     from dccd.application.scheduler import Scheduler
-    from dccd.storage.parquet import ParquetStore
-    from dccd.storage.runs_sqlite import RunsStore
+    from dccd.application.service_factory import (
+        build_registry,
+        build_runs_store,
+        build_store,
+    )
 
     cfg, _ = _load_cfg(config)
-    store = ParquetStore(cfg.settings.data_path)
-    runs_store = RunsStore(pathlib.Path(cfg.settings.data_path) / ".dccd" / "runs.db")
-    registry = _build_registry()
+    store = build_store(cfg.settings.data_path)
+    runs_store = build_runs_store(cfg.settings.data_path)
+    registry = build_registry()
     bus = EventBus()
     scheduler = Scheduler(registry, store, runs_store, bus)
 
@@ -137,7 +116,7 @@ def cmd_stream(
         typer.echo("No stream jobs in config.")
         raise typer.Exit(1)
 
-    typer.echo(f"Starting {len(specs)} stream job(s)... (Ctrl-C to stop)")
+    typer.echo(f"Starting {len(specs)} stream job(s)… (Ctrl-C to stop)")
 
     async def _run():
         await scheduler.start(specs)
@@ -161,25 +140,26 @@ def cmd_start(
     host: Optional[str] = typer.Option(None, "--host"),
     port: Optional[int] = typer.Option(None, "--port"),
 ) -> None:
-    """Start the full daemon (scheduler + streams + UI)."""
+    """Start the full daemon (scheduler + streams + web UI)."""
     import uvicorn
 
     from dccd.application.events import EventBus
     from dccd.application.scheduler import Scheduler
+    from dccd.application.service_factory import (
+        build_registry,
+        build_runs_store,
+        build_store,
+    )
     from dccd.interfaces.api.app import create_app
-    from dccd.storage.parquet import ParquetStore
-    from dccd.storage.runs_sqlite import RunsStore
 
     cfg, cfg_path = _load_cfg(config)
-    store = ParquetStore(cfg.settings.data_path)
-    runs_store = RunsStore(pathlib.Path(cfg.settings.data_path) / ".dccd" / "runs.db")
-    registry = _build_registry()
+    store = build_store(cfg.settings.data_path)
+    runs_store = build_runs_store(cfg.settings.data_path)
+    registry = build_registry()
     bus = EventBus()
     scheduler = Scheduler(registry, store, runs_store, bus)
 
-    all_specs = cfg.all_job_specs()
-    stream_specs = [s for s in all_specs if s.operation == "stream"]
-
+    stream_specs = [s for s in cfg.all_job_specs() if s.operation == "stream"]
     fastapi_app = create_app(config_path=cfg_path, config=cfg, scheduler=scheduler)
 
     ui_host = host or cfg.settings.ui_host
@@ -188,8 +168,7 @@ def cmd_start(
     async def _run():
         await scheduler.start(stream_specs)
         typer.echo(f"Daemon running — UI at http://{ui_host}:{ui_port}")
-        config_uvicorn = uvicorn.Config(fastapi_app, host=ui_host, port=ui_port, log_level="warning")
-        server = uvicorn.Server(config_uvicorn)
+        server = uvicorn.Server(uvicorn.Config(fastapi_app, host=ui_host, port=ui_port, log_level="warning"))
         try:
             await server.serve()
         finally:
@@ -202,11 +181,11 @@ def cmd_start(
 def cmd_status(
     config: Optional[pathlib.Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
-    """Show current run status."""
-    from dccd.storage.runs_sqlite import RunsStore
+    """Show recent job runs from the runs database."""
+    from dccd.application.service_factory import build_runs_store
 
     cfg, _ = _load_cfg(config)
-    runs_store = RunsStore(pathlib.Path(cfg.settings.data_path) / ".dccd" / "runs.db")
+    runs_store = build_runs_store(cfg.settings.data_path)
     runs = runs_store.list_runs(limit=10)
     if not runs:
         typer.echo("No runs found.")
@@ -220,10 +199,10 @@ def cmd_inventory(
     config: Optional[pathlib.Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
     """List all stored datasets."""
-    from dccd.storage.parquet import ParquetStore
+    from dccd.application.service_factory import build_store
 
     cfg, _ = _load_cfg(config)
-    store = ParquetStore(cfg.settings.data_path)
+    store = build_store(cfg.settings.data_path)
     datasets = store.inventory()
     if not datasets:
         typer.echo("No datasets found.")
@@ -238,15 +217,17 @@ def cmd_inventory(
 @app.command("migrate")
 def cmd_migrate(
     config: Optional[pathlib.Path] = typer.Option(None, "--config", "-c"),
-    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run"),
+    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run",
+                                  help="Preview changes without writing."),
 ) -> None:
-    """Migrate existing Parquet files from seconds to nanoseconds."""
+    """Migrate existing Parquet files from second-scale to nanosecond timestamps."""
     from dccd.storage.migrate import migrate_parquet_to_ns
 
     cfg, _ = _load_cfg(config)
     report = migrate_parquet_to_ns(cfg.settings.data_path, dry_run=dry_run)
     migrated = sum(1 for r in report if r.get("migrated"))
-    typer.echo(f"{'[dry-run] ' if dry_run else ''}{migrated}/{len(report)} files migrated")
+    prefix = "[dry-run] " if dry_run else ""
+    typer.echo(f"{prefix}{migrated}/{len(report)} files migrated")
 
 
 @app.command("ui")
@@ -255,14 +236,13 @@ def cmd_ui(
     host: Optional[str] = typer.Option(None, "--host"),
     port: Optional[int] = typer.Option(None, "--port"),
 ) -> None:
-    """Start only the web UI (API + static files)."""
+    """Start only the web UI (API + static files, no scheduler)."""
     import uvicorn
 
     from dccd.interfaces.api.app import create_app
 
     cfg, cfg_path = _load_cfg(config)
     fastapi_app = create_app(config_path=cfg_path, config=cfg)
-
     ui_host = host or cfg.settings.ui_host
     ui_port = port or cfg.settings.ui_port
     typer.echo(f"UI at http://{ui_host}:{ui_port}")

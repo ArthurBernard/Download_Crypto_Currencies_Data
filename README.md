@@ -3,225 +3,175 @@
   <img alt="dccd logo" src="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg" height="180px" align="left">
 </picture>
 
-# **Download Crypto-Currency Data**
+# **Download Crypto-Currency Data** — v3
 
 [![Python versions](https://img.shields.io/pypi/pyversions/dccd)](https://pypi.org/project/dccd/)
 [![PyPI](https://img.shields.io/pypi/v/dccd.svg)](https://pypi.org/project/dccd/)
-[![PyPI status](https://img.shields.io/pypi/status/dccd.svg?colorB=blue)](https://pypi.org/project/dccd/)
 [![CI](https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/actions/workflows/ci.yml/badge.svg)](https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/ArthurBernard/Download_Crypto_Currencies_Data.svg)](https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/blob/master/LICENSE.txt)<br>
 [![Documentation](https://readthedocs.org/projects/download-crypto-currencies-data/badge/?version=latest)](https://download-crypto-currencies-data.readthedocs.io/en/latest/)
 [![Coverage](https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data/branch/master/graph/badge.svg)](https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data)
-[![Docstring coverage](https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/badges/interrogate_badge.svg)](https://github.com/ArthurBernard/Download_Crypto_Currencies_Data)
-[![Downloads](https://pepy.tech/badge/dccd)](https://pepy.tech/project/dccd)
 
-___
+---
 
-Python package to download crypto-currency data (OHLCV, trades, order book) from multiple
-exchanges via REST and WebSocket APIs. Data can be saved to CSV, Excel, SQLite, PostgreSQL,
-or Parquet.
+**dccd** downloads crypto-currency market data (OHLCV, trades, order book)
+from 7 exchanges via REST and WebSocket. Data is stored as Parquet files with
+nanosecond-precision timestamps.
+
+## Architecture (v3)
+
+Hexagonal architecture — business logic is fully separated from interfaces:
+
+```
+Interfaces: CLI · HTTP API · Web UI · Python Client
+                        ↓
+          Application: backfill, stream, read, inventory
+                        ↓
+  Domain ← Sources (7 exchange adapters) ← Transport (httpx · WS · Paginator)
+                        ↓
+             Storage: ParquetStore + RunsStore (SQLite)
+```
+
+- **Async-first** — httpx + websockets, one event loop; CLI via `asyncio.run`
+- **Nanosecond timestamps** — uniform int64 UTC; run `dccd migrate` on existing data
+- **Generic Paginator** — no per-exchange chunking; Coinbase 300-limit is a capability declaration
+- **NoCapability early** — Bybit no spot trades history, Kraken OHLC recent-only → clear error
+- **Four iso-functional interfaces** — same operations everywhere (parity test enforces this)
+
+## Supported exchanges
+
+| Exchange | OHLC REST | Trades REST | Book | WebSocket |
+|----------|-----------|-------------|------|-----------|
+| Binance  | ✅ full   | ✅ full     | ✅   | ✅ |
+| Coinbase | ✅ full (300/req) | ⚠️ recent | ✅ | ✅ |
+| Kraken   | ⚠️ 720 recent | ✅ full  | ✅   | ✅ |
+| Bybit    | ✅ full   | ❌ WS only  | ✅   | ✅ |
+| OKX      | ✅ full   | ✅ full     | ✅   | ✅ |
+| Bitfinex | ✅ full   | ✅ full     | ✅   | ✅ |
+| BitMEX   | ✅ full (4 spans) | ✅ full | ✅ | ✅ |
 
 ## Installation
 
 ```bash
+# Core — Python 3.11+
 pip install dccd
-```
 
-With autonomous daemon support (APScheduler + PyYAML):
-
-```bash
+# With scheduler, CLI, and web UI
 pip install "dccd[daemon]"
+
+# Development
+pip install "dccd[dev]"
 ```
-
-With the web UI (FastAPI + htmx — `dccd ui`):
-
-```bash
-pip install "dccd[daemon,ui]"
-```
-
-From source:
-
-```bash
-git clone https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
-cd Download_Crypto_Currencies_Data
-pip install -e .
-```
-
-## Supported exchanges
-
-| Exchange | REST OHLCV | REST Trades | REST Order Book | WS OHLCV | WS Trades | WS Order Book |
-|----------|:----------:|:-----------:|:---------------:|:--------:|:---------:|:-------------:|
-| Binance  | ✓ | ✓ | ✓ | | ✓ | ✓ |
-| Coinbase | ✓ | ✓ † | ✓ | | | |
-| Kraken   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Bybit    | ✓ | ✓ † | ✓ | | ✓ | ✓ |
-| OKX      | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Bitfinex | | | | ✓ \* | ✓ | ✓ |
-| Bitmex   | | | | | ✓ | ✓ |
-
-\* Bitfinex WS OHLCV is aggregated from the trades stream via `get_ohlc_bitfinex`.  
-† Recent trades only (Bybit ≤ 1 000, Coinbase ≤ 100) — no deep historical pagination via the public REST API.
-
-## Presentation
-
-**Historical Downloader** `dccd.histo_dl`  
-Download OHLCV data via REST APIs and save to disk. Supports chunked requests, automatic retry on rate-limit (HTTP 429), and incremental updates from the last saved timestamp.
-
-**Continuous Downloader** `dccd.continuous_dl`  
-Stream real-time data (order book, trades) via WebSocket with automatic reconnection and configurable processing/saving callbacks.
-
-**Daemon** `dccd.daemon`  
-Autonomous, server-side collector driven by a YAML config. Runs REST jobs on a schedule (APScheduler), opens WebSocket streams for real-time collection, and periodically syncs all local data to one or more remote destinations (NAS, S3, SFTP, …) via rclone. Multiple remotes and a configurable sync interval are supported; collection is never blocked by remote availability.
-
-**Web UI** `dccd.daemon.api`  
-Optional browser interface (FastAPI + htmx) mirroring the CLI: dashboard of live health metrics, data inventory, job management (add/remove pairs, launch and cancel backfills), log tail, config editor, and remote-storage status. Runs standalone (`dccd ui`) or embedded in `dccd start`.
-
-### Output formats
-
-Historical data can be saved as **CSV**, **Excel** (`.xlsx`), **SQLite**, **PostgreSQL** (via SQLAlchemy), or **Parquet**.
-All DataFrames are native `polars.DataFrame`. A `pandas.DataFrame` can be obtained via `get_data(format='pandas')`.
 
 ## Quick start
 
-Historical data:
+### Python API
 
 ```python
-from dccd.histo_dl import FromBinance
+import asyncio
+from dccd import Client
 
-obj = FromBinance('/path/to/data/', 'BTC', 3600, fiat='USDT')
-obj.import_data(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
-obj.save(form='parquet')
-df = obj.get_data()               # polars DataFrame (default)
-df_pd = obj.get_data(format='pandas')  # pandas DataFrame (optional)
+async def main():
+    async with Client() as c:
+        result = await c.backfill("binance", "BTC/USDT", data_type="ohlc", span=3600)
+        print(f"Wrote {result['rows_written']} rows")
+        for ds in c.inventory():
+            print(ds)
+
+asyncio.run(main())
 ```
 
-Incremental update (resume from last saved point):
+### CLI
 
-```python
-obj.import_data(start='last', end='now').save(form='parquet')
+```bash
+dccd validate --config config.yml      # validate config
+dccd backfill --config config.yml      # run all backfill jobs
+dccd backfill -e binance -s BTC/USDT --type ohlc --span 3600  # ad-hoc
+dccd stream   --config config.yml      # run WebSocket stream jobs
+dccd start    --config config.yml      # full daemon + UI
+dccd ui       --config config.yml      # UI only (no scheduler)
+dccd migrate  --config config.yml      # migrate v2 Parquet (s → ns)
+dccd inventory --config config.yml     # list stored datasets
+dccd status   --config config.yml      # show recent runs
 ```
 
-Other exchanges:
-
-```python
-from dccd.histo_dl import FromKraken, FromBybit, FromOKX
-
-FromKraken('/path/', 'ETH', 3600).import_data(start='2024-01-01', end='now').save()
-FromBybit('/path/', 'BTC', 86400).import_data(start='2024-01-01', end='now').save()
-FromOKX('/path/', 'BTC', 3600).import_data(start='2024-01-01', end='now').save()
-```
-
-Trades (historical or recent):
-
-```python
-from dccd.histo_dl import FromBinance, FromKraken
-
-obj = FromBinance('/path/', 'BTC', 3600, fiat='USDT')
-obj.import_trades(start='2024-01-01 00:00:00', end='2024-01-02 00:00:00')
-obj.save_trades(form='csv')
-df = obj.trades_df    # polars DataFrame — columns: TS, price, amount, type, tid
-
-# Kraken also supports full history; Bybit/Coinbase return recent-only snapshots
-FromKraken('/path/', 'BTC', 3600).import_trades(start='2024-01-01', end='2024-01-02').save_trades()
-```
-
-Order book snapshot:
-
-```python
-from dccd.histo_dl import FromOKX
-
-obj = FromOKX('/path/', 'BTC', 3600)
-obj.import_orderbook(depth=50)
-obj.save_orderbook(form='csv')
-df = obj.orderbook_df    # columns: side, price, amount, count
-```
-
-Daemon (autonomous collector) — `config.yml`:
+### Configuration (`config.yml`)
 
 ```yaml
 settings:
-  data_path: /data/crypto/
+  data_path: ./data/crypto
   timezone: UTC
+  ui_port: 8080
+
+jobs:
+  - exchange: binance
+    pairs: [BTC/USDT, ETH/USDT]
+    data_type: ohlc
+    span: 3600
+    trigger_kind: interval
+    every: 3600
+
+  - exchange: kraken
+    pairs: [BTC/USD]
+    data_type: trades
+    operation: stream
+    trigger_kind: supervised
 
 storage:
   remotes:
     - provider: rclone
       remote: "mynas:crypto/"
   sync_interval: 3600
-
-histo_jobs:
-  - exchange: binance
-    pairs: [BTC/USDT, ETH/USDT]
-    span: 3600
-    format: parquet
-
-stream_jobs:
-  - exchange: binance
-    pairs: [BTC/USDT]
-    channels: [trades, book]
-    time_step: 60
 ```
 
-CLI quick start:
+### HTTP API (when `dccd ui` or `dccd start` is running)
+
+```
+GET  /api/operations          list registered operations
+POST /api/backfill            start a backfill job
+GET  /api/backfill/{run_id}   poll run status
+GET  /api/streams             list stream jobs + state
+POST /api/streams/start       start a stream job
+POST /api/streams/stop        stop a stream job
+POST /api/read                read stored data (≤1 000 rows)
+GET  /api/events              SSE stream of progress/log/status events
+GET  /api/inventory           list all datasets
+GET  /health                  liveness check
+```
+
+## Data layout
+
+```
+{data_path}/
+  {exchange}/
+    ohlc/{pair}/{span}/YYYY.parquet       # annual, ns timestamps
+    trades/{pair}/YYYY-MM-DD.parquet      # daily
+    orderbook/{pair}/YYYY-MM-DD.parquet   # daily
+    .dccd/runs.db                         # SQLite job run history
+```
+
+All timestamps are **nanoseconds UTC** (int64).
+
+## Migrating from v2
 
 ```bash
-# Validate the config
-dccd validate --config config.yml
+# Preview what would change
+dccd migrate --config config.yml --dry-run
 
-# Backfill all OHLC history defined in config (resumable)
-dccd backfill --config config.yml --start "2020-01-01 00:00:00"
-
-# Dry run — estimate windows and time without downloading
-dccd backfill --config config.yml --dry-run
-
-# Backfill only one exchange
-dccd backfill --config config.yml --exchange kraken
-
-# One incremental batch per job, then exit (for cron)
-dccd collect --config config.yml
-
-# Continuous daemon (Ctrl-C to stop)
-dccd start --config config.yml
-
-# Add / remove a histo job in-place
-dccd add --exchange kraken --pair ETH/USD --span 86400 --config config.yml
-dccd remove --exchange kraken --pair ETH/USD --span 86400 --config config.yml
-
-# Inspect all data on disk (OHLC, trades, orderbook)
-dccd inventory --config config.yml
-
-# Web UI — dashboard, inventory, jobs, logs, config (needs: pip install "dccd[daemon,ui]")
-dccd ui --config config.yml          # http://127.0.0.1:8080
-
-# Enable shell tab-completion (run once after install)
-dccd --install-completion
+# Apply (irreversible — back up first)
+dccd migrate --config config.yml --no-dry-run
 ```
 
-> `--config` is optional — dccd searches `./config.yml` then `~/.config/dccd/config.yml` when omitted.
+**Breaking changes:**
+- `histo_dl`, `continuous_dl`, `daemon` removed — new `sources/`, `application/`, `interfaces/`
+- `DataStore` → `ParquetStore`; `CollectorConfig` → `AppConfig`
+- Timestamps: seconds → nanoseconds
 
-Python API:
+## Development
 
-```python
-from dccd.daemon.config import load_config
-from dccd.daemon.scheduler import run_once, build_histo_scheduler
-from dccd.daemon.stream_manager import StreamManager
-
-config = load_config('config.yml')
-
-# One-shot: download all histo jobs once, then exit
-run_once(config)
-
-# Daemon mode: periodic REST + live WebSocket streams
-scheduler = build_histo_scheduler(config)
-scheduler.start()
-
-mgr = StreamManager(config)
-mgr.start()      # runs until mgr.stop() is called
+```bash
+pip install -e ".[dev]"
+pytest             # 141 tests
+ruff check dccd/   # lint
+mypy dccd/         # type check (strict on domain/)
 ```
-
-## Links
-
-- PyPI: https://pypi.org/project/dccd/
-- Documentation: https://download-crypto-currencies-data.readthedocs.io/
-- Source: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data
-- Changelog: https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/blob/master/CHANGELOG.md

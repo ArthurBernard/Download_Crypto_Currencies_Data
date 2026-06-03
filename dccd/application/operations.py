@@ -1,4 +1,15 @@
-"""Core operations — backfill, stream, read, inventory."""
+"""Core operations — backfill, stream, read, inventory.
+
+All public functions are async and accept keyword-only infrastructure arguments
+(registry, store, events, …) to keep call sites explicit and testable.
+
+**Key contract for paginators**: each ``fetch_page`` passed to
+``paginate_ohlc`` / ``paginate_trades`` must be a closure with ``symbol``
+(and ``span`` for OHLC) already bound:
+
+    async def _fetch(start_ns, end_ns, limit):
+        return await adapter.fetch_ohlc_page(symbol, span, start_ns, end_ns, limit)
+"""
 
 from __future__ import annotations
 
@@ -23,6 +34,8 @@ __all__ = ["backfill", "stream", "read", "inventory"]
 
 logger = logging.getLogger(__name__)
 
+_FLUSH_BATCH = 10_000  # rows to buffer before writing to Parquet
+
 
 def _make_dataset_id(target: JobTarget) -> DatasetId:
     return DatasetId(
@@ -31,6 +44,25 @@ def _make_dataset_id(target: JobTarget) -> DatasetId:
         data_type=target.data_type,
         span=target.span,
     )
+
+
+def _emit_progress(events: RunEvents | None, done: int, total: int) -> None:
+    if events is not None:
+        events.progress(done, total)
+
+
+async def _flush(
+    store: ParquetStore,
+    ds: DatasetId,
+    batch: list,
+    source: str,
+) -> int:
+    """Write *batch* to *store* and return count written. Clears batch in place."""
+    if not batch:
+        return 0
+    n = await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=source))
+    batch.clear()
+    return n
 
 
 async def backfill(
@@ -47,18 +79,27 @@ async def backfill(
     Parameters
     ----------
     spec : JobSpec
-        Job specification (operation='backfill').
+        Job specification (``operation='backfill'``).
+        ``spec.params.start`` controls the start point:
+        ``'last'`` resumes from the last stored timestamp,
+        ``'origin'`` starts from ts=0,
+        an integer is interpreted as a nanosecond UTC timestamp.
     registry : SourceRegistry
+        Registered exchange adapters.
     store : ParquetStore
+        Persistent storage backend.
     runs_store : RunsStore or None
+        Optional run-history database.
     events : RunEvents or None
+        Progress/log event sink.
     stop_event : asyncio.Event or None
-        Set to cancel mid-run.
+        Set externally to cancel mid-run cleanly.
 
     Returns
     -------
     dict
-        Summary with rows_written, start_ns, end_ns.
+        ``{'run_id', 'rows_written', 'start_ns', 'end_ns'}`` on success;
+        ``{'run_id', 'rows_written', 'error'}`` on failure.
     """
     target = spec.target
     params = spec.params
@@ -75,19 +116,17 @@ async def backfill(
         events.log(f"Backfill start: {spec.id}")
         events.status("running")
 
-    start_ns: int
     end_ns = ns_now()
-
     if params.start == "last":
         last = store.last_timestamp(ds)
-        start_ns = last + 1 if last is not None else 0
+        start_ns: int = last + 1 if last is not None else 0
     elif params.start == "origin":
         start_ns = 0
     else:
         start_ns = int(params.start)
 
     total_written = 0
-    error_msg: str | None = None
+    prov_src = f"{target.exchange}:rest"
 
     try:
         adapter = registry.get(target.exchange)
@@ -101,32 +140,25 @@ async def backfill(
 
             from dccd.transport.paginate import paginate_ohlc
 
+            span = target.span or 3600
+            sym = target.symbol
+
+            # Close over symbol+span so the paginator receives (start_ns, end_ns, limit).
+            async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:
+                return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)  # type: ignore[union-attr]
+
             bars: list[OHLCBar] = []
             async for bar in paginate_ohlc(
-                adapter.fetch_ohlc_page.__func__.__get__(adapter) if hasattr(adapter.fetch_ohlc_page, '__func__') else adapter.fetch_ohlc_page,
-                cap,
-                start_ns,
-                end_ns,
-                target.span or 3600,
-                emit_progress=lambda d, t: events and events.progress(d, t) or None,
+                _fetch_ohlc, cap, start_ns, end_ns, span,
+                emit_progress=lambda d, t: _emit_progress(events, d, t),
             ):
                 if stop_event and stop_event.is_set():
                     break
                 bars.append(bar)
-                if len(bars) >= 10000:
-                    n = await asyncio.to_thread(
-                        store.save, ds, bars,
-                        Provenance(source=f"{target.exchange}:rest")
-                    )
-                    total_written += n
-                    bars.clear()
+                if len(bars) >= _FLUSH_BATCH:
+                    total_written += await _flush(store, ds, bars, prov_src)
 
-            if bars:
-                n = await asyncio.to_thread(
-                    store.save, ds, bars,
-                    Provenance(source=f"{target.exchange}:rest")
-                )
-                total_written += n
+            total_written += await _flush(store, ds, bars, prov_src)
 
         elif target.data_type == DataType.TRADES:
             if not isinstance(adapter, TradesHistory):
@@ -137,42 +169,31 @@ async def backfill(
 
             from dccd.transport.paginate import paginate_trades
 
+            sym = target.symbol
+
+            # Close over symbol so the paginator receives (start_ns, end_ns, limit).
+            async def _fetch_trades(s_ns: int, e_ns: int, limit: int) -> list[Trade]:
+                return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit)  # type: ignore[union-attr]
+
             batch: list[Trade] = []
             async for trade in paginate_trades(
-                adapter.fetch_trades_page.__func__.__get__(adapter) if hasattr(adapter.fetch_trades_page, '__func__') else adapter.fetch_trades_page,
-                cap,
-                start_ns,
-                end_ns,
-                emit_progress=lambda d, t: events and events.progress(d, t) or None,
+                _fetch_trades, cap, start_ns, end_ns,
+                emit_progress=lambda d, t: _emit_progress(events, d, t),
             ):
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(trade)
-                if len(batch) >= 10000:
-                    n = await asyncio.to_thread(
-                        store.save, ds, batch,
-                        Provenance(source=f"{target.exchange}:rest")
-                    )
-                    total_written += n
-                    batch.clear()
+                if len(batch) >= _FLUSH_BATCH:
+                    total_written += await _flush(store, ds, batch, prov_src)
 
-            if batch:
-                n = await asyncio.to_thread(
-                    store.save, ds, batch,
-                    Provenance(source=f"{target.exchange}:rest")
-                )
-                total_written += n
+            total_written += await _flush(store, ds, batch, prov_src)
 
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookSnapshotREST):
                 raise NoCapability(target.exchange, "orderbook", "snapshot")
             depth = params.depth or 50
             snap = await adapter.fetch_orderbook(target.symbol, depth)
-            n = await asyncio.to_thread(
-                store.save, ds, [snap],
-                Provenance(source=f"{target.exchange}:rest")
-            )
-            total_written += n
+            total_written += await _flush(store, ds, [snap], prov_src)
 
     except Exception as exc:
         error_msg = str(exc)
@@ -184,7 +205,7 @@ async def backfill(
             runs_store.finish_run(run_id, "failed", error=error_msg)
         return {"run_id": run_id, "rows_written": 0, "error": error_msg}
 
-    state = "succeeded" if not (stop_event and stop_event.is_set()) else "cancelled"
+    state = "cancelled" if (stop_event and stop_event.is_set()) else "succeeded"
     if events:
         events.log(f"Done: {total_written} rows written")
         events.status(state)
@@ -203,13 +224,26 @@ async def stream(
     events: RunEvents | None = None,
     stop_event: asyncio.Event | None = None,
 ) -> None:
-    """Stream live data continuously until stop_event is set."""
+    """Stream live data continuously until *stop_event* is set.
+
+    Parameters
+    ----------
+    spec : JobSpec
+        Job specification (``operation='stream'``).
+    registry : SourceRegistry
+    store : ParquetStore
+    runs_store : RunsStore or None
+    events : RunEvents or None
+    stop_event : asyncio.Event or None
+        Set to stop the stream cleanly.
+    """
     from dccd.sources.base import OHLCLive, OrderBookLive, TradesLive
 
     target = spec.target
     params = spec.params
     ds = _make_dataset_id(target)
     run_id = f"{spec.id}@{int(time.time() * NS)}"
+    prov_src = f"{target.exchange}:ws"
 
     if runs_store:
         runs_store.create_run(
@@ -234,10 +268,7 @@ async def stream(
                     break
                 batch.append(record)
                 if len(batch) >= 1000:
-                    await asyncio.to_thread(
-                        store.save, ds, batch,
-                        Provenance(source=f"{target.exchange}:ws")
-                    )
+                    await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
 
         elif target.data_type == DataType.OHLC:
@@ -248,10 +279,7 @@ async def stream(
                     break
                 batch.append(record)
                 if len(batch) >= 1000:
-                    await asyncio.to_thread(
-                        store.save, ds, batch,
-                        Provenance(source=f"{target.exchange}:ws")
-                    )
+                    await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
 
         elif target.data_type == DataType.ORDERBOOK:
@@ -261,13 +289,9 @@ async def stream(
             async for snap in adapter.stream_orderbook(target.symbol, params.depth or 50):
                 if stop_event and stop_event.is_set():
                     break
-                now = time.time()
-                if now - last_save >= snapshot_interval:
-                    await asyncio.to_thread(
-                        store.save, ds, [snap],
-                        Provenance(source=f"{target.exchange}:ws")
-                    )
-                    last_save = now
+                if time.time() - last_save >= snapshot_interval:
+                    await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
+                    last_save = time.time()
 
     except Exception as exc:
         if events:
@@ -278,10 +302,7 @@ async def stream(
         raise
 
     if batch:
-        await asyncio.to_thread(
-            store.save, ds, batch,
-            Provenance(source=f"{target.exchange}:ws")
-        )
+        await asyncio.to_thread(store.save, ds, batch, Provenance(source=prov_src))
 
     if events:
         events.status("cancelled")
@@ -296,11 +317,35 @@ def read(
     start_ns: int | None = None,
     end_ns: int | None = None,
 ) -> Any:
-    """Read stored data for a target."""
+    """Read stored data for *target* in the given nanosecond range.
+
+    Parameters
+    ----------
+    target : JobTarget
+    store : ParquetStore
+    start_ns, end_ns : int or None
+        Nanosecond timestamps bounding the query (inclusive). ``None`` means
+        unbounded.
+
+    Returns
+    -------
+    polars.DataFrame
+    """
     ds = _make_dataset_id(target)
     return store.load(ds, start_ns, end_ns)
 
 
 def inventory(*, store: ParquetStore) -> list[dict[str, Any]]:
-    """List all available datasets."""
+    """Return a list of dataset descriptors for all stored data.
+
+    Parameters
+    ----------
+    store : ParquetStore
+
+    Returns
+    -------
+    list of dict
+        Each dict has keys: ``exchange``, ``pair``, ``data_type``,
+        ``span`` (OHLC only), ``files``.
+    """
     return store.inventory()

@@ -140,7 +140,7 @@ class _BybitWS(WebSocketBase):
         yield
 
     async def stream_ohlc(self) -> AsyncIterator[OHLCBar]:
-        async for raw in self._stream_raw():
+        async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
                 continue
@@ -155,7 +155,7 @@ class _BybitWS(WebSocketBase):
                 )
 
     async def stream_trades(self) -> AsyncIterator[Trade]:
-        async for raw in self._stream_raw():
+        async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
                 continue
@@ -169,7 +169,7 @@ class _BybitWS(WebSocketBase):
                 )
 
     async def stream_orderbook(self) -> AsyncIterator[OrderBookSnapshot]:
-        async for raw in self._stream_raw():
+        async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
                 continue
@@ -179,23 +179,3 @@ class _BybitWS(WebSocketBase):
             asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in d.get("a", [])]
             ts_ms = d.get("ts", int(time.time() * 1000))
             yield OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks, is_snapshot=is_snap)
-
-    async def _stream_raw(self) -> AsyncIterator[str]:
-        import asyncio
-
-        import websockets
-        while not self._stop.is_set():
-            try:
-                async with websockets.connect(self.url) as ws:
-                    await self.on_connect(ws)
-                    async for raw in ws:
-                        if self._stop.is_set():
-                            return
-                        yield raw
-            except asyncio.CancelledError:
-                return
-            except Exception as exc:
-                if self._stop.is_set():
-                    return
-                logger.warning("Bybit WS error: %s — reconnecting", exc)
-                await asyncio.sleep(5)

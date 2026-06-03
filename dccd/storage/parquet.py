@@ -77,7 +77,11 @@ class ParquetStore:
         pair_slug = ds.pair_slug()
         root = self._root / ds.exchange
         if ds.data_type == DataType.OHLC:
-            assert ds.span is not None
+            if ds.span is None:
+                raise ValueError(
+                    f"DatasetId {ds} has data_type=OHLC but span is None. "
+                    "Set span when constructing the DatasetId."
+                )
             d = root / "ohlc" / pair_slug / span_label(ds.span)
         else:
             d = root / ds.data_type.value / pair_slug
@@ -124,11 +128,13 @@ class ParquetStore:
 
         total_written = 0
         for period in df_with_period["_period"].unique().sort().to_list():
-            group = df_with_period.filter(pl.col("_period") == period).drop("_period")
+            incoming = df_with_period.filter(pl.col("_period") == period).drop("_period")
+            # Count incoming rows *before* merge — this is what the caller
+            # should see as "rows written" (not the post-dedup file size).
+            total_written += len(incoming)
             file_path = self._file_path(ds, period)
-            group = self._merge(file_path, group, ds)
-            self._write_parquet(file_path, group, provenance)
-            total_written += len(group)
+            merged = self._merge(file_path, incoming, ds)
+            self._write_parquet(file_path, merged, provenance)
 
         return total_written
 
