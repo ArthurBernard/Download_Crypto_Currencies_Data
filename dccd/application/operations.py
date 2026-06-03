@@ -23,7 +23,7 @@ from dccd.application.jobs import JobSpec, JobTarget
 from dccd.domain.dataset import DatasetId, Provenance
 from dccd.domain.errors import NoCapability
 from dccd.domain.records import OHLCBar, Trade
-from dccd.domain.timeutils import NS, ns_now
+from dccd.domain.timeutils import NS, ns_now, ns_to_dt
 from dccd.domain.types import DataType
 from dccd.sources.base import OHLCHistory, OrderBookSnapshotREST, TradesHistory
 from dccd.sources.registry import SourceRegistry
@@ -203,6 +203,22 @@ async def backfill(
                     f"Span {span}s not supported by {target.exchange}. "
                     f"Supported spans: {sorted(cap.spans)}"
                 )
+
+            # Honour history="recent": these exchanges (e.g. Kraken, 720 bars)
+            # only serve a recent window. Paginating deeper just refetches the
+            # same recent bars — wasteful and misleading. Clamp + warn instead.
+            if cap.history == "recent" and cap.max_per_request:
+                earliest = end_ns - cap.max_per_request * span * NS
+                if start_ns < earliest:
+                    _emit_log(
+                        events, runs_store, run_id,
+                        f"{target.exchange} OHLC serves only the "
+                        f"{cap.max_per_request} most recent bars; clamping start "
+                        f"to {ns_to_dt(earliest).isoformat()}.",
+                        level="warning",
+                    )
+                    start_ns = earliest
+
             sym = target.symbol
 
             async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:
@@ -231,10 +247,20 @@ async def backfill(
 
             from dccd.transport.paginate import paginate_trades
 
+            if cap.history == "recent":
+                _emit_log(
+                    events, runs_store, run_id,
+                    f"{target.exchange} serves only recent trades; "
+                    "deep history is unavailable.",
+                    level="warning",
+                )
+
             sym = target.symbol
 
-            async def _fetch_trades(s_ns: int, e_ns: int, limit: int) -> list[Trade]:
-                return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit)  # type: ignore[union-attr]
+            async def _fetch_trades(
+                s_ns: int, e_ns: int, limit: int, cursor: str | None,
+            ) -> tuple[list[Trade], str | None]:
+                return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit, cursor)  # type: ignore[union-attr]
 
             batch: list[Trade] = []
             async for trade in paginate_trades(

@@ -124,7 +124,16 @@ class CoinbaseSource(
         start_ns: int,
         end_ns: int,
         limit: int,
-    ) -> list[Trade]:
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
+        """Fetch the most recent trades (``history="recent"``).
+
+        Coinbase Exchange paginates trades through ``CB-AFTER``/``CB-BEFORE``
+        *response headers*, which the current JSON-only transport does not
+        expose. We therefore return a single recent page and never a cursor —
+        deep history is genuinely unavailable here (declared via the
+        ``history="recent"`` capability, enforced by the backfill engine).
+        """
         pair = self.render_symbol(symbol)
         async with self._http as client:
             data = await client.get(
@@ -149,7 +158,7 @@ class CoinbaseSource(
                 ))
             except Exception:
                 continue
-        return result
+        return result, None
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         pair = self.render_symbol(symbol)

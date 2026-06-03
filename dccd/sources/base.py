@@ -85,7 +85,24 @@ class OHLCHistory(Source):
 
 
 class TradesHistory(Source):
-    """Protocol: can fetch historical trade pages via REST."""
+    """Protocol: can fetch historical trade pages via REST.
+
+    Cursor contract
+    ---------------
+    ``fetch_trades_page`` returns ``(trades, next_cursor)``. The *cursor* is an
+    opaque, adapter-defined string used to continue inside the
+    ``[start_ns, end_ns)`` window:
+
+    - ``cursor=None`` on the first call — anchor on ``start_ns`` (or ``end_ns``
+      for adapters that page backward).
+    - ``next_cursor`` is ``None`` when the window is exhausted (the adapter
+      returned a short/last page, or the next item would fall outside the
+      window). Returning a non-``None`` cursor tells the paginator to call again.
+
+    This lets the generic paginator drain a window completely — fixing the
+    capped-single-page data loss that affected every liquid pair — without
+    per-exchange chunking in the application layer.
+    """
 
     async def fetch_trades_page(
         self,
@@ -93,7 +110,8 @@ class TradesHistory(Source):
         start_ns: int,
         end_ns: int,
         limit: int,
-    ) -> list[Trade]:
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
         raise NotImplementedError
 
 

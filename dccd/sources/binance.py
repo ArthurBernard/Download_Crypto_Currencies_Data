@@ -117,33 +117,34 @@ class BinanceSource(
         start_ns: int,
         end_ns: int,
         limit: int,
-    ) -> list[Trade]:
-        """Fetch all aggregate trades in [start_ns, end_ns).
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
+        """Fetch one page of aggregate trades (cursor = ``fromId``).
 
-        Binance aggTrades caps each response at *limit* (max 1 000). For
-        high-frequency pairs (BTC/USDT runs ~70 tx/s), a single call would
-        only cover a few seconds of a 1-day window.  We therefore sub-paginate
-        internally: after a full page we switch to ``fromId`` cursor mode and
-        continue until the window is exhausted.
+        First call (``cursor=None``) is time-bounded on ``start_ns``; subsequent
+        calls follow the ``fromId`` cursor. The next cursor is the last
+        aggregate-trade id + 1, returned only while the page is full and the
+        last trade is still inside the window.
         """
         sym = self.render_symbol(symbol)
         end_ms = end_ns // 1_000_000
-        all_trades: list[Trade] = []
+        if cursor is None:
+            params: dict[str, Any] = {
+                "symbol": sym,
+                "startTime": start_ns // 1_000_000,
+                "endTime": end_ms,
+                "limit": limit,
+            }
+        else:
+            params = {"symbol": sym, "fromId": int(cursor), "limit": limit}
 
-        # First call: time-bounded to anchor the starting point.
-        params: dict[str, Any] = {
-            "symbol": sym,
-            "startTime": start_ns // 1_000_000,
-            "endTime": end_ms,
-            "limit": limit,
-        }
         async with self._http as client:
             data = await client.get(f"{_BASE_REST}/aggTrades", params)
 
         if not data:
-            return []
+            return [], None
 
-        all_trades.extend(
+        trades = [
             Trade(
                 ts=int(e["T"]) * 1_000_000,
                 price=float(e["p"]),
@@ -152,30 +153,14 @@ class BinanceSource(
                 tid=str(e["a"]),
             )
             for e in data
+        ]
+        last_ts_ms = int(data[-1]["T"])
+        next_cursor = (
+            str(int(data[-1]["a"]) + 1)
+            if len(data) >= limit and last_ts_ms < end_ms
+            else None
         )
-
-        # While the page was full, there may be more trades in the window.
-        # Switch to fromId cursor (faster than repeated startTime queries).
-        while len(data) == limit:
-            next_id = int(data[-1]["a"]) + 1
-            params = {"symbol": sym, "fromId": next_id, "limit": limit}
-            async with self._http as client:
-                data = await client.get(f"{_BASE_REST}/aggTrades", params)
-            if not data:
-                break
-            # Filter to window; stop as soon as we pass end_ms.
-            for e in data:
-                if int(e["T"]) >= end_ms:
-                    return all_trades
-                all_trades.append(Trade(
-                    ts=int(e["T"]) * 1_000_000,
-                    price=float(e["p"]),
-                    amount=float(e["q"]),
-                    side="sell" if e["m"] else "buy",
-                    tid=str(e["a"]),
-                ))
-
-        return all_trades
+        return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         params = {"symbol": self.render_symbol(symbol), "limit": min(depth, 5000)}

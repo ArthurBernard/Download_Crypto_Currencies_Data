@@ -30,9 +30,6 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
-# Default time window for trades pagination (one calendar day at most).
-_DEFAULT_TRADES_WINDOW_S = 86400
-
 
 async def paginate_forward(
     fetch_page: Callable[[int, int, int], Coroutine[Any, Any, list[T]]],
@@ -147,31 +144,58 @@ async def paginate_ohlc(
 
 
 async def paginate_trades(
-    fetch_page: Callable[[int, int, int], Coroutine[Any, Any, list[Trade]]],
+    fetch_page: Callable[
+        [int, int, int, str | None],
+        Coroutine[Any, Any, tuple[list[Trade], str | None]],
+    ],
     cap: Capability,
     start_ns: int,
     end_ns: int,
     *,
-    window_s: int = _DEFAULT_TRADES_WINDOW_S,
     emit_progress: Callable[[int, int], None] | None = None,
+    max_pages: int = 1_000_000,
 ) -> AsyncIterator[Trade]:
-    """Paginate trades forward using declared Capability.
+    """Paginate trades by **cursor**, draining the ``[start_ns, end_ns]`` window.
+
+    Unlike OHLC (fixed-size time windows), trades are far denser than any single
+    page: a one-day window on a liquid pair holds millions of trades but a page
+    is capped at ``cap.max_per_request``. Advancing by a fixed time window —
+    the previous design — silently dropped everything past the first page. This
+    paginator instead follows the adapter's opaque cursor until the window is
+    exhausted.
 
     Parameters
     ----------
     fetch_page : async callable
-        Must be a closure with ``symbol`` already bound:
-        ``fetch_page(start_ns, end_ns, limit) -> list[Trade]``.
+        Closure with ``symbol`` bound:
+        ``fetch_page(start_ns, end_ns, limit, cursor) -> (items, next_cursor)``.
+        ``cursor`` is ``None`` on the first call.
     cap : Capability
         Source capability (provides ``max_per_request``).
     start_ns, end_ns : int
-        Time range in nanoseconds.
-    window_s : int
-        Time-based window size in seconds per HTTP call (default 86 400 = 1 day).
-        Tune this to keep each response near ``cap.max_per_request`` items.
+        Inclusive time range in nanoseconds. Items outside it are filtered out.
+    emit_progress : callable or None
+        Called with ``(pages_done, -1)`` after each page (total is unknown).
+    max_pages : int
+        Hard safety cap on the number of pages, to bound a misbehaving cursor.
     """
     max_per = cap.max_per_request or 1000
-    async for trade in paginate_forward(
-        fetch_page, start_ns, end_ns, window_s, max_per, emit_progress=emit_progress
-    ):
-        yield trade
+    cursor: str | None = None
+    pages = 0
+
+    while pages < max_pages:
+        items, next_cursor = await fetch_page(start_ns, end_ns, max_per, cursor)
+        out_of_window = False
+        for item in items:
+            ts = _get_ts(item)
+            if ts > end_ns:
+                out_of_window = True
+                break
+            if ts >= start_ns:
+                yield item
+        pages += 1
+        if emit_progress:
+            emit_progress(pages, -1)
+        if out_of_window or next_cursor is None or next_cursor == cursor:
+            break
+        cursor = next_cursor

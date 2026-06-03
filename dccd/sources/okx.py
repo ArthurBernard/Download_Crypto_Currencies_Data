@@ -112,31 +112,41 @@ class OKXSource(
         start_ns: int,
         end_ns: int,
         limit: int,
-    ) -> list[Trade]:
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
+        """Fetch one page of trades (cursor = OKX ``after`` ts in ms).
+
+        OKX ``history-trades`` (type=2) returns records *earlier than* the
+        ``after`` timestamp, newest first. We page **backward** from ``end_ns``
+        until the oldest item drops below ``start_ns`` or a short page arrives.
+        """
         pair = self.render_symbol(symbol)
+        after = cursor if cursor is not None else str(end_ns // 1_000_000)
         params: dict[str, Any] = {
             "instId": pair,
             "limit": min(limit, 100),
-            "after": str(end_ns // 1_000_000),
-            "before": str(start_ns // 1_000_000),
+            "after": after,
             "type": "2",
         }
         async with self._http as client:
             data = await client.get(f"{_BASE}/history-trades", params)
 
-        trades = []
-        for e in data.get("data", []):
-            ts_ns = int(e["ts"]) * 1_000_000
-            if not (start_ns <= ts_ns <= end_ns):
-                continue
-            trades.append(Trade(
-                ts=ts_ns,
+        rows = data.get("data", [])
+        trades = [
+            Trade(
+                ts=int(e["ts"]) * 1_000_000,
                 price=float(e["px"]),
                 amount=float(e["sz"]),
                 side="buy" if e.get("side") == "buy" else "sell",
                 tid=str(e.get("tradeId", "")),
-            ))
-        return trades
+            )
+            for e in rows
+        ]
+        if not rows or len(rows) < min(limit, 100):
+            return trades, None
+        oldest_ts_ms = int(rows[-1]["ts"])
+        next_cursor = str(oldest_ts_ms) if oldest_ts_ms > start_ns // 1_000_000 else None
+        return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         pair = self.render_symbol(symbol)

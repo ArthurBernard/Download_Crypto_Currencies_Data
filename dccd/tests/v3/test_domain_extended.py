@@ -145,16 +145,86 @@ class TestAppConfigValidation:
 # Paginator window correctness
 # ---------------------------------------------------------------------------
 
-class TestPaginatorWindow:
-    def test_ohlc_window_equals_span_times_limit(self) -> None:
-        """paginate_ohlc window_s = span * max_per_request (verified via constant)."""
-        from dccd.transport.paginate import _DEFAULT_TRADES_WINDOW_S
+class TestOHLCPaginatorWindow:
+    @pytest.mark.asyncio
+    async def test_ohlc_window_equals_span_times_limit(self) -> None:
+        """paginate_ohlc must size each window as span * max_per_request."""
+        from dccd.domain.capability import Capability
+        from dccd.domain.types import DataType
+        from dccd.transport.paginate import paginate_ohlc
 
-        assert _DEFAULT_TRADES_WINDOW_S == 86400, "Default trades window should be 1 day"
-        # ohlc window is computed dynamically as span * max_per_request; the
-        # formula lives in paginate_ohlc and is integration-tested separately.
+        span, max_per = 60, 1000
+        cap = Capability(
+            data_type=DataType.OHLC, transport="rest", mode="historical",
+            history="full", max_per_request=max_per, page_direction="forward",
+        )
+        windows: list[tuple[int, int]] = []
 
-    def test_trades_default_window_is_one_day(self) -> None:
-        from dccd.transport.paginate import _DEFAULT_TRADES_WINDOW_S
+        async def fetch(s_ns: int, e_ns: int, limit: int):
+            windows.append((s_ns, e_ns))
+            return []
 
-        assert _DEFAULT_TRADES_WINDOW_S == 86400
+        start = 0
+        end = span * max_per * NS * 3  # exactly three full windows
+        async for _ in paginate_ohlc(fetch, cap, start, end, span):
+            pass
+
+        assert windows, "paginator made no calls"
+        first_s, first_e = windows[0]
+        assert first_e - first_s == span * max_per * NS
+
+
+class TestTradesCursorPaginator:
+    @pytest.mark.asyncio
+    async def test_follows_cursor_across_pages(self) -> None:
+        """Cursor pagination drains every page, not just the first (the bug)."""
+        from dccd.domain.capability import Capability
+        from dccd.domain.types import DataType
+        from dccd.transport.paginate import paginate_trades
+
+        cap = Capability(
+            data_type=DataType.TRADES, transport="rest", mode="historical",
+            history="full", max_per_request=2, page_direction="forward",
+        )
+
+        def mk(ts_s: int) -> Trade:
+            return Trade(ts=ts_s * NS, price=1.0, amount=1.0, side="buy", tid=str(ts_s))
+
+        # Three pages of 2 trades each; cursor = next start second.
+        pages = {
+            None: ([mk(1), mk(2)], "3"),
+            "3": ([mk(3), mk(4)], "5"),
+            "5": ([mk(5)], None),
+        }
+
+        calls: list[str | None] = []
+
+        async def fetch(s_ns, e_ns, limit, cursor):
+            calls.append(cursor)
+            return pages[cursor]
+
+        out = [t async for t in paginate_trades(fetch, cap, 0, 100 * NS)]
+        assert [int(t.tid) for t in out] == [1, 2, 3, 4, 5]
+        assert calls == [None, "3", "5"]
+
+    @pytest.mark.asyncio
+    async def test_filters_outside_window_and_stops(self) -> None:
+        """Items past end_ns are filtered and stop iteration."""
+        from dccd.domain.capability import Capability
+        from dccd.domain.types import DataType
+        from dccd.transport.paginate import paginate_trades
+
+        cap = Capability(
+            data_type=DataType.TRADES, transport="rest", mode="historical",
+            history="full", max_per_request=10, page_direction="forward",
+        )
+
+        def mk(ts_s: int) -> Trade:
+            return Trade(ts=ts_s * NS, price=1.0, amount=1.0, side="buy", tid=str(ts_s))
+
+        async def fetch(s_ns, e_ns, limit, cursor):
+            return ([mk(1), mk(5), mk(20)], "next")
+
+        out = [t async for t in paginate_trades(fetch, cap, 0, 10 * NS)]
+        # ts=20s is past end (10s) → filtered, and iteration stops (no 2nd call).
+        assert [int(t.tid) for t in out] == [1, 5]

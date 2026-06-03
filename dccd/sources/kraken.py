@@ -156,47 +156,49 @@ class KrakenSource(
 
     async def fetch_trades_page(
         self, symbol: Symbol, start_ns: int, end_ns: int, limit: int,
-    ) -> list[Trade]:
-        """Fetch ONE page of trades starting from *start_ns*.
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
+        """Fetch one page of trades (cursor = Kraken ``since`` ns).
 
-        The Kraken trades endpoint returns up to 1 000 trades starting from the
-        ``since`` nanosecond cursor. Only one API call is made per invocation —
-        the caller (paginator) is responsible for advancing the window.
-
-        Trades beyond *end_ns* are filtered out but do NOT stop iteration; the
-        paginator advances by time-window, not by cursor.
+        Kraken returns up to 1 000 trades from the ``since`` cursor and a
+        ``result["last"]`` nanosecond cursor for the next page. We follow it
+        until the page is short (caught up to the present) or the cursor stops
+        advancing.
         """
         pair = _kraken_pair(symbol)
-        params: dict[str, Any] = {
-            "pair": pair,
-            "since": str(start_ns),
-        }
+        since = cursor if cursor is not None else str(start_ns)
+        params: dict[str, Any] = {"pair": pair, "since": since}
         async with self._http as client:
             data = await client.get(f"{_BASE}/Trades", params)
 
         if data.get("error"):
             logger.error("Kraken trades error: %s", data["error"])
-            return []
+            return [], None
 
         result_data = data.get("result", {})
+        last = result_data.get("last")
         raw_trades = result_data.get(
             pair,
             result_data.get(next((k for k in result_data if k != "last"), ""), []),
         )
 
-        trades: list[Trade] = []
-        for e in raw_trades:
-            ts_ns = int(float(e[2]) * NS)
-            if ts_ns > end_ns:
-                break
-            trades.append(Trade(
-                ts=ts_ns,
+        trades: list[Trade] = [
+            Trade(
+                ts=int(float(e[2]) * NS),
                 price=float(e[0]),
                 amount=float(e[1]),
                 side="buy" if e[3] == "b" else "sell",
                 tid=None,
-            ))
-        return trades
+            )
+            for e in raw_trades
+        ]
+        # Continue only while a full page came back and the cursor advanced.
+        next_cursor = (
+            str(last)
+            if raw_trades and last is not None and str(last) != since and len(raw_trades) >= 1000
+            else None
+        )
+        return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         pair = _kraken_pair(symbol)

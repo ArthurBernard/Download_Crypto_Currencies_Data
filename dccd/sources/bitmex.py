@@ -114,37 +114,52 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
         start_ns: int,
         end_ns: int,
         limit: int,
-    ) -> list[Trade]:
-        from datetime import datetime, timezone
-        start_dt = datetime.fromtimestamp(start_ns / NS, tz=timezone.utc).isoformat()
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
+        """Fetch one page of trades (cursor = ISO ``startTime``, forward).
+
+        BitMEX returns up to 1 000 trades ascending from ``startTime``. On a
+        full page we advance the cursor to the last timestamp + 1 ms to avoid
+        re-fetching the boundary trade, and continue until the window is drained.
+        """
+        from datetime import datetime, timedelta, timezone
+        page_count = min(limit, 1000)
+        if cursor is not None:
+            start_dt = cursor
+        else:
+            start_dt = datetime.fromtimestamp(start_ns / NS, tz=timezone.utc).isoformat()
         params: dict[str, Any] = {
             "symbol": self.render_symbol(symbol),
             "startTime": start_dt,
-            "count": min(limit, 1000),
+            "count": page_count,
             "reverse": False,
         }
         async with self._http as client:
             data = await client.get(f"{_BASE}/trade", params)
 
-        trades = []
-        for e in (data if isinstance(data, list) else []):
+        rows = data if isinstance(data, list) else []
+        trades: list[Trade] = []
+        last_ts_ns: int | None = None
+        for e in rows:
             ts_str = e.get("timestamp", "")
             try:
                 dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                 ts_ns = s_to_ns(dt.timestamp())
             except Exception:
                 continue
-            if ts_ns > end_ns:
-                break
-            side = "buy" if e.get("side") == "Buy" else "sell"
+            last_ts_ns = ts_ns
             trades.append(Trade(
                 ts=ts_ns,
                 price=float(e.get("price") or 0),
                 amount=float(e.get("size") or 0),
-                side=side,
+                side="buy" if e.get("side") == "Buy" else "sell",
                 tid=str(e.get("trdMatchID", "")),
             ))
-        return trades
+
+        if len(rows) < page_count or last_ts_ns is None or last_ts_ns >= end_ns:
+            return trades, None
+        next_dt = datetime.fromtimestamp(last_ts_ns / NS, tz=timezone.utc) + timedelta(milliseconds=1)
+        return trades, next_dt.isoformat()
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         params = {"symbol": self.render_symbol(symbol), "depth": depth}

@@ -114,33 +114,42 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         start_ns: int,
         end_ns: int,
         limit: int,
-    ) -> list[Trade]:
+        cursor: str | None = None,
+    ) -> tuple[list[Trade], str | None]:
+        """Fetch one page of trades (cursor = ``start`` ts in ms, forward).
+
+        Bitfinex returns up to 10 000 trades ascending in ``[start, end]``. When
+        a full page comes back the window held more than one page, so we advance
+        the cursor to the last timestamp + 1 ms and continue.
+        """
         sym = _bfx_symbol(symbol)
+        page_limit = min(limit, 10000)
+        start_ms = int(cursor) if cursor is not None else start_ns // 1_000_000
         params: dict[str, Any] = {
-            "start": start_ns // 1_000_000,
+            "start": start_ms,
             "end": end_ns // 1_000_000,
-            "limit": min(limit, 10000),
+            "limit": page_limit,
             "sort": 1,
         }
         async with self._http as client:
             data = await client.get(f"{_BASE}/trades/{sym}/hist", params)
 
-        trades = []
-        for e in (data if isinstance(data, list) else []):
-            if not isinstance(e, list) or len(e) < 4:
-                continue
-            ts_ns = int(e[1]) * 1_000_000
-            if not (start_ns <= ts_ns <= end_ns):
-                continue
-            side = "buy" if float(e[2]) > 0 else "sell"
-            trades.append(Trade(
-                ts=ts_ns,
+        rows = [e for e in (data if isinstance(data, list) else [])
+                if isinstance(e, list) and len(e) >= 4]
+        trades = [
+            Trade(
+                ts=int(e[1]) * 1_000_000,
                 price=float(e[3]),
                 amount=abs(float(e[2])),
-                side=side,
+                side="buy" if float(e[2]) > 0 else "sell",
                 tid=str(e[0]),
-            ))
-        return trades
+            )
+            for e in rows
+        ]
+        if len(rows) < page_limit:
+            return trades, None
+        next_cursor = str(int(rows[-1][1]) + 1)
+        return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         sym = _bfx_symbol(symbol)
