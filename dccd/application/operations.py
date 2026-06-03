@@ -335,6 +335,12 @@ async def stream(
     batch: list = []
     snapshot_interval = params.snapshot_interval or 60
 
+    # Reject early if the adapter does not declare a live WS capability for this
+    # data type — otherwise a missing/stub implementation would "run" forever
+    # producing zero rows (the silent-empty-stream bug, D8).
+    if adapter.capability_for(target.data_type, "ws", "live") is None:
+        raise NoCapability(target.exchange, target.data_type.value, "live")
+
     try:
         if target.data_type == DataType.TRADES:
             if not isinstance(adapter, TradesLive):

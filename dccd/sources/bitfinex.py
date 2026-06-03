@@ -68,7 +68,8 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live"),
+            # Order-book WS is not parsed yet (the book channel is unhandled) —
+            # not declared so the engine rejects it rather than streaming empty.
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -182,8 +183,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
-        ws = _BitfinexWS(_bfx_symbol(symbol), "book")
-        return ws.stream()
+        raise NotImplementedError("Bitfinex live order book stream is not implemented")
 
 
 class _BitfinexWS(WebSocketBase):

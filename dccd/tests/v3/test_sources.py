@@ -144,6 +144,35 @@ class TestBybitCapabilities:
         assert cap.history == "full"
 
 
+class TestStreamCapabilityHonesty:
+    """Declared WS capabilities must match a real implementation (D8)."""
+
+    def test_coinbase_no_ohlc_or_book_ws(self):
+        src = CoinbaseSource()
+        assert src.capability_for(DataType.OHLC, "ws", "live") is None
+        assert src.capability_for(DataType.ORDERBOOK, "ws", "live") is None
+        assert src.capability_for(DataType.TRADES, "ws", "live") is not None
+
+    def test_bitfinex_no_book_ws(self):
+        from dccd.sources.bitfinex import BitfinexSource
+        src = BitfinexSource()
+        assert src.capability_for(DataType.ORDERBOOK, "ws", "live") is None
+
+    @pytest.mark.asyncio
+    async def test_stream_rejects_undeclared_capability(self):
+        from dccd.application.jobs import JobSpec, JobTarget, Trigger
+        from dccd.application.operations import stream
+
+        reg = SourceRegistry()
+        reg.register("coinbase", CoinbaseSource())
+        target = JobTarget(exchange="coinbase", symbol=BTC_USD,
+                           data_type=DataType.OHLC, span=60)
+        spec = JobSpec(id=JobSpec.make_id("stream", target), operation="stream",
+                       target=target, trigger=Trigger(kind="supervised"))
+        with pytest.raises(NoCapability):
+            await stream(spec, registry=reg, store=None)
+
+
 class TestSourceRegistry:
     def setup_method(self):
         self.reg = SourceRegistry()

@@ -67,9 +67,10 @@ class CoinbaseSource(
                 data_type=DataType.ORDERBOOK, transport="rest", mode="historical",
                 max_depth=50,
             ),
-            Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
+            # Only the trades WS channel is implemented. OHLC/orderbook live
+            # are intentionally NOT declared (no honest implementation yet) so
+            # the engine rejects them instead of running an empty stream.
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live"),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -171,17 +172,15 @@ class CoinbaseSource(
                 for a in data.get("asks", [])]
         return OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks)
 
-    def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
-        ws = _CoinbaseWS(self.render_symbol(symbol))
-        return ws.stream_ohlc()
-
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
         ws = _CoinbaseWS(self.render_symbol(symbol))
         return ws.stream_trades()
 
+    def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        raise NotImplementedError("Coinbase live OHLC stream is not implemented")
+
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
-        ws = _CoinbaseWS(self.render_symbol(symbol))
-        return ws.stream_orderbook()
+        raise NotImplementedError("Coinbase live order book stream is not implemented")
 
 
 class _CoinbaseWS(WebSocketBase):
@@ -213,14 +212,6 @@ class _CoinbaseWS(WebSocketBase):
                 except Exception:
                     continue
 
-    async def stream_ohlc(self) -> AsyncIterator[OHLCBar]:
-        return
-        yield
-
     async def stream_trades(self) -> AsyncIterator[Trade]:
         async for item in self.stream():
             yield item
-
-    async def stream_orderbook(self) -> AsyncIterator[OrderBookSnapshot]:
-        return
-        yield
