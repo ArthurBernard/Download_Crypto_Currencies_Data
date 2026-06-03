@@ -9,9 +9,11 @@
 </div>
 
 <div class="card" style="margin-top:.5rem">
-  <h2 style="margin-top:0">Migrate timestamps</h2>
-  <p class="muted">Convert existing v2 Parquet files from second-scale to nanosecond timestamps.
-  Run dry-run first to preview what would change.</p>
+  <h2 style="margin-top:0">Migrate v2 → v3</h2>
+  <p class="muted">Upgrade legacy v2 Parquet files to the v3 schema: rename
+  <code>quoteVolume</code>→<code>quote_volume</code>, drop <code>weightedAverage</code>,
+  add a <code>trades</code> column, and rescale second timestamps to nanoseconds.
+  Idempotent and never drops rows. Run dry-run first to preview.</p>
   <div class="row" style="gap:.5rem">
     <button onclick="migrate(true)">Dry run</button>
     <button class="danger" onclick="confirmMigrate()">Migrate (irreversible)</button>
@@ -76,7 +78,7 @@ async function migrate(dryRun) {
 }
 
 function confirmMigrate() {
-  if (confirm('Migrate all Parquet files to nanosecond timestamps? This is irreversible without a backup.')) {
+  if (confirm('Migrate all legacy v2 Parquet files to the v3 schema? This is irreversible without a backup.')) {
     migrate(false);
   }
 }

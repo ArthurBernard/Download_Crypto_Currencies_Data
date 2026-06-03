@@ -5,7 +5,10 @@
   <h1 style="margin:0">Inventory</h1>
   <button onclick="openModal('bf-modal')">＋ Backfill…</button>
 </div>
-<p class="muted">All stored datasets with their time range. Click a row's <em>Backfill</em> button to top-up missing history.</p>
+<p class="muted">Everything stored on disk under <code>data_path</code>, grouped by exchange —
+including imported or historical data, <strong>independently of your configured jobs</strong>.
+Rows tagged <span class="ok">● job</span> are covered by a job in the config; the others are
+just data you happen to have. Click <em>Backfill</em> to extend a dataset's history.</p>
 
 <div id="inv-content"><span class="muted">Loading…</span></div>
 
@@ -95,6 +98,15 @@ function onStartChange() {
 async function loadInventory() {
   try {
     const { datasets } = await api('GET', '/api/inventory');
+    // Which datasets are actually covered by a configured job?
+    let jobKeys = new Set();
+    try {
+      const { jobs } = await api('GET', '/api/jobs');
+      for (const j of jobs) {
+        if (j.enabled === false) continue;
+        jobKeys.add(`${j.exchange}|${j.symbol.replace('/','-')}|${j.data_type}`);
+      }
+    } catch (_) {}
     if (!datasets.length) {
       document.getElementById('inv-content').innerHTML =
         `<div class="card" style="text-align:center;padding:2rem">
@@ -117,8 +129,10 @@ async function loadInventory() {
       </thead><tbody>`;
       for (const d of ds) {
         const sym = d.pair.replace(/-/, '/');
+        const isJob = jobKeys.has(`${d.exchange}|${d.pair}|${d.data_type}`);
+        const tag = isJob ? ' <span class="ok" style="font-size:.7em" title="covered by a configured job">● job</span>' : '';
         html += `<tr>
-          <td><strong>${escapeHtml(d.pair)}</strong></td>
+          <td><strong>${escapeHtml(d.pair)}</strong>${tag}</td>
           <td>${escapeHtml(d.data_type)}</td>
           <td>${d.span ?? '-'}</td>
           <td class="muted">${(d.rows ?? 0).toLocaleString()}</td>
