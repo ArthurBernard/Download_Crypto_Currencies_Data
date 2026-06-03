@@ -73,7 +73,10 @@ class WebSocketBase:
         delay = _INITIAL_DELAY
         while not self._stop.is_set():
             try:
-                async with websockets.connect(self.url) as ws:
+                # close_timeout keeps shutdown snappy: without it the closing
+                # handshake blocks ~10s on stop/cancel (a "Stop" button that
+                # appears frozen). 1s is plenty for a clean close.
+                async with websockets.connect(self.url, close_timeout=1) as ws:
                     delay = _INITIAL_DELAY
                     await self.on_connect(ws)
                     async for raw in ws:

@@ -38,6 +38,7 @@ async def paginate_forward(
     window_s: int,
     max_per_request: int,
     *,
+    align_s: int | None = None,
     emit_progress: Callable[[int, int], None] | None = None,
 ) -> AsyncIterator[T]:
     """Paginate forward from *start_ns* to *end_ns* in fixed time windows.
@@ -54,11 +55,18 @@ async def paginate_forward(
         on each step regardless of how many items the page returned.
     max_per_request : int
         Passed as *limit* to each ``fetch_page`` call.
+    align_s : int or None
+        Granularity to snap *start_ns* to (e.g. the candle span). Defaults to
+        ``window_s``; snapping to the *window* would pull the start back by up
+        to a whole window (e.g. ~41 days for 1h candles), fetching data the
+        caller never asked for. Snap to the bar instead so the requested start
+        is honoured.
     emit_progress : callable or None
         Called with ``(windows_done, windows_total)`` after each page.
     """
     window_ns = window_s * NS
-    cur = align_ns(start_ns, window_s) if window_s >= 60 else start_ns
+    snap = align_s if align_s is not None else window_s
+    cur = align_ns(start_ns, snap) if snap >= 60 else start_ns
     total_windows = max(1, (end_ns - cur + window_ns - 1) // window_ns)
     done = 0
 
@@ -135,10 +143,13 @@ async def paginate_ohlc(
         Candle interval in seconds — used to compute the page window.
     """
     max_per = cap.max_per_request or 1000
-    # Window = span * max_per_request so each call fills exactly one page.
+    # Window = span * max_per_request so each call fills exactly one page, but
+    # snap the start to the bar (span) — not the window — so the requested start
+    # is honoured rather than pulled back by up to one whole window.
     window_s = span * max_per
     async for bar in paginate_forward(
-        fetch_page, start_ns, end_ns, window_s, max_per, emit_progress=emit_progress
+        fetch_page, start_ns, end_ns, window_s, max_per,
+        align_s=span, emit_progress=emit_progress,
     ):
         yield bar
 

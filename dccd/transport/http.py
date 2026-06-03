@@ -50,17 +50,30 @@ class AsyncHTTPClient:
         self._timeout = timeout
         self._headers = headers or {}
         self._client: httpx.AsyncClient | None = None
+        # Adapters share one AsyncHTTPClient and wrap each call in
+        # ``async with self._http``. With two concurrent operations on the same
+        # exchange (e.g. "run all jobs", or a scheduled job overlapping a manual
+        # one) the first to finish would otherwise close the shared httpx client
+        # mid-flight for the other ("Cannot send a request, as the client has
+        # been closed"). Reference-count the context so the client is created on
+        # first entry and closed only when the last concurrent user exits. Safe
+        # under asyncio: the counter is mutated without intervening awaits.
+        self._depth = 0
 
     async def __aenter__(self) -> "AsyncHTTPClient":
-        self._client = httpx.AsyncClient(
-            timeout=self._timeout,
-            headers=self._headers,
-            follow_redirects=True,
-        )
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=self._timeout,
+                headers=self._headers,
+                follow_redirects=True,
+            )
+        self._depth += 1
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        if self._client:
+        self._depth -= 1
+        if self._depth <= 0 and self._client:
+            self._depth = 0
             await self._client.aclose()
             self._client = None
 
