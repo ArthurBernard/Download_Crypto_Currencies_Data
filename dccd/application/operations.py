@@ -177,11 +177,13 @@ async def backfill(
     total_written = 0
     prov_src = f"{target.exchange}:rest"
 
-    # Mutable counter shared between the progress callback and the flush loop.
-    _rows_counter: list[int] = [0]
+    # Counts every item received from the paginator, including unflushed ones.
+    # Updated per-item so the progress callback always reflects actual progress
+    # (not just post-flush checkpoints).
+    _collected: list[int] = [0]
 
     def _on_progress(done: int, total: int) -> None:
-        _emit_progress(events, runs_store, run_id, done, total, _rows_counter[0])
+        _emit_progress(events, runs_store, run_id, done, total, _collected[0])
 
     try:
         adapter = registry.get(target.exchange)
@@ -214,14 +216,11 @@ async def backfill(
                 if stop_event and stop_event.is_set():
                     break
                 bars.append(bar)
+                _collected[0] += 1
                 if len(bars) >= _FLUSH_BATCH:
-                    n = await _flush(store, ds, bars, prov_src)
-                    total_written += n
-                    _rows_counter[0] = total_written
+                    total_written += await _flush(store, ds, bars, prov_src)
 
-            n = await _flush(store, ds, bars, prov_src)
-            total_written += n
-            _rows_counter[0] = total_written
+            total_written += await _flush(store, ds, bars, prov_src)
 
         elif target.data_type == DataType.TRADES:
             if not isinstance(adapter, TradesHistory):
@@ -245,14 +244,11 @@ async def backfill(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(trade)
+                _collected[0] += 1
                 if len(batch) >= _FLUSH_BATCH:
-                    n = await _flush(store, ds, batch, prov_src)
-                    total_written += n
-                    _rows_counter[0] = total_written
+                    total_written += await _flush(store, ds, batch, prov_src)
 
-            n = await _flush(store, ds, batch, prov_src)
-            total_written += n
-            _rows_counter[0] = total_written
+            total_written += await _flush(store, ds, batch, prov_src)
 
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookSnapshotREST):
