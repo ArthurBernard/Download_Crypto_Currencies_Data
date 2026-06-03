@@ -40,15 +40,34 @@ Interfaces: CLI · HTTP API · Web UI · Python Client
 
 ## Supported exchanges
 
-| Exchange | OHLC REST | Trades REST | Book | WebSocket |
-|----------|-----------|-------------|------|-----------|
-| Binance  | ✅ full   | ✅ full     | ✅   | ✅ |
-| Coinbase | ✅ full (300/req) | ⚠️ recent | ✅ | ✅ |
-| Kraken   | ⚠️ 720 recent | ✅ full  | ✅   | ✅ |
-| Bybit    | ✅ full   | ❌ WS only  | ✅   | ✅ |
-| OKX      | ✅ full   | ✅ full     | ✅   | ✅ |
-| Bitfinex | ✅ full   | ✅ full     | ✅   | ✅ |
-| BitMEX   | ✅ full (4 spans) | ✅ full | ✅ | ✅ |
+| Exchange | OHLC REST | Trades REST | Book REST | WebSocket (live) |
+|----------|-----------|-------------|-----------|------------------|
+| Binance  | ✅ full   | ✅ full     | ✅   | OHLC · trades · book |
+| Coinbase | ✅ full (300/req) | ⚠️ recent only | ✅ | trades |
+| Kraken   | ⚠️ 720 recent | ✅ full  | ✅   | OHLC · trades · book |
+| Bybit    | ✅ full   | ❌ no spot history | ✅   | OHLC · trades · book |
+| OKX      | ✅ full   | ✅ full     | ✅   | OHLC · trades · book |
+| Bitfinex | ✅ full   | ✅ full     | ✅   | OHLC · trades |
+| BitMEX   | ✅ full (4 spans) | ✅ full | ✅ | OHLC · trades · book |
+
+Trades REST is **cursor-paginated**: a backfill drains the full window, not just
+the first capped page. `⚠️ recent only` means the exchange exposes no deep trade
+history through the JSON API (a deep request is rejected early, not silently
+truncated). The **WebSocket** column lists only channels with a real
+implementation — undeclared channels are rejected with `NoCapability` rather
+than running an empty stream.
+
+### OHLC field fidelity
+
+Not every exchange returns every OHLC field natively. Missing fields are stored
+as `null` (never fabricated):
+
+| Exchange | `quote_volume` | `trades` (count) |
+|----------|----------------|------------------|
+| Binance  | ✅ native      | ✅ native |
+| Bybit / OKX | ✅ native   | — null |
+| Kraken   | ✅ (vwap × volume, exact) | ✅ native |
+| Coinbase / Bitfinex / BitMEX | — null | — null |
 
 ## Installation
 

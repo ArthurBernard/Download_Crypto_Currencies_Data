@@ -1,223 +1,52 @@
------------------------------------------
- CLI Reference (:mod:`dccd.daemon.cli`)
------------------------------------------
+=============
+CLI Reference
+=============
 
-The ``dccd`` command-line interface requires the daemon extra:
-
-.. code-block:: bash
-
-   pip install dccd[daemon]
-
-.. tip::
-
-   All commands accept ``--config PATH`` to specify the config file.  When
-   omitted, ``dccd`` looks for ``./config.yml`` then falls back to
-   ``$XDG_CONFIG_HOME/dccd/config.yml`` (default ``~/.config/dccd/config.yml``).
-
-----
-
-dccd validate
--------------
-
-Check that a config file is valid before using it:
+The ``dccd`` command line is a thin Typer wrapper over the application layer.
+The daemon/UI commands need the extra:
 
 .. code-block:: bash
 
-   dccd validate --config config.yml
+   pip install "dccd[daemon]"
 
-Exits with code 0 on success, non-zero on validation errors.  Run this after
-every edit to ``config.yml``.
+All commands accept ``--config / -c`` to point at a YAML config; without it the
+config is resolved from ``./config.yml`` then ``$XDG_CONFIG_HOME/dccd/config.yml``.
 
-----
+Commands
+========
 
-dccd backfill
--------------
+``dccd backfill``
+   One-off historical download.
 
-Download missing historical OHLCV data for all configured pairs:
+   .. code-block:: bash
 
-.. code-block:: bash
+      dccd backfill -e binance -s BTC/USDT -t ohlc --span 3600 --start last
+      dccd backfill -e okx -s BTC/USDT -t trades --start 2024-01-01
 
-   # All exchanges and pairs in the config
-   dccd backfill --config config.yml
+   Options: ``--exchange/-e``, ``--symbol/-s``, ``--type/-t``
+   (``ohlc``/``trades``/``orderbook``), ``--span`` (seconds, OHLC only),
+   ``--start`` (``last``/``origin``/ISO date/ns). With no ``-e``/``-s`` it runs
+   every ``backfill`` job in the config.
 
-   # Single exchange
-   dccd backfill --config config.yml --exchange binance
+``dccd stream``
+   Start every ``stream`` job defined in the config (Ctrl-C to stop).
 
-   # Single pair
-   dccd backfill --config config.yml --exchange binance --pairs BTC/USDT
+``dccd start``
+   Full daemon: scheduler + supervised streams + web UI. ``--host`` / ``--port``
+   override the UI bind address.
 
-   # Parallel downloads (one thread per exchange)
-   dccd backfill --config config.yml --parallel
+``dccd ui``
+   Serve only the web UI / HTTP API (no scheduler).
 
-Options:
+``dccd migrate``
+   Migrate legacy v2 Parquet files to the v3 schema. ``--dry-run`` (default)
+   previews; ``--no-dry-run`` applies. Idempotent, never drops rows.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
+``dccd inventory``
+   List stored datasets and their file counts.
 
-   * - Option
-     - Description
-   * - ``--exchange NAME``
-     - Restrict to one exchange (e.g. ``binance``, ``okx``)
-   * - ``--pairs PAIR``
-     - Restrict to one pair (e.g. ``BTC/USDT``)
-   * - ``--parallel``
-     - Run exchanges in parallel threads
-   * - ``--start DATE``
-     - Override start date (``'2024-01-01'`` or Unix timestamp)
-   * - ``--end DATE``
-     - Override end date
+``dccd status``
+   Show the most recent job runs from the runs database.
 
-----
-
-dccd collect
-------------
-
-Run WebSocket streams defined under ``stream_jobs:`` in the config:
-
-.. code-block:: bash
-
-   dccd collect --config config.yml
-
-Streams run until interrupted (``Ctrl+C``).  Each stream reconnects automatically
-after network errors.
-
-----
-
-dccd start
-----------
-
-Start the full daemon: historical scheduler + WebSocket streams + rclone sync:
-
-.. code-block:: bash
-
-   dccd start --config config.yml
-
-This is the main production command.  It combines the APScheduler (histo_jobs)
-and StreamManager (stream_jobs) in a single process.  Use a systemd unit or
-supervisor to keep it running.
-
-.. code-block:: ini
-
-   [Unit]
-   Description=dccd crypto data daemon
-   After=network.target
-
-   [Service]
-   ExecStart=dccd start --config /etc/dccd/config.yml
-   Restart=on-failure
-   RestartSec=30
-
-   [Install]
-   WantedBy=multi-user.target
-
-----
-
-dccd status
------------
-
-Print the current health metrics for all running jobs:
-
-.. code-block:: bash
-
-   dccd status --config config.yml
-
-   # Machine-readable JSON (pipe to jq or Grafana)
-   dccd status --config config.yml --json
-
-Sample output:
-
-.. code-block:: text
-
-   Job                                       rows   errors  last_run
-   ----------------------------------------  -----  ------  --------------------
-   binance / BTC-USDT / 3600                 8760       0   2026-05-27 12:00:00
-   okx / ETH-USDT / 3600                     8752       1   2026-05-27 12:00:00
-
-----
-
-dccd add
---------
-
-Add a new pair to a histo_job entry and re-validate the config:
-
-.. code-block:: bash
-
-   dccd add --exchange binance --pair BTC-USDT --span 3600
-
-----
-
-dccd remove
------------
-
-Remove a pair from a histo_job.  If it was the last pair, the whole job entry
-is removed:
-
-.. code-block:: bash
-
-   dccd remove --exchange binance --pair BTC-USDT --span 3600
-
-----
-
-dccd inventory
---------------
-
-Scan ``data_path`` and print a table of all stored data with date range, row
-count, and gap count per series:
-
-.. code-block:: bash
-
-   dccd inventory --config config.yml
-
-   # Filter by exchange
-   dccd inventory --config config.yml --exchange kraken
-
-Sample output:
-
-.. code-block:: text
-
-   Exchange  Pair      Span   Type    Start       End         Rows    Gaps
-   --------  --------  -----  ------  ----------  ----------  ------  ----
-   binance   BTC-USDT  3600   ohlc    2024-01-01  2026-05-27  20160      0
-   kraken    BTC-USD   3600   ohlc    2023-06-01  2026-05-27  25848      3
-
-----
-
-dccd ui
--------
-
-Serve the web UI (dashboard, inventory, jobs, logs, config, storage) in a
-browser.  Requires the ``ui`` extra:
-
-.. code-block:: bash
-
-   pip install dccd[daemon,ui]
-
-   # Standalone (monitoring/control only — no collection)
-   dccd ui --config config.yml
-
-   # Override the bind address / port from settings.ui_host / ui_port
-   dccd ui --config config.yml --host 0.0.0.0 --port 9000
-
-By default the UI binds to ``127.0.0.1:8080`` (local only).  When the ``ui``
-extra is installed, ``dccd start`` also serves the UI automatically on the same
-address, alongside the scheduler and streams.
-
-To expose the UI on a network, set ``settings.ui_host: 0.0.0.0`` **and** a
-``settings.ui_auth_token`` (a Bearer token required on every request); visit
-``http://HOST:PORT/?token=YOUR_TOKEN`` once to store it in a cookie.
-
-----
-
-Shell auto-completion
----------------------
-
-Install tab-completion once per shell:
-
-.. code-block:: bash
-
-   dccd --install-completion bash    # or zsh / fish
-
-After restarting the shell (or sourcing the rc file), pressing ``Tab`` completes
-subcommand names, ``--exchange`` values, and ``--pairs`` values.
-
+``dccd validate``
+   Validate the config file and report the number of job specs.

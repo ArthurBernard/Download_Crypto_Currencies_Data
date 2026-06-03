@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 class SourceRegistry:
     """Maps exchange names to source adapter instances.
 
-    Usage
-    -----
+    Examples
+    --------
     >>> reg = SourceRegistry()
     >>> # reg.register('binance', BinanceSource())
     >>> # src = reg.get_ohlc_history('binance')

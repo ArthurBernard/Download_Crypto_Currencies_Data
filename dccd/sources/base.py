@@ -70,11 +70,9 @@ class OHLCHistory(Source):
 class TradesHistory(Source):
     """Protocol: can fetch historical trade pages via REST.
 
-    Cursor contract
-    ---------------
-    ``fetch_trades_page`` returns ``(trades, next_cursor)``. The *cursor* is an
-    opaque, adapter-defined string used to continue inside the
-    ``[start_ns, end_ns)`` window:
+    Cursor contract: ``fetch_trades_page`` returns ``(trades, next_cursor)``.
+    The *cursor* is an opaque, adapter-defined string used to continue inside
+    the ``[start_ns, end_ns)`` window:
 
     - ``cursor=None`` on the first call — anchor on ``start_ns`` (or ``end_ns``
       for adapters that page backward).

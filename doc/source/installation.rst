@@ -5,7 +5,7 @@ Installation
 Requirements
 ------------
 
-- Python **3.10** or later
+- Python **3.11** or later
 - No API key required — all REST and WebSocket endpoints used by ``dccd`` are public.
 
 Optional system dependency: `rclone <https://rclone.org/>`_ is needed only if you
@@ -38,7 +38,7 @@ Extras summary
      - Adds
    * - *(core)*
      - ``pip install dccd``
-     - ``histo_dl``, ``continuous_dl``, Polars I/O
+     - Python ``Client``, 7 exchange adapters, Polars/Parquet storage
    * - ``daemon``
      - ``pip install dccd[daemon]``
      - CLI (``dccd`` command), APScheduler, PyYAML, Typer, rclone sync

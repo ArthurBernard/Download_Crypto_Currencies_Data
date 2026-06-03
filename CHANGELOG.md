@@ -6,28 +6,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Added (v3 remediation, pre-3.0.0)
 
-- `dccd/daemon/api.py` — web UI and JSON API (FastAPI + Jinja2 + htmx): a thin
-  HTTP layer over the existing daemon modules exposing dashboard (live health
-  metrics), inventory (stored data coverage), jobs (histo/stream list + add/remove
-  + live backfill progress), logs (tail), config (view/validate/save the YAML),
-  and storage (rclone status + manual sync). JSON-only API (`/api/*`) with
-  dumb-shell templates, so the front-end can be swapped without touching the API.
-  Optional Bearer-token auth via `settings.ui_auth_token`
-- `dccd/daemon/cli.py` — `dccd ui`: serve the web UI standalone; the UI is also
-  started automatically (background thread) by `dccd start` when the `[ui]` extra
-  is installed
-- `dccd/daemon/config.py` — `SettingsConfig.ui_host`, `ui_port`, `ui_auth_token`:
-  web UI bind address, port, and optional auth token
-- `dccd/daemon/backfill.py` — `progress_callback` and `stop_event` on
-  `_BackfillBase.run()` / `run_backfill()`: let the UI report live progress and
-  cancel a running backfill (defaults keep CLI behaviour unchanged)
-- `dccd/daemon/stream_manager.py` — `SyncService` writes
-  `{local_path}/.dccd/last_sync.json` after each successful remote push, so the UI
-  can display the last sync time
-- `pyproject.toml` — new optional extra `[ui]` (`fastapi`, `uvicorn[standard]`,
-  `jinja2`); install with `pip install dccd[daemon,ui]`
+- Cursor-based trades pagination: the engine now follows each adapter's opaque
+  cursor until a window is drained, instead of advancing by a fixed time window.
+  Fixes silent loss of >95% of trades on every liquid pair (all exchanges).
+- Complete v2→v3 Parquet migration (`dccd migrate`): renames `quoteVolume`→
+  `quote_volume`, drops `weightedAverage`, adds a `trades` column, rescales
+  second timestamps to nanoseconds — schema-aware and idempotent.
+- Bearer auth on `/api/*` when `settings.ui_auth_token` is set, with a `?token=`
+  fallback for Server-Sent Events; `settings.ui_allow_origins` for opt-in CORS.
+- Public async `Client.read()` and `Client.stream()`; `Client` wires adapters
+  via `service_factory` (single source of truth).
+- Network-marked end-to-end tests (`pytest -m network`) validating pagination
+  against live exchange APIs.
+
+### Fixed
+
+- Data loss on merge: writing into an existing legacy v2 Parquet file no longer
+  silently overwrites it; existing rows are canonicalised and preserved.
+- Provenance is now actually written into the Parquet footer (was computed but
+  dropped).
+- Custom ISO start date for backfill no longer raises (`JobParams.start`).
+- `dccd inventory` no longer crashes on OHLC datasets.
+- Streams with no real implementation (Coinbase OHLC/order book, Bitfinex order
+  book) are rejected with `NoCapability` instead of "running" with zero output.
+- `history="recent"` exchanges (Kraken OHLC) are clamped + warned instead of
+  silently returning wrong deep history.
+- `mypy dccd/` runs and passes again (it had been aborting on the dev Sphinx).
+
+### Changed / Removed
+
+- Honest OHLC fidelity: Coinbase `quote_volume` is null (was a fabricated
+  `close×volume`); Kraken now fills its native trade count.
+- Removed the dead `parallel` backfill flag, the unused `Page` model and the
+  unused bundled `htmx.min.js`.
+
+> The previous `[Unreleased]` entry described the **v2 daemon** web UI
+> (`dccd/daemon/*`, removed in the v3 rewrite) and has been superseded.
 
 ## [2.3.3] - 2026-05-31
 
