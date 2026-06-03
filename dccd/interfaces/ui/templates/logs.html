@@ -2,17 +2,31 @@
 {% block title %}Logs{% endblock %}
 {% block content %}
 <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
-  <h1 style="margin:0">Live events</h1>
+  <h1 style="margin:0">Logs</h1>
   <div class="row" style="gap:.5rem">
-    <button class="ghost" onclick="clearLog()">Clear</button>
+    <button class="ghost" onclick="clearLive()">Clear live</button>
     <span id="conn-status" class="muted">Connecting…</span>
   </div>
 </div>
-<p class="muted">Real-time progress, log, and status events from running jobs.
-  Start a backfill from <a href="/inventory">Inventory</a> to see events here.</p>
 
-<pre id="log-out" style="min-height:60vh">Waiting for events…
+<!-- Live SSE stream -->
+<div class="card" style="margin-bottom:1rem">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.4rem">
+    <strong>Live events</strong>
+    <span class="muted" style="font-size:.8rem">Real-time SSE stream — start a job to see events here</span>
+  </div>
+  <pre id="log-out" style="min-height:8rem;max-height:20rem;overflow-y:auto;background:var(--bg);border:1px solid var(--border);padding:.5rem;border-radius:4px;font-size:.8rem">Waiting for events…
 </pre>
+</div>
+
+<!-- Recent runs with log history -->
+<div>
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+    <strong>Recent runs</strong>
+    <button class="ghost" style="font-size:.8rem" onclick="loadHistory()">Refresh</button>
+  </div>
+  <div id="history-content"><span class="muted">Loading…</span></div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -21,7 +35,7 @@ const statusEl = document.getElementById('conn-status');
 let es;
 let eventCount = 0;
 
-function clearLog() {
+function clearLive() {
   logEl.textContent = 'Waiting for events…\n';
   eventCount = 0;
 }
@@ -29,23 +43,21 @@ function clearLog() {
 function connect() {
   if (es) es.close();
   es = new EventSource('/api/events');
-
-  es.onopen = () => { statusEl.innerHTML = '<span class="ok">Connected</span>'; };
-
+  es.onopen = () => { statusEl.innerHTML = '<span class="ok">● Connected</span>'; };
   es.onmessage = (e) => {
-    if (e.data.startsWith(':')) return; // heartbeat comment
+    if (e.data.startsWith(':')) return;
     try {
       const ev = JSON.parse(e.data);
-      if (eventCount === 0) logEl.textContent = ''; // clear placeholder
+      if (eventCount === 0) logEl.textContent = '';
       eventCount++;
       const ts = new Date().toISOString().slice(11, 19);
       let line = `[${ts}] `;
       if (ev.kind === 'progress') {
-        line += `PROGRESS ${ev.run_id.split('@')[0]}  ${ev.done}/${ev.total} ${ev.unit}`;
+        line += `PROG   ${ev.run_id.slice(0,8)}…  ${ev.done}/${ev.total} ${ev.unit}`;
       } else if (ev.kind === 'log') {
-        line += `${ev.level.toUpperCase().padEnd(5)} ${ev.run_id.split('@')[0]} — ${ev.message}`;
+        line += `${ev.level.toUpperCase().padEnd(5)} ${ev.run_id.slice(0,8)}… — ${ev.message}`;
       } else if (ev.kind === 'status') {
-        line += `STATUS  ${ev.run_id.split('@')[0]} → ${ev.state}`;
+        line += `STATUS ${ev.run_id.slice(0,8)}… → ${ev.state}`;
       } else {
         line += e.data;
       }
@@ -55,13 +67,48 @@ function connect() {
       logEl.textContent += e.data + '\n';
     }
   };
-
   es.onerror = () => {
     statusEl.innerHTML = '<span class="err">Disconnected — retrying…</span>';
     setTimeout(connect, 3000);
   };
 }
 
+async function loadHistory() {
+  try {
+    const { runs } = await api('GET', '/api/runs?limit=30');
+    if (!runs.length) {
+      document.getElementById('history-content').innerHTML = '<span class="muted">No runs yet.</span>';
+      return;
+    }
+    let html = '';
+    for (const r of runs) {
+      const stateClass = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : '';
+      const prog = r.progress ? ` · ${r.progress.done}/${r.progress.total} windows` : '';
+      const rows = r.rows_written ? ` · ${r.rows_written.toLocaleString()} rows` : '';
+      const logs = Array.isArray(r.log_tail) && r.log_tail.length
+        ? r.log_tail.join('\n')
+        : r.error ? `[ERROR] ${r.error}` : '(no logs)';
+      html += `<div class="card" style="margin:.4rem 0;padding:.6rem .8rem">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <span>
+            <span class="${stateClass}">●</span>
+            <strong>${escapeHtml(r.operation)}</strong>
+            <span class="muted">${escapeHtml(r.exchange)}</span> ${escapeHtml(r.symbol)}
+            <span class="muted">${escapeHtml(r.data_type)}</span>
+          </span>
+          <span class="muted" style="font-size:.8em">${fmtNs(r.started_at)}${prog}${rows}</span>
+        </div>
+        <pre style="margin:.4rem 0 0;font-size:.75rem;background:var(--bg);border:1px solid var(--border);padding:.3rem .5rem;border-radius:4px;max-height:6rem;overflow-y:auto">${escapeHtml(logs)}</pre>
+      </div>`;
+    }
+    document.getElementById('history-content').innerHTML = html;
+  } catch (e) {
+    document.getElementById('history-content').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
+  }
+}
+
 connect();
+loadHistory();
+setInterval(loadHistory, 10000);
 </script>
 {% endblock %}

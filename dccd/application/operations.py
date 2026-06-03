@@ -56,11 +56,25 @@ def _emit_progress(
     done: int,
     total: int,
 ) -> None:
-    """Emit progress to the EventBus AND persist it in the RunsStore for polling."""
+    """Emit progress to EventBus AND persist in RunsStore for polling."""
     if events is not None:
         events.progress(done, total)
     if runs_store is not None:
         runs_store.update_progress(run_id, {"done": done, "total": total, "unit": "windows"})
+
+
+def _emit_log(
+    events: RunEvents | None,
+    runs_store: RunsStore | None,
+    run_id: str,
+    msg: str,
+    level: str = "info",
+) -> None:
+    """Emit a log line to EventBus SSE AND persist it in RunsStore log_tail."""
+    if events is not None:
+        events.log(msg, level=level)
+    if runs_store is not None:
+        runs_store.append_log(run_id, f"[{level.upper()}] {msg}")
 
 
 async def _flush(
@@ -131,8 +145,8 @@ async def backfill(
             target.exchange, str(target.symbol), target.data_type.value,
             started_at=ns_now(),
         )
+    _emit_log(events, runs_store, run_id, f"Backfill start: {spec.id}")
     if events:
-        events.log(f"Backfill start: {spec.id}")
         events.status("running")
 
     end_ns = ns_now()
@@ -144,8 +158,7 @@ async def backfill(
         else:
             # No data yet — start 30 days back instead of epoch 0.
             start_ns = end_ns - _DEFAULT_LOOKBACK_NS
-            if events:
-                events.log("No existing data — starting from 30 days ago")
+            _emit_log(events, runs_store, run_id, "No existing data — starting from 30 days ago")
     elif params.start == "origin":
         start_ns = 0
     else:
@@ -232,16 +245,16 @@ async def backfill(
     except Exception as exc:
         error_msg = str(exc)
         logger.error("Backfill %s failed: %s", spec.id, exc)
+        _emit_log(events, runs_store, run_id, f"ERROR: {exc}", level="error")
         if events:
-            events.log(f"ERROR: {exc}", level="error")
             events.status("failed")
         if runs_store:
             runs_store.finish_run(run_id, "failed", error=error_msg)
         return {"run_id": run_id, "rows_written": 0, "error": error_msg}
 
     state = "cancelled" if (stop_event and stop_event.is_set()) else "succeeded"
+    _emit_log(events, runs_store, run_id, f"Done: {total_written} rows written")
     if events:
-        events.log(f"Done: {total_written} rows written")
         events.status(state)
     if runs_store:
         runs_store.finish_run(run_id, state, rows_written=total_written)

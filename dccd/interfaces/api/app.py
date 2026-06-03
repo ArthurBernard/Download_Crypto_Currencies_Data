@@ -157,6 +157,9 @@ def create_app(
         stream_specs = [s for s in cfg.all_job_specs() if s.operation == "stream"]
         app.state.scheduler.register_streams(stream_specs)
         app.state.all_specs = cfg.all_job_specs()
+        # Keeps strong references to background tasks so Python's GC doesn't
+        # collect them mid-execution (asyncio only holds a weak ref internally).
+        app.state.bg_tasks: set[asyncio.Task] = set()
 
         yield
         # --- shutdown ---
@@ -177,6 +180,25 @@ def create_app(
     )
 
     # -- state accessors (read from app.state via request) --
+
+    def _spawn(request: Request, coro) -> asyncio.Task:
+        """Create a background task and hold a strong reference to it."""
+        task = asyncio.create_task(coro)
+        bg: set = request.app.state.bg_tasks
+        bg.add(task)
+        task.add_done_callback(bg.discard)
+        return task
+
+    def _parse_run(run: dict) -> dict:
+        """Parse JSON-encoded fields returned from SQLite."""
+        import json as _json
+        for key in ("progress", "log_tail"):
+            if isinstance(run.get(key), str):
+                try:
+                    run[key] = _json.loads(run[key])
+                except Exception:
+                    pass
+        return run
 
     def _cfg(request: Request) -> AppConfig:
         return request.app.state.config
@@ -273,7 +295,7 @@ def create_app(
             except Exception as exc:
                 logger.error("Backfill task %s failed: %s", run_id, exc)
 
-        asyncio.create_task(_run())
+        _spawn(request, _run())
         return {"run_id": run_id, "status": "started"}
 
     @app.get("/api/backfill/{run_id}")
@@ -282,12 +304,12 @@ def create_app(
         run = _runs(request).get_run(run_id)
         if not run:
             raise HTTPException(404, f"Run {run_id!r} not found")
-        return run
+        return _parse_run(run)
 
     @app.get("/api/runs")
     async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
         """List recent job runs."""
-        return {"runs": _runs(request).list_runs(limit=limit)}
+        return {"runs": [_parse_run(r) for r in _runs(request).list_runs(limit=limit)]}
 
     # -----------------------------------------------------------------------
     # Stream control
@@ -371,7 +393,7 @@ def create_app(
             except Exception as exc:
                 logger.error("Job %s run failed: %s", job_id, exc)
 
-        asyncio.create_task(_run())
+        _spawn(request, _run())
         return {"run_id": run_id, "status": "started", "job_id": job_id}
 
     @app.post("/api/jobs/run-all")
@@ -400,7 +422,7 @@ def create_app(
                 except Exception as exc:
                     logger.error("Job %s run failed: %s", s.id, exc)
 
-            asyncio.create_task(_run())
+            _spawn(request, _run())
 
         return {"started": len(run_ids), "runs": run_ids}
 
