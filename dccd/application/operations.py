@@ -73,6 +73,7 @@ async def backfill(
     runs_store: RunsStore | None = None,
     events: RunEvents | None = None,
     stop_event: asyncio.Event | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Backfill historical data from a source to the Parquet store.
 
@@ -104,7 +105,8 @@ async def backfill(
     target = spec.target
     params = spec.params
     ds = _make_dataset_id(target)
-    run_id = f"{spec.id}@{int(time.time() * NS)}"
+    if run_id is None:
+        run_id = f"{spec.id}@{int(time.time() * NS)}"
 
     if runs_store:
         runs_store.create_run(

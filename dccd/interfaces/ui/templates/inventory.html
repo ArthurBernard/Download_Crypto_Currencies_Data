@@ -3,42 +3,59 @@
 {% block content %}
 <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
   <h1 style="margin:0">Inventory</h1>
-  <button onclick="openModal('bf-modal')">Backfill…</button>
+  <button onclick="openModal('bf-modal')">＋ Backfill…</button>
 </div>
-<p class="muted">All stored datasets. Click "Backfill" on a row to download missing history.</p>
+<p class="muted">All stored datasets. Use the button above or the row buttons to trigger a backfill.</p>
 
 <div id="inv-content"><span class="muted">Loading…</span></div>
 
 <!-- Backfill modal -->
 <div class="modal-bg" id="bf-modal">
-  <div class="modal">
+  <div class="modal" style="min-width:380px">
     <button class="modal-close" onclick="closeModal('bf-modal')">×</button>
     <h2 style="margin:0 0 1rem">Backfill</h2>
-    <div class="row" style="flex-direction:column;gap:.5rem;align-items:stretch">
-      <input id="bf-exchange" placeholder="Exchange (e.g. binance)" style="width:100%">
-      <input id="bf-symbol"   placeholder="Symbol (e.g. BTC/USDT)"  style="width:100%">
-      <div class="row">
-        <select id="bf-type" style="flex:1">
-          <option value="ohlc">OHLC</option>
-          <option value="trades">Trades</option>
-          <option value="orderbook">Order Book</option>
-        </select>
-        <input id="bf-span" placeholder="Span (s, e.g. 3600)" style="flex:1">
+    <div style="display:grid;gap:.5rem">
+      <div class="row" style="gap:.5rem">
+        <div style="flex:1">
+          <label style="font-size:.8rem;color:var(--muted)">Exchange *</label>
+          <input id="bf-exchange" placeholder="binance" style="width:100%;margin-top:.2rem">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:.8rem;color:var(--muted)">Symbol *</label>
+          <input id="bf-symbol" placeholder="BTC/USDT" style="width:100%;margin-top:.2rem">
+        </div>
       </div>
-      <select id="bf-start">
-        <option value="last">Resume (last stored)</option>
-        <option value="origin">From origin</option>
-      </select>
-      <label class="row" style="gap:.4rem">
-        <input type="checkbox" id="bf-parallel"> Parallel pairs
+      <div class="row" style="gap:.5rem">
+        <div style="flex:1">
+          <label style="font-size:.8rem;color:var(--muted)">Data type</label>
+          <select id="bf-type" style="width:100%;margin-top:.2rem">
+            <option value="ohlc">OHLC</option>
+            <option value="trades">Trades</option>
+            <option value="orderbook">Order Book</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="font-size:.8rem;color:var(--muted)">Span (s) — OHLC only</label>
+          <input id="bf-span" placeholder="e.g. 3600" style="width:100%;margin-top:.2rem">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:.8rem;color:var(--muted)">Start</label>
+        <select id="bf-start" style="width:100%;margin-top:.2rem">
+          <option value="last">Resume from last stored bar</option>
+          <option value="origin">From origin (full history)</option>
+        </select>
+      </div>
+      <label class="row" style="gap:.4rem;font-size:.9rem">
+        <input type="checkbox" id="bf-parallel"> Run pairs in parallel
       </label>
     </div>
     <div class="row" style="margin-top:1rem;gap:.5rem">
-      <button onclick="launchBackfill()">Launch</button>
+      <button id="bf-launch-btn" onclick="launchBackfill()">Launch</button>
       <button class="ghost" onclick="closeModal('bf-modal')">Cancel</button>
     </div>
-    <div id="bf-status" style="margin-top:.8rem"></div>
-    <div id="bf-progress" style="margin-top:.5rem"></div>
+    <div id="bf-status" style="margin-top:.8rem;padding:.5rem;border-radius:4px;display:none"></div>
+    <div id="bf-progress" style="margin-top:.4rem;font-size:.85rem;color:var(--muted)"></div>
   </div>
 </div>
 {% endblock %}
@@ -48,7 +65,12 @@ async function loadInventory() {
   try {
     const { datasets } = await api('GET', '/api/inventory');
     if (!datasets.length) {
-      document.getElementById('inv-content').innerHTML = '<span class="muted">No datasets yet.</span>';
+      document.getElementById('inv-content').innerHTML =
+        `<div class="card" style="text-align:center;padding:2rem">
+          <div class="muted" style="font-size:1.1rem">No datasets stored yet.</div>
+          <div class="muted" style="margin:.5rem 0 1rem">Use <strong>＋ Backfill…</strong> above to download your first data.</div>
+          <button onclick="openModal('bf-modal')">＋ Start first backfill</button>
+        </div>`;
       return;
     }
     // Group by exchange
@@ -59,19 +81,20 @@ async function loadInventory() {
     }
     let html = '';
     for (const [ex, ds] of Object.entries(byExchange)) {
-      html += `<h2>${escapeHtml(ex)}
-        <button style="font-size:.75rem;padding:.2rem .5rem;margin-left:.5rem"
-          onclick='prefillModal(${attrJson(ex)}, "", "ohlc", null)'>Backfill all ${escapeHtml(ex)}</button>
+      html += `<h2 style="display:flex;align-items:center;gap:.5rem">${escapeHtml(ex)}
+        <button style="font-size:.75rem;padding:.2rem .5rem"
+          onclick='prefillModal(${attrJson(ex)}, "", "ohlc", null)'>Backfill all…</button>
       </h2>`;
       html += `<table><thead><tr><th>Pair</th><th>Type</th><th>Span</th><th>Files</th><th></th></tr></thead><tbody>`;
       for (const d of ds) {
+        const sym = d.pair.replace(/-/, '/');
         html += `<tr>
           <td>${escapeHtml(d.pair)}</td>
           <td>${escapeHtml(d.data_type)}</td>
           <td>${d.span ?? '-'}</td>
           <td>${d.files}</td>
           <td><button style="font-size:.75rem;padding:.2rem .5rem"
-            onclick='prefillModal(${attrJson(ex)}, ${attrJson(d.pair.replace("-","/"))}, ${attrJson(d.data_type)}, ${d.span??'null'})'>Backfill</button></td>
+            onclick='prefillModal(${attrJson(ex)}, ${attrJson(sym)}, ${attrJson(d.data_type)}, ${JSON.stringify(d.span)})'>Backfill</button></td>
         </tr>`;
       }
       html += '</tbody></table>';
@@ -83,13 +106,22 @@ async function loadInventory() {
 }
 
 function prefillModal(exchange, symbol, dataType, span) {
-  document.getElementById('bf-exchange').value = exchange;
-  document.getElementById('bf-symbol').value = symbol;
-  document.getElementById('bf-type').value = dataType;
-  document.getElementById('bf-span').value = span ?? '';
-  document.getElementById('bf-status').innerHTML = '';
-  document.getElementById('bf-progress').innerHTML = '';
+  document.getElementById('bf-exchange').value = exchange || '';
+  document.getElementById('bf-symbol').value  = symbol || '';
+  document.getElementById('bf-type').value    = dataType || 'ohlc';
+  document.getElementById('bf-span').value    = (span != null) ? span : '';
+  setStatusEl('', '');
+  document.getElementById('bf-progress').textContent = '';
   openModal('bf-modal');
+}
+
+function setStatusEl(msg, kind) {
+  const el = document.getElementById('bf-status');
+  if (!msg) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.style.background = kind === 'err' ? 'rgba(248,81,73,.15)' : 'rgba(63,185,80,.12)';
+  el.style.border = `1px solid ${kind === 'err' ? 'var(--err)' : 'var(--ok)'}`;
+  el.innerHTML = `<span class="${kind || 'ok'}">${escapeHtml(msg)}</span>`;
 }
 
 let bfRunId = null;
@@ -103,20 +135,31 @@ async function launchBackfill() {
   const start    = document.getElementById('bf-start').value;
   const parallel = document.getElementById('bf-parallel').checked;
 
-  if (!exchange || !symbol) { toast('Exchange and symbol are required.', 'err'); return; }
+  if (!exchange) { setStatusEl('Exchange is required.', 'err'); return; }
+  if (!symbol)   { setStatusEl('Symbol is required (e.g. BTC/USDT).', 'err'); return; }
+  if (dataType === 'ohlc' && !spanVal) {
+    setStatusEl('Span is required for OHLC (e.g. 3600 for 1h).', 'err');
+    return;
+  }
 
   const payload = { exchange, symbol, data_type: dataType, start, parallel };
   if (spanVal) payload.span = parseInt(spanVal, 10);
 
-  document.getElementById('bf-status').innerHTML = '<span class="muted">Starting…</span>';
+  const btn = document.getElementById('bf-launch-btn');
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  setStatusEl('', '');
 
   try {
     const result = await api('POST', '/api/backfill', payload);
     bfRunId = result.run_id;
-    document.getElementById('bf-status').innerHTML = `<span class="ok">Started (${escapeHtml(bfRunId)})</span>`;
+    setStatusEl(`Started — run ${bfRunId.split('@')[0]}`, 'ok');
+    btn.textContent = 'Running…';
     startPolling();
   } catch (e) {
-    document.getElementById('bf-status').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
+    setStatusEl(e.message, 'err');
+    btn.disabled = false;
+    btn.textContent = 'Launch';
   }
 }
 
@@ -126,14 +169,22 @@ function startPolling() {
     if (!bfRunId) return;
     try {
       const run = await api('GET', '/api/backfill/' + encodeURIComponent(bfRunId));
-      const prog = run.progress ? ` (${run.progress.done}/${run.progress.total} ${run.progress.unit})` : '';
+      const prog = run.progress ? ` — ${run.progress.done}/${run.progress.total} ${run.progress.unit}` : '';
       document.getElementById('bf-progress').innerHTML =
-        `State: <span class="${run.state==='succeeded'?'ok':run.state==='failed'?'err':''}">${escapeHtml(run.state)}</span>${prog} · ${run.rows_written} rows`;
+        `<span class="${run.state==='succeeded'?'ok':run.state==='failed'?'err':''}">${escapeHtml(run.state)}</span>${prog} · ${run.rows_written ?? 0} rows`;
       if (['succeeded','failed','cancelled'].includes(run.state)) {
         clearInterval(bfPollInterval);
-        loadInventory();
+        const btn = document.getElementById('bf-launch-btn');
+        btn.disabled = false;
+        btn.textContent = 'Launch';
+        if (run.state === 'succeeded') {
+          toast(`Backfill done — ${run.rows_written} rows written`, 'ok');
+          loadInventory();
+        } else {
+          toast(run.error || 'Backfill failed', 'err');
+        }
       }
-    } catch (e) {}
+    } catch (e) { /* 404 means run not yet created — keep polling */ }
   }, 2000);
 }
 

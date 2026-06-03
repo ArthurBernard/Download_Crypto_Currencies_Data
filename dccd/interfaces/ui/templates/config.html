@@ -5,19 +5,55 @@
   <h1 style="margin:0">Config</h1>
   <div class="row" style="gap:.5rem">
     <button onclick="saveConfig()">Save</button>
+    <button class="ghost" onclick="loadConfig()">Reload</button>
     <span id="save-status" style="font-size:.85rem"></span>
   </div>
 </div>
-<p class="muted">Edit the raw YAML-equivalent config as JSON. Changes are written to disk when a config path is set.</p>
 
-<textarea id="cfg-editor" spellcheck="false"></textarea>
+<div class="row" style="gap:1rem;align-items:flex-start">
+  <div style="flex:2">
+    <p class="muted">Edit configuration as JSON. Click <strong>Save</strong> to persist to disk.</p>
+    <textarea id="cfg-editor" spellcheck="false" style="min-height:55vh;font-size:.85rem"></textarea>
+  </div>
+  <div class="card" style="flex:1;min-width:240px;font-size:.82rem">
+    <strong>Jobs format</strong>
+    <p class="muted" style="margin:.4rem 0">Add entries to the <code>jobs</code> array:</p>
+    <pre style="font-size:.78rem;max-height:none;padding:.6rem">{
+  "exchange": "binance",
+  "pairs": ["BTC/USDT"],
+  "data_type": "ohlc",
+  "span": 3600,
+  "trigger_kind": "interval",
+  "every": 3600,
+  "start": "last"
+}</pre>
+    <p class="muted" style="margin:.6rem 0 .2rem"><strong>stream job:</strong></p>
+    <pre style="font-size:.78rem;max-height:none;padding:.6rem">{
+  "exchange": "binance",
+  "pairs": ["BTC/USDT"],
+  "data_type": "trades",
+  "operation": "stream",
+  "trigger_kind": "supervised"
+}</pre>
+    <p class="muted" style="margin:.6rem 0 .2rem"><strong>data_type values:</strong></p>
+    <ul style="margin:.2rem 0;padding-left:1.2rem">
+      <li><code>ohlc</code> — requires <code>span</code> in seconds</li>
+      <li><code>trades</code></li>
+      <li><code>orderbook</code></li>
+    </ul>
+    <p class="muted" style="margin:.6rem 0 .2rem"><strong>Exchanges:</strong></p>
+    <code>binance coinbase kraken bybit okx bitfinex bitmex</code>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
 async function loadConfig() {
+  const el = document.getElementById('save-status');
   try {
     const cfg = await api('GET', '/api/config');
     document.getElementById('cfg-editor').value = JSON.stringify(cfg, null, 2);
+    el.innerHTML = '';
   } catch (e) {
     document.getElementById('cfg-editor').value = '// Error loading config: ' + e.message;
   }

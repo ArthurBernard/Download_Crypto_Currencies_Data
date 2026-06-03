@@ -8,17 +8,23 @@
     <span id="conn-status" class="muted">Connecting…</span>
   </div>
 </div>
-<p class="muted">Real-time progress, log, and status events from running jobs (SSE stream).</p>
+<p class="muted">Real-time progress, log, and status events from running jobs.
+  Start a backfill from <a href="/inventory">Inventory</a> to see events here.</p>
 
-<pre id="log-out" style="min-height:60vh"></pre>
+<pre id="log-out" style="min-height:60vh">Waiting for events…
+</pre>
 {% endblock %}
 {% block scripts %}
 <script>
 const logEl = document.getElementById('log-out');
 const statusEl = document.getElementById('conn-status');
 let es;
+let eventCount = 0;
 
-function clearLog() { logEl.textContent = ''; }
+function clearLog() {
+  logEl.textContent = 'Waiting for events…\n';
+  eventCount = 0;
+}
 
 function connect() {
   if (es) es.close();
@@ -27,21 +33,23 @@ function connect() {
   es.onopen = () => { statusEl.innerHTML = '<span class="ok">Connected</span>'; };
 
   es.onmessage = (e) => {
+    if (e.data.startsWith(':')) return; // heartbeat comment
     try {
       const ev = JSON.parse(e.data);
+      if (eventCount === 0) logEl.textContent = ''; // clear placeholder
+      eventCount++;
       const ts = new Date().toISOString().slice(11, 19);
       let line = `[${ts}] `;
       if (ev.kind === 'progress') {
-        line += `PROGRESS ${ev.run_id} ${ev.done}/${ev.total} ${ev.unit}`;
+        line += `PROGRESS ${ev.run_id.split('@')[0]}  ${ev.done}/${ev.total} ${ev.unit}`;
       } else if (ev.kind === 'log') {
-        line += `${ev.level.toUpperCase().padEnd(5)} ${ev.run_id} — ${ev.message}`;
+        line += `${ev.level.toUpperCase().padEnd(5)} ${ev.run_id.split('@')[0]} — ${ev.message}`;
       } else if (ev.kind === 'status') {
-        line += `STATUS  ${ev.run_id} → ${ev.state}`;
+        line += `STATUS  ${ev.run_id.split('@')[0]} → ${ev.state}`;
       } else {
         line += e.data;
       }
       logEl.textContent += line + '\n';
-      // Auto-scroll
       logEl.scrollTop = logEl.scrollHeight;
     } catch (_) {
       logEl.textContent += e.data + '\n';
@@ -50,6 +58,7 @@ function connect() {
 
   es.onerror = () => {
     statusEl.innerHTML = '<span class="err">Disconnected — retrying…</span>';
+    setTimeout(connect, 3000);
   };
 }
 

@@ -24,7 +24,6 @@ import asyncio
 import contextlib
 import logging
 import pathlib
-import time
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -209,16 +208,25 @@ def create_app(
 
     @app.post("/api/backfill")
     async def start_backfill(body: BackfillRequest, request: Request) -> dict[str, Any]:
-        """Launch a backfill job asynchronously and return its ``run_id``."""
+        """Launch a backfill job asynchronously and return its ``run_id``.
+
+        The ``run_id`` can be polled via ``GET /api/backfill/{run_id}``.
+        """
         try:
             sym = Symbol.parse(body.symbol)
         except ValueError as e:
             raise HTTPException(400, str(e))
 
+        data_type = DataType(body.data_type)
+
+        # Validate span for OHLC before the task starts — avoids a silent background crash.
+        if data_type == DataType.OHLC and not body.span:
+            raise HTTPException(400, "span is required for data_type='ohlc'")
+
         target = JobTarget(
             exchange=body.exchange,
             symbol=sym,
-            data_type=DataType(body.data_type),
+            data_type=data_type,
             span=body.span,
         )
         spec = JobSpec(
@@ -229,7 +237,13 @@ def create_app(
             params=JobParams(start=body.start, parallel=body.parallel),  # type: ignore[arg-type]
             origin="runtime",
         )
-        run_id = f"backfill:{body.exchange}:{body.symbol}@{int(time.time())}"
+
+        # Generate a URL-safe run_id and pass it into backfill() so both the
+        # API polling endpoint and the RunsStore use the same identifier.
+        # We use a short UUID (no slashes) instead of embedding spec.id which
+        # may contain '/' from the symbol (e.g. BTC/USDT) and would break routing.
+        import uuid as _uuid
+        run_id = str(_uuid.uuid4())
 
         # Capture state objects before creating the task — the Request object
         # is recycled by Starlette after the response is sent.
@@ -241,7 +255,11 @@ def create_app(
         async def _run() -> None:
             from dccd.application.operations import backfill
             evts = bus.for_run(run_id)
-            await backfill(spec, registry=reg, store=store, runs_store=runs_store, events=evts)
+            try:
+                await backfill(spec, registry=reg, store=store,
+                               runs_store=runs_store, events=evts, run_id=run_id)
+            except Exception as exc:
+                logger.error("Backfill task %s failed: %s", run_id, exc)
 
         asyncio.create_task(_run())
         return {"run_id": run_id, "status": "started"}
