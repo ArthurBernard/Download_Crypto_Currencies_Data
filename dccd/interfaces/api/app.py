@@ -89,6 +89,12 @@ class ReadRequest(BaseModel):
     end_ns: int | None = None
 
 
+class JobRunRequest(BaseModel):
+    """Request body for ``POST /api/jobs/run``."""
+
+    job_id: str
+
+
 class MigrateRequest(BaseModel):
     """Request body for ``POST /api/migrate``."""
 
@@ -146,8 +152,14 @@ def create_app(
                 app.state.event_bus,
             )
 
+        # Register stream workers from config so they can be started/stopped
+        # from the UI even in standalone dccd-ui mode (without dccd start).
+        stream_specs = [s for s in cfg.all_job_specs() if s.operation == "stream"]
+        app.state.scheduler.register_streams(stream_specs)
+        app.state.all_specs = cfg.all_job_specs()
+
         yield
-        # --- shutdown (nothing to clean up for now) ---
+        # --- shutdown ---
 
     app = FastAPI(title="dccd v3", version="3.0.0", lifespan=lifespan)
     app.add_middleware(
@@ -311,7 +323,7 @@ def create_app(
     @app.get("/api/jobs")
     async def list_jobs(request: Request) -> dict[str, Any]:
         """List all configured job specs and their current state."""
-        specs = _cfg(request).all_job_specs()
+        specs = getattr(request.app.state, "all_specs", _cfg(request).all_job_specs())
         stream_status = _sched(request).stream_status()
         return {"jobs": [
             {
@@ -327,6 +339,70 @@ def create_app(
             }
             for s in specs
         ]}
+
+    @app.post("/api/jobs/run")
+    async def run_job_now(body: JobRunRequest, request: Request) -> dict[str, Any]:
+        """Trigger an immediate one-shot backfill for a configured job.
+
+        Uses a POST body to avoid URL-routing issues with job IDs that contain
+        slashes (e.g. ``backfill:binance:BTC/USDT:ohlc:3600s``).
+        """
+        import uuid as _uuid
+        job_id = body.job_id
+        specs = getattr(request.app.state, "all_specs", _cfg(request).all_job_specs())
+        spec = next((s for s in specs if s.id == job_id), None)
+        if spec is None:
+            raise HTTPException(404, f"Job {job_id!r} not found")
+        if spec.operation != "backfill":
+            raise HTTPException(400, "Only backfill jobs can be triggered manually; use /api/streams/start for stream jobs")
+
+        run_id = str(_uuid.uuid4())
+        reg = _reg(request)
+        store = _store(request)
+        runs_store = _runs(request)
+        bus = _bus(request)
+
+        async def _run() -> None:
+            from dccd.application.operations import backfill
+            evts = bus.for_run(run_id)
+            try:
+                await backfill(spec, registry=reg, store=store,
+                               runs_store=runs_store, events=evts, run_id=run_id)
+            except Exception as exc:
+                logger.error("Job %s run failed: %s", job_id, exc)
+
+        asyncio.create_task(_run())
+        return {"run_id": run_id, "status": "started", "job_id": job_id}
+
+    @app.post("/api/jobs/run-all")
+    async def run_all_backfill_jobs(request: Request) -> dict[str, Any]:
+        """Trigger an immediate backfill for all enabled backfill jobs."""
+        import uuid as _uuid
+        specs = getattr(request.app.state, "all_specs", _cfg(request).all_job_specs())
+        backfill_specs = [s for s in specs if s.operation == "backfill" and s.enabled]
+
+        run_ids = []
+        reg = _reg(request)
+        store = _store(request)
+        runs_store = _runs(request)
+        bus = _bus(request)
+
+        for spec in backfill_specs:
+            run_id = str(_uuid.uuid4())
+            run_ids.append({"run_id": run_id, "job_id": spec.id})
+
+            async def _run(s=spec, rid=run_id) -> None:
+                from dccd.application.operations import backfill
+                evts = bus.for_run(rid)
+                try:
+                    await backfill(s, registry=reg, store=store,
+                                   runs_store=runs_store, events=evts, run_id=rid)
+                except Exception as exc:
+                    logger.error("Job %s run failed: %s", s.id, exc)
+
+            asyncio.create_task(_run())
+
+        return {"started": len(run_ids), "runs": run_ids}
 
     # -----------------------------------------------------------------------
     # Config

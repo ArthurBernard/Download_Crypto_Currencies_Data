@@ -104,16 +104,35 @@ class Scheduler:
         self._interval_tasks: list[asyncio.Task] = []
         self._running = False
 
+    def register_streams(self, specs: list[JobSpec]) -> None:
+        """Register stream workers from config without starting them.
+
+        Called by the app lifespan so stream jobs appear in ``/api/streams``
+        and can be started/stopped from the UI even in ``dccd ui`` mode.
+        """
+        for spec in specs:
+            if spec.operation == "stream" and spec.enabled and spec.id not in self._streams:
+                worker = _StreamWorker(
+                    spec, self._registry, self._store, self._runs_store, self._events
+                )
+                self._streams[spec.id] = worker
+
+    async def run_now(self, spec: JobSpec) -> None:
+        """Trigger a one-shot backfill for *spec* immediately."""
+        task = asyncio.create_task(self._run_once(spec))
+        self._interval_tasks.append(task)
+
     async def start(self, specs: list[JobSpec]) -> None:
-        """Start all enabled specs."""
+        """Start all enabled specs (full daemon mode)."""
         self._running = True
         for spec in specs:
             if not spec.enabled:
                 continue
             if spec.trigger.kind == "supervised":
-                worker = _StreamWorker(spec, self._registry, self._store, self._runs_store, self._events)
-                self._streams[spec.id] = worker
-                worker.start()
+                if spec.id not in self._streams:
+                    worker = _StreamWorker(spec, self._registry, self._store, self._runs_store, self._events)
+                    self._streams[spec.id] = worker
+                self._streams[spec.id].start()
             elif spec.trigger.kind in ("interval", "cron"):
                 task = asyncio.create_task(self._interval_loop(spec))
                 self._interval_tasks.append(task)

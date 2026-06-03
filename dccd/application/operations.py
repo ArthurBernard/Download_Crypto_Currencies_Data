@@ -34,7 +34,10 @@ __all__ = ["backfill", "stream", "read", "inventory"]
 
 logger = logging.getLogger(__name__)
 
-_FLUSH_BATCH = 10_000  # rows to buffer before writing to Parquet
+_FLUSH_BATCH = 10_000
+# Default lookback when no previous data exists and start="last".
+# Avoids a 56-year paginator run from epoch 0.
+_DEFAULT_LOOKBACK_NS = 30 * 86400 * NS  # 30 days
 
 
 def _make_dataset_id(target: JobTarget) -> DatasetId:
@@ -46,9 +49,18 @@ def _make_dataset_id(target: JobTarget) -> DatasetId:
     )
 
 
-def _emit_progress(events: RunEvents | None, done: int, total: int) -> None:
+def _emit_progress(
+    events: RunEvents | None,
+    runs_store: RunsStore | None,
+    run_id: str,
+    done: int,
+    total: int,
+) -> None:
+    """Emit progress to the EventBus AND persist it in the RunsStore for polling."""
     if events is not None:
         events.progress(done, total)
+    if runs_store is not None:
+        runs_store.update_progress(run_id, {"done": done, "total": total, "unit": "windows"})
 
 
 async def _flush(
@@ -57,7 +69,6 @@ async def _flush(
     batch: list,
     source: str,
 ) -> int:
-    """Write *batch* to *store* and return count written. Clears batch in place."""
     if not batch:
         return 0
     n = await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=source))
@@ -82,19 +93,25 @@ async def backfill(
     spec : JobSpec
         Job specification (``operation='backfill'``).
         ``spec.params.start`` controls the start point:
-        ``'last'`` resumes from the last stored timestamp,
-        ``'origin'`` starts from ts=0,
-        an integer is interpreted as a nanosecond UTC timestamp.
+
+        - ``'last'``: resume from the last stored timestamp.
+          If no data exists yet, defaults to 30 days ago to avoid a
+          multi-decade paginator run from epoch 0.
+        - ``'origin'``: start from the exchange's earliest available data
+          (timestamp 0 — many pages will be empty before the exchange's
+          launch date).
+        - An **ISO-8601 date string** (``'2024-01-01'``) or a nanosecond
+          integer: explicit start timestamp.
+
     registry : SourceRegistry
-        Registered exchange adapters.
     store : ParquetStore
-        Persistent storage backend.
     runs_store : RunsStore or None
-        Optional run-history database.
     events : RunEvents or None
-        Progress/log event sink.
     stop_event : asyncio.Event or None
         Set externally to cancel mid-run cleanly.
+    run_id : str or None
+        Override the auto-generated run ID (used by the API endpoint so
+        the polling URL matches what is stored in RunsStore).
 
     Returns
     -------
@@ -119,16 +136,33 @@ async def backfill(
         events.status("running")
 
     end_ns = ns_now()
+
     if params.start == "last":
         last = store.last_timestamp(ds)
-        start_ns: int = last + 1 if last is not None else 0
+        if last is not None:
+            start_ns: int = last + 1
+        else:
+            # No data yet — start 30 days back instead of epoch 0.
+            start_ns = end_ns - _DEFAULT_LOOKBACK_NS
+            if events:
+                events.log("No existing data — starting from 30 days ago")
     elif params.start == "origin":
         start_ns = 0
     else:
-        start_ns = int(params.start)
+        # ISO date string or nanosecond integer
+        raw = str(params.start)
+        if raw.isdigit():
+            start_ns = int(raw)
+        else:
+            from dccd.domain.timeutils import str_to_ns
+            start_ns = str_to_ns(raw[:10], form="%Y-%m-%d", tz="UTC")
 
     total_written = 0
     prov_src = f"{target.exchange}:rest"
+
+    # Progress callback that updates both the EventBus and the RunsStore.
+    def _on_progress(done: int, total: int) -> None:
+        _emit_progress(events, runs_store, run_id, done, total)
 
     try:
         adapter = registry.get(target.exchange)
@@ -145,14 +179,13 @@ async def backfill(
             span = target.span or 3600
             sym = target.symbol
 
-            # Close over symbol+span so the paginator receives (start_ns, end_ns, limit).
             async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:
                 return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)  # type: ignore[union-attr]
 
             bars: list[OHLCBar] = []
             async for bar in paginate_ohlc(
                 _fetch_ohlc, cap, start_ns, end_ns, span,
-                emit_progress=lambda d, t: _emit_progress(events, d, t),
+                emit_progress=_on_progress,
             ):
                 if stop_event and stop_event.is_set():
                     break
@@ -173,14 +206,13 @@ async def backfill(
 
             sym = target.symbol
 
-            # Close over symbol so the paginator receives (start_ns, end_ns, limit).
             async def _fetch_trades(s_ns: int, e_ns: int, limit: int) -> list[Trade]:
                 return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit)  # type: ignore[union-attr]
 
             batch: list[Trade] = []
             async for trade in paginate_trades(
                 _fetch_trades, cap, start_ns, end_ns,
-                emit_progress=lambda d, t: _emit_progress(events, d, t),
+                emit_progress=_on_progress,
             ):
                 if stop_event and stop_event.is_set():
                     break
@@ -226,19 +258,7 @@ async def stream(
     events: RunEvents | None = None,
     stop_event: asyncio.Event | None = None,
 ) -> None:
-    """Stream live data continuously until *stop_event* is set.
-
-    Parameters
-    ----------
-    spec : JobSpec
-        Job specification (``operation='stream'``).
-    registry : SourceRegistry
-    store : ParquetStore
-    runs_store : RunsStore or None
-    events : RunEvents or None
-    stop_event : asyncio.Event or None
-        Set to stop the stream cleanly.
-    """
+    """Stream live data continuously until *stop_event* is set."""
     from dccd.sources.base import OHLCLive, OrderBookLive, TradesLive
 
     target = spec.target
@@ -319,35 +339,11 @@ def read(
     start_ns: int | None = None,
     end_ns: int | None = None,
 ) -> Any:
-    """Read stored data for *target* in the given nanosecond range.
-
-    Parameters
-    ----------
-    target : JobTarget
-    store : ParquetStore
-    start_ns, end_ns : int or None
-        Nanosecond timestamps bounding the query (inclusive). ``None`` means
-        unbounded.
-
-    Returns
-    -------
-    polars.DataFrame
-    """
+    """Read stored data for *target* in the given nanosecond range."""
     ds = _make_dataset_id(target)
     return store.load(ds, start_ns, end_ns)
 
 
 def inventory(*, store: ParquetStore) -> list[dict[str, Any]]:
-    """Return a list of dataset descriptors for all stored data.
-
-    Parameters
-    ----------
-    store : ParquetStore
-
-    Returns
-    -------
-    list of dict
-        Each dict has keys: ``exchange``, ``pair``, ``data_type``,
-        ``span`` (OHLC only), ``files``.
-    """
+    """Return a list of dataset descriptors for all stored data."""
     return store.inventory()

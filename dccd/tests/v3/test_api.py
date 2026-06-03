@@ -97,6 +97,15 @@ class TestJobsEndpoint:
         assert resp.status_code == 200
         assert resp.json()["jobs"] == []
 
+    def test_run_job_not_found(self, client):
+        resp = client.post("/api/jobs/run", json={"job_id": "nonexistent:job:id"})
+        assert resp.status_code == 404
+
+    def test_run_all_jobs_empty(self, client):
+        resp = client.post("/api/jobs/run-all")
+        assert resp.status_code == 200
+        assert resp.json()["started"] == 0
+
 
 class TestStreamsEndpoint:
     def test_list_streams(self, client):

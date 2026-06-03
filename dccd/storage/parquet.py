@@ -226,16 +226,22 @@ class ParquetStore:
         return intervals
 
     def inventory(self) -> list[dict[str, Any]]:
-        """Return list of dataset info dicts for all stored data."""
+        """Return list of dataset info dicts for all stored data.
+
+        Each entry includes ``min_ts`` / ``max_ts`` (nanoseconds UTC) and
+        ``rows`` so the UI can display the actual data time range.
+        """
         result = []
         for exchange_dir in sorted(self._root.iterdir()):
-            if not exchange_dir.is_dir():
+            if not exchange_dir.is_dir() or exchange_dir.name.startswith("."):
                 continue
             exchange = exchange_dir.name
             for dtype_dir in sorted(exchange_dir.iterdir()):
                 if not dtype_dir.is_dir():
                     continue
                 dtype = dtype_dir.name
+                if dtype not in ("ohlc", "trades", "orderbook"):
+                    continue
                 for pair_dir in sorted(dtype_dir.iterdir()):
                     if not pair_dir.is_dir():
                         continue
@@ -244,25 +250,57 @@ class ParquetStore:
                         for span_dir in sorted(pair_dir.iterdir()):
                             if not span_dir.is_dir():
                                 continue
-                            files = list(span_dir.glob("*.parquet"))
+                            files = sorted(span_dir.glob("*.parquet"))
                             if files:
+                                min_ts, max_ts, rows = self._ts_range(files)
                                 result.append({
                                     "exchange": exchange,
                                     "pair": pair,
                                     "data_type": dtype,
                                     "span": span_dir.name,
                                     "files": len(files),
+                                    "rows": rows,
+                                    "min_ts": min_ts,
+                                    "max_ts": max_ts,
                                 })
                     else:
-                        files = list(pair_dir.glob("*.parquet"))
+                        files = sorted(pair_dir.glob("*.parquet"))
                         if files:
+                            min_ts, max_ts, rows = self._ts_range(files)
                             result.append({
                                 "exchange": exchange,
                                 "pair": pair,
                                 "data_type": dtype,
                                 "files": len(files),
+                                "rows": rows,
+                                "min_ts": min_ts,
+                                "max_ts": max_ts,
                             })
         return result
+
+    def _ts_range(
+        self, files: list[pathlib.Path]
+    ) -> tuple[int | None, int | None, int]:
+        """Return (min_ts_ns, max_ts_ns, total_rows) across a list of parquet files."""
+        min_ts: int | None = None
+        max_ts: int | None = None
+        total_rows = 0
+        for f in files:
+            try:
+                df = pl.read_parquet(f, columns=["TS"])
+                n = len(df)
+                if n == 0:
+                    continue
+                total_rows += n
+                fmin = int(df["TS"].min())
+                fmax = int(df["TS"].max())
+                if min_ts is None or fmin < min_ts:
+                    min_ts = fmin
+                if max_ts is None or fmax > max_ts:
+                    max_ts = fmax
+            except Exception:
+                pass
+        return min_ts, max_ts, total_rows
 
     def _is_year_complete(self, ds: DatasetId, year: int) -> bool:
         if ds.span is None:

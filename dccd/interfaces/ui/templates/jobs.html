@@ -1,10 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Jobs{% endblock %}
 {% block content %}
-<h1>Jobs</h1>
-<p class="muted">Configured job specs from config.yml. Edit the Config page to add or remove jobs.</p>
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+  <h1 style="margin:0">Jobs</h1>
+  <div class="row" style="gap:.5rem">
+    <button onclick="runAll()">▶ Run all now</button>
+    <a href="/config" style="text-decoration:none"><button class="ghost">Edit config…</button></a>
+  </div>
+</div>
+<p class="muted">Configured jobs from config.yml. Click <strong>Run now</strong> for an immediate one-shot backfill, or Start/Stop to control live streams.</p>
 
 <div id="jobs-content"><span class="muted">Loading…</span></div>
+<div id="run-status" style="margin-top:.5rem"></div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -12,26 +19,34 @@ async function loadJobs() {
   try {
     const { jobs } = await api('GET', '/api/jobs');
     if (!jobs.length) {
-      document.getElementById('jobs-content').innerHTML = '<span class="muted">No jobs configured.</span>';
+      document.getElementById('jobs-content').innerHTML =
+        `<div class="card" style="text-align:center;padding:1.5rem">
+          <div class="muted">No jobs configured.</div>
+          <div class="muted" style="margin:.4rem 0 .8rem">Add jobs in the <a href="/config">Config</a> page.</div>
+        </div>`;
       return;
     }
-
     const backfillJobs = jobs.filter(j => j.operation === 'backfill');
     const streamJobs   = jobs.filter(j => j.operation === 'stream');
-
     let html = '';
 
     if (backfillJobs.length) {
       html += '<h2>Backfill / Update jobs</h2>';
-      html += '<table><thead><tr><th>Exchange</th><th>Symbol</th><th>Type</th><th>Span</th><th>Trigger</th><th>Enabled</th></tr></thead><tbody>';
+      html += `<table><thead><tr>
+        <th>Exchange</th><th>Symbol</th><th>Type</th><th>Span</th><th>Trigger</th><th>Enabled</th><th></th>
+      </tr></thead><tbody>`;
       for (const j of backfillJobs) {
         html += `<tr>
           <td>${escapeHtml(j.exchange)}</td>
           <td>${escapeHtml(j.symbol)}</td>
           <td>${escapeHtml(j.data_type)}</td>
           <td>${j.span ?? '-'}</td>
-          <td>${escapeHtml(j.trigger)}</td>
+          <td class="muted">${escapeHtml(j.trigger)}</td>
           <td>${j.enabled ? '<span class="ok">✓</span>' : '<span class="muted">✗</span>'}</td>
+          <td>
+            <button style="font-size:.75rem;padding:.2rem .5rem"
+              onclick='runJob(${attrJson(j.id)})' id='btn-${escapeHtml(j.id)}'>Run now</button>
+          </td>
         </tr>`;
       }
       html += '</tbody></table>';
@@ -39,20 +54,19 @@ async function loadJobs() {
 
     if (streamJobs.length) {
       html += '<h2>Stream jobs</h2>';
-      html += '<table><thead><tr><th>Exchange</th><th>Symbol</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody>';
+      html += `<table><thead><tr>
+        <th>Exchange</th><th>Symbol</th><th>Type</th><th>Status</th><th></th>
+      </tr></thead><tbody>`;
       for (const j of streamJobs) {
-        const running = j.running;
-        html += `<tr>
+        html += `<tr id="stream-row-${escapeHtml(j.id)}">
           <td>${escapeHtml(j.exchange)}</td>
           <td>${escapeHtml(j.symbol)}</td>
           <td>${escapeHtml(j.data_type)}</td>
-          <td><span class="${running ? 'ok' : 'muted'}">${running ? 'Running' : 'Stopped'}</span></td>
-          <td>
-            ${running
-              ? `<button class="ghost danger" style="font-size:.8rem" onclick='stopStream(${attrJson(j.id)})'>Stop</button>`
-              : `<button style="font-size:.8rem" onclick='startStream(${attrJson(j.id)})'>Start</button>`
-            }
-          </td>
+          <td><span class="${j.running ? 'ok' : 'muted'}">${j.running ? '● Running' : '○ Stopped'}</span></td>
+          <td>${j.running
+            ? `<button class="ghost" style="font-size:.75rem;padding:.2rem .5rem" onclick='stopStream(${attrJson(j.id)})'>Stop</button>`
+            : `<button style="font-size:.75rem;padding:.2rem .5rem" onclick='startStream(${attrJson(j.id)})'>Start</button>`
+          }</td>
         </tr>`;
       }
       html += '</tbody></table>';
@@ -64,14 +78,49 @@ async function loadJobs() {
   }
 }
 
+async function runJob(jobId) {
+  const btn = document.getElementById('btn-' + jobId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
+  try {
+    const { run_id } = await api('POST', '/api/jobs/run', { job_id: jobId });
+    toast(`Job started (${run_id.slice(0,8)}…)`, 'ok');
+    // Poll until done
+    const poll = setInterval(async () => {
+      try {
+        const run = await api('GET', '/api/backfill/' + run_id);
+        if (['succeeded','failed','cancelled'].includes(run.state)) {
+          clearInterval(poll);
+          if (btn) { btn.disabled = false; btn.textContent = 'Run now'; }
+          toast(run.state === 'succeeded'
+            ? `Done — ${(run.rows_written||0).toLocaleString()} rows`
+            : run.error || 'Failed', run.state === 'succeeded' ? 'ok' : 'err');
+        }
+      } catch (_) {}
+    }, 2000);
+  } catch (e) {
+    toast(e.message, 'err');
+    if (btn) { btn.disabled = false; btn.textContent = 'Run now'; }
+  }
+}
+
+async function runAll() {
+  try {
+    const result = await api('POST', '/api/jobs/run-all');
+    toast(`${result.started} job(s) started`, 'ok');
+    document.getElementById('run-status').innerHTML =
+      `<span class="ok">${result.started} job(s) started. Check Logs or Inventory for progress.</span>`;
+    setTimeout(loadJobs, 1000);
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 async function startStream(specId) {
   try {
     await api('POST', '/api/streams/start', { spec_id: specId });
     toast('Stream started', 'ok');
     setTimeout(loadJobs, 500);
-  } catch (e) {
-    toast(e.message, 'err');
-  }
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 async function stopStream(specId) {
@@ -79,9 +128,7 @@ async function stopStream(specId) {
     await api('POST', '/api/streams/stop', { spec_id: specId });
     toast('Stream stopped', 'ok');
     setTimeout(loadJobs, 500);
-  } catch (e) {
-    toast(e.message, 'err');
-  }
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 loadJobs();
