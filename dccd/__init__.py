@@ -48,15 +48,7 @@ class Client:
 
     async def __aenter__(self) -> "Client":
         from dccd.application.config import AppConfig, load_config, resolve_config_path
-        from dccd.sources.binance import BinanceSource
-        from dccd.sources.bitfinex import BitfinexSource
-        from dccd.sources.bitmex import BitMEXSource
-        from dccd.sources.bybit import BybitSource
-        from dccd.sources.coinbase import CoinbaseSource
-        from dccd.sources.kraken import KrakenSource
-        from dccd.sources.okx import OKXSource
-        from dccd.sources.registry import SourceRegistry
-        from dccd.storage.parquet import ParquetStore
+        from dccd.application.service_factory import build_registry, build_store
 
         try:
             path = resolve_config_path(self._config_path)
@@ -64,15 +56,9 @@ class Client:
         except FileNotFoundError:
             self._config = AppConfig()
 
-        self._store = ParquetStore(self._config.settings.data_path)
-        self._registry = SourceRegistry()
-        self._registry.register("binance", BinanceSource())
-        self._registry.register("coinbase", CoinbaseSource())
-        self._registry.register("kraken", KrakenSource())
-        self._registry.register("bybit", BybitSource())
-        self._registry.register("okx", OKXSource())
-        self._registry.register("bitfinex", BitfinexSource())
-        self._registry.register("bitmex", BitMEXSource())
+        # Single source of truth for adapter wiring — same as CLI and API.
+        self._store = build_store(self._config.settings.data_path)
+        self._registry = build_registry()
         return self
 
     async def __aexit__(self, *args) -> None:
@@ -115,6 +101,46 @@ class Client:
             origin="runtime",
         )
         return await do_backfill(spec, registry=self._registry, store=self._store)
+
+    async def stream(self, exchange: str, symbol: str, data_type: str = "trades",
+                     span: int | None = None, depth: int | None = None,
+                     snapshot_interval: int | None = None,
+                     stop_event: "object | None" = None) -> None:
+        """Stream live data until *stop_event* is set.
+
+        Parameters mirror :meth:`backfill`; ``stop_event`` is an
+        :class:`asyncio.Event` used to stop the stream cleanly.
+        """
+        from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
+        from dccd.application.operations import stream as do_stream
+        from dccd.domain.symbol import Symbol
+        from dccd.domain.types import DataType
+
+        target = JobTarget(exchange=exchange, symbol=Symbol.parse(symbol),
+                           data_type=DataType(data_type), span=span)
+        spec = JobSpec(
+            id=JobSpec.make_id("stream", target),
+            operation="stream",
+            target=target,
+            trigger=Trigger(kind="supervised"),
+            params=JobParams(depth=depth, snapshot_interval=snapshot_interval),
+            origin="runtime",
+        )
+        await do_stream(spec, registry=self._registry, store=self._store,
+                        stop_event=stop_event)  # type: ignore[arg-type]
+
+    def read(self, exchange: str, symbol: str, data_type: str = "ohlc",
+             span: int | None = None, start_ns: int | None = None,
+             end_ns: int | None = None):
+        """Read stored data for a dataset as a Polars DataFrame."""
+        from dccd.application.jobs import JobTarget
+        from dccd.application.operations import read as do_read
+        from dccd.domain.symbol import Symbol
+        from dccd.domain.types import DataType
+
+        target = JobTarget(exchange=exchange, symbol=Symbol.parse(symbol),
+                           data_type=DataType(data_type), span=span)
+        return do_read(target, store=self._store, start_ns=start_ns, end_ns=end_ns)
 
     def inventory(self) -> list:
         """List stored datasets."""

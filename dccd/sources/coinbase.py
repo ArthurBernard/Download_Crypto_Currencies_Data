@@ -113,7 +113,10 @@ class CoinbaseSource(
                 low=float(e[1]),
                 close=float(e[4]),
                 volume=float(e[5]),
-                quote_volume=float(e[4]) * float(e[5]),
+                # Coinbase candles carry no quote volume; close×volume would be
+                # a fabricated approximation, so leave it null (see fidelity
+                # matrix in the docs).
+                quote_volume=None,
             )
             for e in data
             if isinstance(e, (list, tuple)) and len(e) >= 6

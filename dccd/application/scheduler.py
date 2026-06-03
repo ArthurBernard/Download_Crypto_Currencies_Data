@@ -104,6 +104,13 @@ class Scheduler:
         self._interval_tasks: list[asyncio.Task] = []
         self._running = False
 
+    def _track(self, task: asyncio.Task) -> None:
+        """Hold a strong reference to *task* and drop it once it completes."""
+        self._interval_tasks.append(task)
+        task.add_done_callback(
+            lambda t: self._interval_tasks.remove(t) if t in self._interval_tasks else None
+        )
+
     def register_streams(self, specs: list[JobSpec]) -> None:
         """Register stream workers from config without starting them.
 
@@ -119,8 +126,7 @@ class Scheduler:
 
     async def run_now(self, spec: JobSpec) -> None:
         """Trigger a one-shot backfill for *spec* immediately."""
-        task = asyncio.create_task(self._run_once(spec))
-        self._interval_tasks.append(task)
+        self._track(asyncio.create_task(self._run_once(spec)))
 
     async def start(self, specs: list[JobSpec]) -> None:
         """Start all enabled specs (full daemon mode)."""
@@ -134,13 +140,11 @@ class Scheduler:
                     self._streams[spec.id] = worker
                 self._streams[spec.id].start()
             elif spec.trigger.kind in ("interval", "cron"):
-                task = asyncio.create_task(self._interval_loop(spec))
-                self._interval_tasks.append(task)
+                self._track(asyncio.create_task(self._interval_loop(spec)))
             elif spec.trigger.kind == "once":
-                # Store the task reference so it is tracked by stop() and cannot
-                # be silently GC'd by the event loop before it finishes.
-                task = asyncio.create_task(self._run_once(spec))
-                self._interval_tasks.append(task)
+                # Track the task so stop() can cancel it and the event loop
+                # cannot silently GC it before it finishes.
+                self._track(asyncio.create_task(self._run_once(spec)))
 
     async def stop(self) -> None:
         """Stop all running jobs."""

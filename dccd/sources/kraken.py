@@ -148,8 +148,11 @@ class KrakenSource(
                 low=float(e[3]),
                 close=float(e[4]),
                 volume=float(e[6]),
-                # e[5] is VWAP; quote_volume is approximated as volume × vwap
+                # Kraken row: [time, o, h, l, c, vwap, volume, count]. VWAP =
+                # quote_volume / base_volume, so vwap × volume is the exact quote
+                # volume (not an approximation); count is the trade count.
                 quote_volume=float(e[6]) * float(e[5]) if e[5] else None,
+                trades=int(e[7]) if len(e) > 7 else None,
             )
             for e in rows
         ]

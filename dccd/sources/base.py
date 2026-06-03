@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Generic, TypeVar
-
-from pydantic import BaseModel
 
 from dccd.domain.capability import Capability
 from dccd.domain.records import OHLCBar, OrderBookSnapshot, Trade
@@ -20,21 +17,7 @@ __all__ = [
     "OHLCLive",
     "TradesLive",
     "OrderBookLive",
-    "Page",
 ]
-
-T = TypeVar("T")
-
-
-class Page(BaseModel, Generic[T]):
-    """Paginated result with opaque cursor.
-
-    The cursor is encoded/decoded inside the adapter; application code
-    treats it as an opaque string.
-    """
-
-    items: list[T]
-    next_cursor: str | None = None
 
 
 class Source:
