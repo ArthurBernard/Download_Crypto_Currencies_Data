@@ -173,6 +173,20 @@ class TestStreamCapabilityHonesty:
             await stream(spec, registry=reg, store=None)
 
 
+class TestBitfinexSymbol:
+    """Bitfinex labels Tether UST and uses the colon form for long symbols."""
+
+    def test_usdt_maps_to_ust(self):
+        from dccd.sources.bitfinex import _bfx_symbol
+        # tBTCUSDT returns [] (HTTP 200) — must map to tBTCUST.
+        assert _bfx_symbol(Symbol(base="BTC", quote="USDT")) == "tBTCUST"
+        assert _bfx_symbol(Symbol(base="BTC", quote="USD")) == "tBTCUSD"
+
+    def test_long_symbol_uses_colon(self):
+        from dccd.sources.bitfinex import _bfx_symbol
+        assert _bfx_symbol(Symbol(base="DUSK", quote="USDT")) == "tDUSK:UST"
+
+
 class TestSourceRegistry:
     def setup_method(self):
         self.reg = SourceRegistry()

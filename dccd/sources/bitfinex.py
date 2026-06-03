@@ -39,8 +39,17 @@ _BITFINEX_SPANS = {
 
 
 def _bfx_symbol(s: Symbol) -> str:
-    """Bitfinex trading pair format: tBTCUSD."""
-    return f"t{s.base}{s.quote}"
+    """Bitfinex trading pair format, e.g. ``tBTCUSD``.
+
+    Bitfinex labels Tether as ``UST`` (not ``USDT``), so ``BTC/USDT`` must map to
+    ``tBTCUST`` — ``tBTCUSDT`` returns an empty list (HTTP 200), which would
+    otherwise look like "0 rows" with no error. Symbols whose base or quote is
+    longer than 3 characters use the ``tBASE:QUOTE`` form.
+    """
+    quote = "UST" if s.quote == "USDT" else s.quote
+    if len(s.base) > 3 or len(quote) > 3:
+        return f"t{s.base}:{quote}"
+    return f"t{s.base}{quote}"
 
 
 class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, TradesLive, OrderBookLive):

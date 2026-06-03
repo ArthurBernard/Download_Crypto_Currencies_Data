@@ -158,14 +158,18 @@ def cmd_start(
     bus = EventBus()
     scheduler = Scheduler(registry, store, runs_store, bus)
 
-    stream_specs = [s for s in cfg.all_job_specs() if s.operation == "stream"]
+    # Run *all* configured jobs, not just streams: the scheduler routes each by
+    # trigger kind (supervised → stream worker; interval/cron → periodic
+    # backfill; once → one-shot). Passing only streams meant configured
+    # scheduled backfills never ran under `dccd start`.
+    all_specs = cfg.all_job_specs()
     fastapi_app = create_app(config_path=cfg_path, config=cfg, scheduler=scheduler)
 
     ui_host = host or cfg.settings.ui_host
     ui_port = port or cfg.settings.ui_port
 
     async def _run():
-        await scheduler.start(stream_specs)
+        await scheduler.start(all_specs)
         typer.echo(f"Daemon running — UI at http://{ui_host}:{ui_port}")
         server = uvicorn.Server(uvicorn.Config(fastapi_app, host=ui_host, port=ui_port, log_level="warning"))
         try:
