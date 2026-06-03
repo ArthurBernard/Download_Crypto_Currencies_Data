@@ -87,9 +87,12 @@ include = ["dccd*"]
 "dccd.daemon.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
 
 [tool.pytest.ini_options]
-addopts = "--exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing"
+addopts = "--exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing -m 'not network'"
 testpaths = ["dccd"]
 asyncio_mode = "auto"
+markers = [
+    "network: end-to-end tests that hit real exchange APIs (run with -m network)",
+]
 
 [tool.ruff]
 target-version = "py311"
