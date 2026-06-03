@@ -69,7 +69,15 @@
       <button class="ghost" onclick="closeModal('bf-modal')">Cancel</button>
     </div>
     <div id="bf-status" style="margin-top:.8rem;padding:.5rem;border-radius:4px;display:none"></div>
-    <div id="bf-progress" style="margin-top:.4rem;font-size:.85rem"></div>
+    <div id="bf-progress-wrap" style="display:none;margin-top:.6rem">
+      <div class="row" style="justify-content:space-between;font-size:.82rem;margin-bottom:.2rem">
+        <span id="bf-prog-label">Starting…</span>
+        <span id="bf-prog-pct" class="muted"></span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px">
+        <div id="bf-prog-bar" style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .4s"></div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -136,9 +144,12 @@ function prefillModal(exchange, symbol, dataType, span) {
   document.getElementById('bf-start').value    = 'last';
   document.getElementById('bf-date-row').style.display = 'none';
   setStatusEl('', '');
-  document.getElementById('bf-progress').textContent = '';
+  document.getElementById('bf-progress-wrap').style.display = 'none';
+  document.getElementById('bf-prog-bar').style.width = '0%';
   document.getElementById('bf-launch-btn').disabled = false;
   document.getElementById('bf-launch-btn').textContent = 'Launch';
+  bfRunId = null;
+  if (bfPollInterval) { clearInterval(bfPollInterval); bfPollInterval = null; }
   onBfTypeChange();
   openModal('bf-modal');
 }
@@ -153,6 +164,26 @@ function setStatusEl(msg, kind) {
 }
 
 let bfRunId = null, bfPollInterval = null;
+
+function showProgress(run) {
+  const wrap = document.getElementById('bf-progress-wrap');
+  const label = document.getElementById('bf-prog-label');
+  const pct   = document.getElementById('bf-prog-pct');
+  const bar   = document.getElementById('bf-prog-bar');
+  wrap.style.display = '';
+  const prog = run.progress;
+  const rows = (prog?.rows ?? run.rows_written ?? 0).toLocaleString();
+  if (prog && prog.total > 0) {
+    const p = Math.round(prog.done / prog.total * 100);
+    bar.style.width = p + '%';
+    label.innerHTML = `<span class="${run.state === 'succeeded' ? 'ok' : run.state === 'failed' ? 'err' : ''}">${escapeHtml(run.state)}</span> — ${prog.done}/${prog.total} pages · ${rows} rows`;
+    pct.textContent = p + '%';
+  } else {
+    bar.style.width = run.state === 'succeeded' ? '100%' : '5%';
+    label.innerHTML = `<span class="${run.state === 'succeeded' ? 'ok' : run.state === 'failed' ? 'err' : ''}">${escapeHtml(run.state)}</span> · ${rows} rows`;
+    pct.textContent = '';
+  }
+}
 
 async function launchBackfill() {
   const exchange = document.getElementById('bf-exchange').value;
@@ -180,7 +211,7 @@ async function launchBackfill() {
   try {
     const { run_id } = await api('POST', '/api/backfill', payload);
     bfRunId = run_id;
-    setStatusEl('Started — polling for progress…', 'ok');
+    setStatusEl('', '');
     btn.textContent = 'Running…';
     startPolling();
   } catch (e) {
@@ -191,26 +222,29 @@ async function launchBackfill() {
 
 function startPolling() {
   if (bfPollInterval) clearInterval(bfPollInterval);
-  bfPollInterval = setInterval(async () => {
-    if (!bfRunId) return;
-    try {
-      const run = await api('GET', '/api/backfill/' + bfRunId);
-      const prog = run.progress ? ` — ${run.progress.done}/${run.progress.total} pages` : '';
-      document.getElementById('bf-progress').innerHTML =
-        `<span class="${run.state==='succeeded'?'ok':run.state==='failed'?'err':''}">${escapeHtml(run.state)}</span>${prog} · ${(run.rows_written||0).toLocaleString()} rows`;
-      if (['succeeded','failed','cancelled'].includes(run.state)) {
-        clearInterval(bfPollInterval);
-        const btn = document.getElementById('bf-launch-btn');
-        btn.disabled = false; btn.textContent = 'Launch';
-        if (run.state === 'succeeded') {
-          toast(`Done — ${(run.rows_written||0).toLocaleString()} rows written`, 'ok');
-          loadInventory();
-        } else if (run.state === 'failed') {
-          toast(run.error || 'Backfill failed', 'err');
-        }
+  // Poll immediately, then every 1s
+  _doPoll();
+  bfPollInterval = setInterval(_doPoll, 1000);
+}
+
+async function _doPoll() {
+  if (!bfRunId) return;
+  try {
+    const run = await api('GET', '/api/backfill/' + bfRunId);
+    showProgress(run);
+    if (['succeeded','failed','cancelled'].includes(run.state)) {
+      clearInterval(bfPollInterval);
+      const btn = document.getElementById('bf-launch-btn');
+      btn.disabled = false; btn.textContent = 'Launch';
+      if (run.state === 'succeeded') {
+        toast(`Done — ${(run.rows_written||0).toLocaleString()} rows written`, 'ok');
+        loadInventory();
+      } else if (run.state === 'failed') {
+        toast(run.error || 'Backfill failed', 'err');
+        setStatusEl(run.error || 'Failed', 'err');
       }
-    } catch (_) { /* run not yet in store, keep polling */ }
-  }, 2000);
+    }
+  } catch (_) { /* run not yet in store, keep polling */ }
 }
 
 loadInventory();

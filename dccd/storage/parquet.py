@@ -252,12 +252,20 @@ class ParquetStore:
                                 continue
                             files = sorted(span_dir.glob("*.parquet"))
                             if files:
+                                from dccd.domain.timeutils import str_to_span
+                                span_s = str_to_span(span_dir.name)
+                                if span_s is None:
+                                    # Fallback: parse "3600s" format
+                                    try:
+                                        span_s = int(span_dir.name.rstrip("s"))
+                                    except ValueError:
+                                        span_s = None
                                 min_ts, max_ts, rows = self._ts_range(files)
                                 result.append({
                                     "exchange": exchange,
                                     "pair": pair,
                                     "data_type": dtype,
-                                    "span": span_dir.name,
+                                    "span": span_s,
                                     "files": len(files),
                                     "rows": rows,
                                     "min_ts": min_ts,

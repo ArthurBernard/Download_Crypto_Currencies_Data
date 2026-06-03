@@ -39,12 +39,16 @@ async function load() {
     const el = document.getElementById('active-runs');
     if (active.length) {
       el.innerHTML = active.map(r => {
-        const prog = r.progress ? `${r.progress.done}/${r.progress.total} pages` : 'in progress';
+        const prog = r.progress;
+        const pct  = prog && prog.total > 0 ? Math.round(prog.done / prog.total * 100) : null;
+        const rows = (prog?.rows ?? r.rows_written ?? 0).toLocaleString();
+        const progTxt = prog ? `${prog.done}/${prog.total} pages` : 'starting…';
         return `<div class="card" style="border-left:3px solid var(--accent);padding:.6rem 1rem;margin:.3rem 0">
-          <div class="row" style="justify-content:space-between">
+          <div class="row" style="justify-content:space-between;margin-bottom:.3rem">
             <span><span class="ok">●</span> <strong>${escapeHtml(r.operation)}</strong> ${escapeHtml(r.exchange)} ${escapeHtml(r.symbol)} ${escapeHtml(r.data_type)}</span>
-            <span class="muted" style="font-size:.82em">${prog} · ${(r.rows_written||0).toLocaleString()} rows</span>
+            <span class="muted" style="font-size:.82em">${progTxt} · ${rows} rows${pct !== null ? ` · ${pct}%` : ''}</span>
           </div>
+          ${pct !== null ? `<div style="height:4px;background:var(--border);border-radius:2px"><div style="height:100%;background:var(--accent);border-radius:2px;width:${pct}%"></div></div>` : ''}
         </div>`;
       }).join('');
     } else {

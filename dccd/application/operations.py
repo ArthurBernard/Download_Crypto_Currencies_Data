@@ -55,12 +55,16 @@ def _emit_progress(
     run_id: str,
     done: int,
     total: int,
+    rows_so_far: int = 0,
 ) -> None:
     """Emit progress to EventBus AND persist in RunsStore for polling."""
     if events is not None:
         events.progress(done, total)
     if runs_store is not None:
-        runs_store.update_progress(run_id, {"done": done, "total": total, "unit": "windows"})
+        runs_store.update_progress(
+            run_id,
+            {"done": done, "total": total, "unit": "windows", "rows": rows_so_far},
+        )
 
 
 def _emit_log(
@@ -173,9 +177,11 @@ async def backfill(
     total_written = 0
     prov_src = f"{target.exchange}:rest"
 
-    # Progress callback that updates both the EventBus and the RunsStore.
+    # Mutable counter shared between the progress callback and the flush loop.
+    _rows_counter: list[int] = [0]
+
     def _on_progress(done: int, total: int) -> None:
-        _emit_progress(events, runs_store, run_id, done, total)
+        _emit_progress(events, runs_store, run_id, done, total, _rows_counter[0])
 
     try:
         adapter = registry.get(target.exchange)
@@ -209,9 +215,13 @@ async def backfill(
                     break
                 bars.append(bar)
                 if len(bars) >= _FLUSH_BATCH:
-                    total_written += await _flush(store, ds, bars, prov_src)
+                    n = await _flush(store, ds, bars, prov_src)
+                    total_written += n
+                    _rows_counter[0] = total_written
 
-            total_written += await _flush(store, ds, bars, prov_src)
+            n = await _flush(store, ds, bars, prov_src)
+            total_written += n
+            _rows_counter[0] = total_written
 
         elif target.data_type == DataType.TRADES:
             if not isinstance(adapter, TradesHistory):
@@ -236,9 +246,13 @@ async def backfill(
                     break
                 batch.append(trade)
                 if len(batch) >= _FLUSH_BATCH:
-                    total_written += await _flush(store, ds, batch, prov_src)
+                    n = await _flush(store, ds, batch, prov_src)
+                    total_written += n
+                    _rows_counter[0] = total_written
 
-            total_written += await _flush(store, ds, batch, prov_src)
+            n = await _flush(store, ds, batch, prov_src)
+            total_written += n
+            _rows_counter[0] = total_written
 
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookSnapshotREST):
