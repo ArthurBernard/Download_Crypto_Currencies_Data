@@ -110,6 +110,53 @@ class TestDefensiveMerge:
         assert df.columns[-2:] == ["quote_volume", "trades"]
 
 
+class TestDedupKey:
+    """Dedup must use the natural key per data type, not TS alone (review fix)."""
+
+    def test_trades_sharing_timestamp_are_kept(self, tmp_path):
+        from dccd.domain.records import Trade
+        store = ParquetStore(tmp_path)
+        ds = DatasetId(exchange="binance", symbol=Symbol(base="BTC", quote="USDT"),
+                       data_type=DataType.TRADES, span=None)
+        ts = 1_704_067_200 * NS
+        trades = [Trade(ts=ts, price=100.0 + i, amount=1.0, side="buy", tid=str(i))
+                  for i in range(5)]  # all same TS, distinct tid
+        store.save(ds, trades)
+        assert len(store.load(ds)) == 5  # TS-only dedup would have kept 1
+        store.save(ds, trades)  # idempotent on tid
+        assert len(store.load(ds)) == 5
+
+    def test_trades_without_tid_use_composite_key(self, tmp_path):
+        from dccd.domain.records import Trade
+        store = ParquetStore(tmp_path)
+        ds = DatasetId(exchange="kraken", symbol=Symbol(base="BTC", quote="USD"),
+                       data_type=DataType.TRADES, span=None)
+        ts = 1_704_067_200 * NS
+        # Kraken has tid=None; distinct price/amount/side must survive.
+        trades = [
+            Trade(ts=ts, price=100.0, amount=1.0, side="buy", tid=None),
+            Trade(ts=ts, price=101.0, amount=1.0, side="buy", tid=None),
+            Trade(ts=ts, price=100.0, amount=2.0, side="sell", tid=None),
+        ]
+        store.save(ds, trades)
+        assert len(store.load(ds)) == 3
+
+    def test_orderbook_levels_share_ts_but_survive(self, tmp_path):
+        from dccd.domain.records import OrderBookLevel, OrderBookSnapshot
+        store = ParquetStore(tmp_path)
+        ds = DatasetId(exchange="binance", symbol=Symbol(base="BTC", quote="USDT"),
+                       data_type=DataType.ORDERBOOK, span=None)
+        snap = OrderBookSnapshot(
+            ts=1_704_067_200 * NS,
+            bids=[OrderBookLevel(price=100.0, amount=1.0),
+                  OrderBookLevel(price=99.0, amount=2.0)],
+            asks=[OrderBookLevel(price=101.0, amount=1.5)],
+        )
+        store.save(ds, [snap])
+        # 3 levels, all sharing one TS — TS-only dedup would collapse to 1.
+        assert len(store.load(ds)) == 3
+
+
 class TestProvenance:
     def test_provenance_round_trip(self, tmp_path):
         store = ParquetStore(tmp_path)

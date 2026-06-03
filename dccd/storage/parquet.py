@@ -414,8 +414,24 @@ class ParquetStore:
                     })
             return pl.DataFrame(rows, schema=_BOOK_SCHEMA)
 
+    def _dedup_subset(self, ds: DatasetId, df: pl.DataFrame) -> list[str]:
+        """Natural dedup key for *ds*. ``TS`` alone is unique only for OHLC.
+
+        Trades collide on TS (exchanges timestamp at ms → many share a ns), so
+        deduping on TS would drop distinct trades; we key on the trade id when
+        present, else a composite. Order-book rows share one TS across every
+        price level, so they key on (TS, side, price).
+        """
+        if ds.data_type == DataType.OHLC:
+            return ["TS"]
+        if ds.data_type == DataType.TRADES:
+            if "tid" in df.columns and df["tid"].null_count() == 0:
+                return ["tid"]
+            return ["TS", "price", "amount", "side"]
+        return ["TS", "side", "price"]  # order book level
+
     def _merge(self, file_path: pathlib.Path, new: pl.DataFrame, ds: DatasetId) -> pl.DataFrame:
-        """Merge new data with existing file, deduplicating on TS.
+        """Merge new data with existing file, deduplicating on the natural key.
 
         The existing file is **canonicalised** before the concat so that legacy
         (v2) files — whose columns differ (``quoteVolume``/``weightedAverage``)
@@ -424,13 +440,10 @@ class ParquetStore:
         worth surfacing, not a reason to drop its rows.
         """
         if not file_path.exists():
-            return new.unique(subset=["TS"], keep="last").sort("TS")
+            return new.unique(subset=self._dedup_subset(ds, new), keep="last").sort("TS")
         existing = canonicalize(pl.read_parquet(file_path), ds.data_type)
-        return (
-            pl.concat([existing, new])
-            .unique(subset=["TS"], keep="last")
-            .sort("TS")
-        )
+        merged = pl.concat([existing, new])
+        return merged.unique(subset=self._dedup_subset(ds, merged), keep="last").sort("TS")
 
     def _write_parquet(
         self,
