@@ -111,7 +111,7 @@ class Client:
             operation="backfill",
             target=target,
             trigger=Trigger(kind="once"),
-            params=JobParams(start=start),  # type: ignore[arg-type]
+            params=JobParams(start=start),
             origin="runtime",
         )
         return await do_backfill(spec, registry=self._registry, store=self._store)

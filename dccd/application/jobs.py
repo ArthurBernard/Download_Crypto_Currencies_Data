@@ -43,8 +43,9 @@ class JobTarget(BaseModel, frozen=True):
 class JobParams(BaseModel):
     """Operation parameters (all optional, per-operation)."""
 
-    start: int | Literal["last", "origin"] = "last"
-    parallel: bool = False
+    # ``start`` accepts the sentinels "last"/"origin", an ISO date string
+    # ("2024-01-01"), or a nanosecond integer — all parsed in operations.backfill.
+    start: int | str = "last"
     depth: int | None = None
     snapshot_interval: int | None = None
     derive_from: DataType | None = None

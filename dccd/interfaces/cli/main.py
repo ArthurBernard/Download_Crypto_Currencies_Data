@@ -40,7 +40,6 @@ def cmd_backfill(
     data_type: str = typer.Option("ohlc", "--type", "-t"),
     span: Optional[int] = typer.Option(None, "--span"),
     start: str = typer.Option("last", "--start"),
-    parallel: bool = typer.Option(False, "--parallel"),
 ) -> None:
     """Backfill historical data for one or all configured jobs."""
     from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
@@ -67,7 +66,7 @@ def cmd_backfill(
             operation="backfill",
             target=target,
             trigger=Trigger(kind="once"),
-            params=JobParams(start=start, parallel=parallel),  # type: ignore[arg-type]
+            params=JobParams(start=start),
             origin="runtime",
         )]
     else:
@@ -209,8 +208,8 @@ def cmd_inventory(
         return
     for d in datasets:
         parts = [d["exchange"], d["pair"], d["data_type"]]
-        if "span" in d:
-            parts.append(d["span"])
+        if d.get("span") is not None:
+            parts.append(f"{d['span']}s")
         typer.echo(f"  {' / '.join(parts)}  ({d['files']} file(s))")
 
 

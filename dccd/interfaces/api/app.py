@@ -69,7 +69,6 @@ class BackfillRequest(BaseModel):
     data_type: str = "ohlc"
     span: int | None = None
     start: str = "last"
-    parallel: bool = False
 
 
 class StreamAction(BaseModel):
@@ -268,7 +267,7 @@ def create_app(
             operation="backfill",
             target=target,
             trigger=Trigger(kind="once"),
-            params=JobParams(start=body.start, parallel=body.parallel),  # type: ignore[arg-type]
+            params=JobParams(start=body.start),
             origin="runtime",
         )
 
@@ -451,6 +450,11 @@ def create_app(
                 yaml.safe_dump(new_cfg.model_dump(), f)
 
         request.app.state.config = new_cfg
+        # Refresh runtime state so /api/jobs and stream control reflect the new
+        # config without a restart (D11): rebuild specs and register new streams.
+        request.app.state.all_specs = new_cfg.all_job_specs()
+        new_streams = [s for s in request.app.state.all_specs if s.operation == "stream"]
+        request.app.state.scheduler.register_streams(new_streams)
         return {"status": "ok"}
 
     # -----------------------------------------------------------------------

@@ -51,7 +51,6 @@ REGISTRY.register(OperationSpec(
         "data_type": "str",
         "span": "int | None",
         "start": "str | int",
-        "parallel": "bool",
     },
     output_schema={"run_id": "str", "rows_written": "int"},
 ))

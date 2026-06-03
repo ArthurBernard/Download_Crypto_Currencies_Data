@@ -149,7 +149,10 @@ class TestJobs:
     def test_job_params_default(self):
         p = JobParams()
         assert p.start == "last"
-        assert p.parallel is False
+
+    def test_job_params_accepts_iso_date(self):
+        # Regression for D6: custom ISO start date must not be rejected.
+        assert JobParams(start="2024-01-01").start == "2024-01-01"
 
     def test_run_state_enum(self):
         assert RunState.RUNNING == "running"
