@@ -10,20 +10,26 @@
 
 ---
 
-## Avancement (2026-06-03)
+## Avancement (2026-06-03) — M1+M2+M3 faits, reste la release
 
-- ✅ **WS-A** — pagination trades par curseur (D1, D4). Commit `0580030`,
-  branche `fix/trades-cursor-pagination`. 7 adapters convertis, garde
-  `history="recent"`. Validation E2E réseau (WS-G) en attente.
-- ✅ **WS-B** — migration v2→v3 complète, fusion défensive, provenance écrite
-  (D2, D3, D5). Commit `a44ba48`, branche `fix/storage-schema-migration`.
-  Dry-run réel : 120 fichiers migreraient proprement, 5 intacts.
-- ⏳ **G2** — migration réelle in-place sur `/home/arthur/data/crypto` :
-  **action mutante, en attente de confirmation utilisateur**.
-- ⬜ WS-C, D, E, F, G3/G4, H — à faire.
+Tout consolidé sur `feat/refonte-v3` (10 commits). Gate : **162 tests verts ·
+`ruff` clean · `mypy` Success (45 fichiers) · doc Sphinx 0 warning**.
 
-Tests : 151 verts · `ruff` clean · `mypy` bloqué par un bug d'env préexistant
-(mypy suit ses imports jusqu'à Sphinx 3.12 — voir note outillage ci-dessous).
+- ✅ **WS-A** — pagination trades par curseur (D1, D4). 7 adapters + garde `history`.
+- ✅ **WS-B** — migration v2→v3 complète, fusion défensive, provenance (D2, D3, D5).
+- ✅ **G2** — migration réelle FAITE et vérifiée (120 fichiers, 0 perte ; backup
+  `crypto.backup-pre-v3-2026-06-03`).
+- ✅ **WS-C** — date custom, inventory, `parallel` retiré, refresh config, streams
+  honnêtes (D6, D7, D8, D10, D11).
+- ✅ **WS-D** — auth Bearer `/api/*` + CORS restreint (D9).
+- ✅ **WS-E** — Client complété/dédupliqué, code mort retiré, OHLC honnête, purge
+  tasks (D12, D13, D15, D16). *(E3 RunsStore laissé : non-bug.)*
+- ✅ **WS-F** — mypy runnable+green ; doc Sphinx v3 ; CHANGELOG ; TODO ; matrice
+  fidélité (D17, D18, D19 + outillage).
+- ✅ **WS-G** — validation réseau réelle + tests `@network` (G3, G4).
+- ✅ **WS-H/P8-3** — Dockerfile + unit systemd.
+- ⬜ **WS-H/H1,H3** — merge `feat/refonte-v3 → develop`, puis `develop → master`
+  + tag `v3.0.0` + push : **actions de release, en attente de l'utilisateur**.
 
 ---
 
