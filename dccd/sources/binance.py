@@ -118,16 +118,32 @@ class BinanceSource(
         end_ns: int,
         limit: int,
     ) -> list[Trade]:
+        """Fetch all aggregate trades in [start_ns, end_ns).
+
+        Binance aggTrades caps each response at *limit* (max 1 000). For
+        high-frequency pairs (BTC/USDT runs ~70 tx/s), a single call would
+        only cover a few seconds of a 1-day window.  We therefore sub-paginate
+        internally: after a full page we switch to ``fromId`` cursor mode and
+        continue until the window is exhausted.
+        """
+        sym = self.render_symbol(symbol)
+        end_ms = end_ns // 1_000_000
+        all_trades: list[Trade] = []
+
+        # First call: time-bounded to anchor the starting point.
         params: dict[str, Any] = {
-            "symbol": self.render_symbol(symbol),
+            "symbol": sym,
             "startTime": start_ns // 1_000_000,
-            "endTime": end_ns // 1_000_000,
+            "endTime": end_ms,
             "limit": limit,
         }
         async with self._http as client:
             data = await client.get(f"{_BASE_REST}/aggTrades", params)
 
-        return [
+        if not data:
+            return []
+
+        all_trades.extend(
             Trade(
                 ts=int(e["T"]) * 1_000_000,
                 price=float(e["p"]),
@@ -136,7 +152,30 @@ class BinanceSource(
                 tid=str(e["a"]),
             )
             for e in data
-        ]
+        )
+
+        # While the page was full, there may be more trades in the window.
+        # Switch to fromId cursor (faster than repeated startTime queries).
+        while len(data) == limit:
+            next_id = int(data[-1]["a"]) + 1
+            params = {"symbol": sym, "fromId": next_id, "limit": limit}
+            async with self._http as client:
+                data = await client.get(f"{_BASE_REST}/aggTrades", params)
+            if not data:
+                break
+            # Filter to window; stop as soon as we pass end_ms.
+            for e in data:
+                if int(e["T"]) >= end_ms:
+                    return all_trades
+                all_trades.append(Trade(
+                    ts=int(e["T"]) * 1_000_000,
+                    price=float(e["p"]),
+                    amount=float(e["q"]),
+                    side="sell" if e["m"] else "buy",
+                    tid=str(e["a"]),
+                ))
+
+        return all_trades
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         params = {"symbol": self.render_symbol(symbol), "limit": min(depth, 5000)}
