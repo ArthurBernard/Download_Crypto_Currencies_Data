@@ -33,7 +33,7 @@ class _StreamWorker:
         self._store = store
         self._runs_store = runs_store
         self._events = events
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
     @property
@@ -101,10 +101,10 @@ class Scheduler:
         self._runs_store = runs_store
         self._events = events or EventBus()
         self._streams: dict[str, _StreamWorker] = {}
-        self._interval_tasks: list[asyncio.Task] = []
+        self._interval_tasks: list[asyncio.Task[None]] = []
         self._running = False
 
-    def _track(self, task: asyncio.Task) -> None:
+    def _track(self, task: asyncio.Task[None]) -> None:
         """Hold a strong reference to *task* and drop it once it completes."""
         self._interval_tasks.append(task)
         task.add_done_callback(

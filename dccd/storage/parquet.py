@@ -49,7 +49,7 @@ _BOOK_SCHEMA = {
     "is_snapshot": pl.Boolean,
 }
 
-_SCHEMAS = {
+_SCHEMAS: dict[DataType, dict[str, Any]] = {
     DataType.OHLC: _OHLC_SCHEMA,
     DataType.TRADES: _TRADES_SCHEMA,
     DataType.ORDERBOOK: _BOOK_SCHEMA,
@@ -213,7 +213,7 @@ class ParquetStore:
             try:
                 df = pl.read_parquet(f, columns=["TS"])
                 if len(df) > 0:
-                    return int(df["TS"].max())
+                    return int(df["TS"].max())  # type: ignore[arg-type]
             except Exception:
                 pass
         return None
@@ -248,8 +248,8 @@ class ParquetStore:
                 try:
                     df = pl.read_parquet(file_path, columns=["TS"])
                     if len(df) > 0:
-                        file_min = int(df["TS"].min())
-                        file_max = int(df["TS"].max())
+                        file_min = int(df["TS"].min())  # type: ignore[arg-type]
+                        file_max = int(df["TS"].max())  # type: ignore[arg-type]
                         if ivl_start < file_min:
                             intervals.append((ivl_start, file_min))
                         trailing = file_max + span_ns
@@ -338,8 +338,8 @@ class ParquetStore:
                 if n == 0:
                     continue
                 total_rows += n
-                fmin = int(df["TS"].min())
-                fmax = int(df["TS"].max())
+                fmin = int(df["TS"].min())  # type: ignore[arg-type]
+                fmax = int(df["TS"].max())  # type: ignore[arg-type]
                 if min_ts is None or fmin < min_ts:
                     min_ts = fmin
                 if max_ts is None or fmax > max_ts:

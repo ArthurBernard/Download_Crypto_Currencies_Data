@@ -143,7 +143,7 @@ class JobConfig(BaseModel):
                 span=self.span,
             )
             params = JobParams(
-                start=self.start,  # type: ignore[arg-type]
+                start=self.start,
                 depth=self.depth,
                 snapshot_interval=self.snapshot_interval,
             )

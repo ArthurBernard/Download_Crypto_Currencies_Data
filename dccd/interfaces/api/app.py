@@ -24,7 +24,8 @@ import asyncio
 import contextlib
 import logging
 import pathlib
-from typing import Any
+from collections.abc import Coroutine
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -158,7 +159,7 @@ def create_app(
         app.state.all_specs = cfg.all_job_specs()
         # Keeps strong references to background tasks so Python's GC doesn't
         # collect them mid-execution (asyncio only holds a weak ref internally).
-        app.state.bg_tasks: set[asyncio.Task] = set()
+        app.state.bg_tasks = set()
 
         yield
         # --- shutdown ---
@@ -209,15 +210,15 @@ def create_app(
 
     # -- state accessors (read from app.state via request) --
 
-    def _spawn(request: Request, coro) -> asyncio.Task:
+    def _spawn(request: Request, coro: "Coroutine[Any, Any, Any]") -> "asyncio.Task[Any]":
         """Create a background task and hold a strong reference to it."""
         task = asyncio.create_task(coro)
-        bg: set = request.app.state.bg_tasks
+        bg: set[Any] = request.app.state.bg_tasks
         bg.add(task)
         task.add_done_callback(bg.discard)
         return task
 
-    def _parse_run(run: dict) -> dict:
+    def _parse_run(run: dict[str, Any]) -> dict[str, Any]:
         """Parse JSON-encoded fields returned from SQLite."""
         import json as _json
         for key in ("progress", "log_tail"):
@@ -229,22 +230,22 @@ def create_app(
         return run
 
     def _cfg(request: Request) -> AppConfig:
-        return request.app.state.config
+        return cast(AppConfig, request.app.state.config)
 
     def _store(request: Request):
         return request.app.state.store
 
     def _runs(request: Request) -> RunsStore:
-        return request.app.state.runs_store
+        return cast(RunsStore, request.app.state.runs_store)
 
     def _sched(request: Request) -> Scheduler:
-        return request.app.state.scheduler
+        return cast(Scheduler, request.app.state.scheduler)
 
     def _reg(request: Request):
         return request.app.state.registry
 
     def _bus(request: Request) -> EventBus:
-        return request.app.state.event_bus
+        return cast(EventBus, request.app.state.event_bus)
 
     # -----------------------------------------------------------------------
     # Operations
@@ -558,7 +559,7 @@ def create_app(
     if templates is not None:
         from importlib.metadata import version as _pkg_version
 
-        def _tpl_ctx(request: Request, page: str) -> dict:
+        def _tpl_ctx(request: Request, page: str) -> dict[str, Any]:
             # request is NOT included here — Starlette 1.x injects it automatically
             # when using the new TemplateResponse(request, name, context) signature.
             try:

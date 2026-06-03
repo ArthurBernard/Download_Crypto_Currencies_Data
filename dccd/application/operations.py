@@ -84,7 +84,7 @@ def _emit_log(
 async def _flush(
     store: ParquetStore,
     ds: DatasetId,
-    batch: list,
+    batch: list[Any],
     source: str,
 ) -> int:
     if not batch:
@@ -222,7 +222,7 @@ async def backfill(
             sym = target.symbol
 
             async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:
-                return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)  # type: ignore[union-attr]
+                return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)
 
             bars: list[OHLCBar] = []
             async for bar in paginate_ohlc(
@@ -260,7 +260,7 @@ async def backfill(
             async def _fetch_trades(
                 s_ns: int, e_ns: int, limit: int, cursor: str | None,
             ) -> tuple[list[Trade], str | None]:
-                return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit, cursor)  # type: ignore[union-attr]
+                return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit, cursor)
 
             batch: list[Trade] = []
             async for trade in paginate_trades(
@@ -332,7 +332,7 @@ async def stream(
         events.status("running")
 
     adapter = registry.get(target.exchange)
-    batch: list = []
+    batch: list[Any] = []
     snapshot_interval = params.snapshot_interval or 60
 
     # Reject early if the adapter does not declare a live WS capability for this
@@ -356,10 +356,10 @@ async def stream(
         elif target.data_type == DataType.OHLC:
             if not isinstance(adapter, OHLCLive):
                 raise NoCapability(target.exchange, "ohlc", "live")
-            async for record in adapter.stream_ohlc(target.symbol, target.span or 3600):
+            async for bar in adapter.stream_ohlc(target.symbol, target.span or 3600):
                 if stop_event and stop_event.is_set():
                     break
-                batch.append(record)
+                batch.append(bar)
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()

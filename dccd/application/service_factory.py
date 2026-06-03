@@ -8,11 +8,17 @@ this file.
 from __future__ import annotations
 
 import pathlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from dccd.sources.registry import SourceRegistry
+    from dccd.storage.parquet import ParquetStore
+    from dccd.storage.runs_sqlite import RunsStore
 
 __all__ = ["build_registry", "build_store", "build_runs_store"]
 
 
-def build_registry():
+def build_registry() -> "SourceRegistry":
     """Return a :class:`~dccd.sources.registry.SourceRegistry` with all adapters registered.
 
     Returns
@@ -39,7 +45,7 @@ def build_registry():
     return reg
 
 
-def build_store(data_path: str | pathlib.Path):
+def build_store(data_path: str | pathlib.Path) -> "ParquetStore":
     """Return a :class:`~dccd.storage.parquet.ParquetStore` for *data_path*.
 
     Parameters
@@ -55,7 +61,7 @@ def build_store(data_path: str | pathlib.Path):
     return ParquetStore(data_path)
 
 
-def build_runs_store(data_path: str | pathlib.Path):
+def build_runs_store(data_path: str | pathlib.Path) -> "RunsStore":
     """Return a :class:`~dccd.storage.runs_sqlite.RunsStore` inside *data_path*.
 
     The database lives at ``{data_path}/.dccd/runs.db``.

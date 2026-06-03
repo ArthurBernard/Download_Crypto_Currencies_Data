@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -87,5 +87,5 @@ class JobRun(BaseModel):
     ended_at: int | None = None
     rows_written: int = 0
     error: str | None = None
-    progress: dict | None = None
+    progress: dict[str, Any] | None = None
     log_tail: list[str] = []

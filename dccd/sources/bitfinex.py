@@ -219,12 +219,11 @@ class _BitfinexWS(WebSocketBase):
 
         if self._channel == "trades" and isinstance(payload, list) and len(payload) >= 4:
             ts_ns = int(payload[1]) * 1_000_000
-            side = "buy" if float(payload[2]) > 0 else "sell"
             yield Trade(
                 ts=ts_ns,
                 price=float(payload[3]),
                 amount=abs(float(payload[2])),
-                side=side,
+                side="buy" if float(payload[2]) > 0 else "sell",
                 tid=str(payload[0]),
             )
         elif self._channel == "candles" and isinstance(payload, list):

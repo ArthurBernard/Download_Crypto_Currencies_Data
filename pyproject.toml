@@ -110,17 +110,26 @@ ignore = ["E501"]
 omit = []
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12: the dev/docs env ships Sphinx, whose source uses 3.12 `type` statements.
+# With python_version 3.11 mypy parsed those installed files with the 3.11
+# grammar and aborted before checking our code at all. dccd supports 3.11–3.13,
+# so assuming 3.12 semantics is safe and lets mypy actually run.
+python_version = "3.12"
 ignore_missing_imports = true
 warn_return_any = false
 warn_unused_configs = true
-disable_error_code = ["import-untyped"]
+follow_imports = "silent"
+# Full annotations are enforced only on the domain layer (strict override
+# below). Interfaces/application are glue around FastAPI/Typer/Polars where
+# requiring return annotations on every handler adds noise, not safety.
+disable_error_code = ["import-untyped", "no-untyped-def", "no-untyped-call"]
 exclude = ["dccd/tests/", "dccd/histo_dl/", "dccd/continuous_dl/", "dccd/daemon/"]
 
 [[tool.mypy.overrides]]
 module = ["dccd.domain.*"]
 strict = true
 warn_return_any = true
+enable_error_code = ["no-untyped-def", "no-untyped-call"]
 
 [tool.interrogate]
 ignore-init-method = true
