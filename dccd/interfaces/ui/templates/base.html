@@ -101,9 +101,15 @@
   <div id="toast-root"></div>
   <script>
     // Minimal vanilla helpers shared across pages — no JS framework.
+    // ts in seconds → human date
     function fmtTs(ts) {
       if (ts == null) return '-';
       return new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ');
+    }
+    // ts in nanoseconds (v3 internal format) → human date
+    function fmtNs(ns) {
+      if (ns == null) return '-';
+      return new Date(ns / 1_000_000).toISOString().slice(0, 16).replace('T', ' ');
     }
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, function (c) {

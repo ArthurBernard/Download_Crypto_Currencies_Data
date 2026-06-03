@@ -1,19 +1,58 @@
 {% extends "base.html" %}
 {% block title %}Logs{% endblock %}
 {% block content %}
-<h1>Logs</h1>
-<p class="muted">Last 200 lines of <code>dccd.log</code>, refreshed every 5&nbsp;s.</p>
-<pre id="log-pre" hx-get="/api/logs?tail=200" hx-trigger="load, every 5s"
-     hx-swap="innerHTML"></pre>
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+  <h1 style="margin:0">Live events</h1>
+  <div class="row" style="gap:.5rem">
+    <button class="ghost" onclick="clearLog()">Clear</button>
+    <span id="conn-status" class="muted">Connecting…</span>
+  </div>
+</div>
+<p class="muted">Real-time progress, log, and status events from running jobs (SSE stream).</p>
+
+<pre id="log-out" style="min-height:60vh"></pre>
 {% endblock %}
 {% block scripts %}
 <script>
-  document.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.target.id !== 'log-pre') return;
-    let data;
-    try { data = JSON.parse(e.target.textContent); } catch (err) { return; }
-    e.target.textContent = (data.lines || []).join('\n') || '(empty)';
-    e.target.scrollTop = e.target.scrollHeight;
-  });
+const logEl = document.getElementById('log-out');
+const statusEl = document.getElementById('conn-status');
+let es;
+
+function clearLog() { logEl.textContent = ''; }
+
+function connect() {
+  if (es) es.close();
+  es = new EventSource('/api/events');
+
+  es.onopen = () => { statusEl.innerHTML = '<span class="ok">Connected</span>'; };
+
+  es.onmessage = (e) => {
+    try {
+      const ev = JSON.parse(e.data);
+      const ts = new Date().toISOString().slice(11, 19);
+      let line = `[${ts}] `;
+      if (ev.kind === 'progress') {
+        line += `PROGRESS ${ev.run_id} ${ev.done}/${ev.total} ${ev.unit}`;
+      } else if (ev.kind === 'log') {
+        line += `${ev.level.toUpperCase().padEnd(5)} ${ev.run_id} — ${ev.message}`;
+      } else if (ev.kind === 'status') {
+        line += `STATUS  ${ev.run_id} → ${ev.state}`;
+      } else {
+        line += e.data;
+      }
+      logEl.textContent += line + '\n';
+      // Auto-scroll
+      logEl.scrollTop = logEl.scrollHeight;
+    } catch (_) {
+      logEl.textContent += e.data + '\n';
+    }
+  };
+
+  es.onerror = () => {
+    statusEl.innerHTML = '<span class="err">Disconnected — retrying…</span>';
+  };
+}
+
+connect();
 </script>
 {% endblock %}

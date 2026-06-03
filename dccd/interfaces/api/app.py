@@ -410,34 +410,37 @@ def create_app(
         from importlib.metadata import version as _pkg_version
 
         def _tpl_ctx(request: Request, page: str) -> dict:
+            # request is NOT included here — Starlette 1.x injects it automatically
+            # when using the new TemplateResponse(request, name, context) signature.
             try:
                 ver = _pkg_version("dccd")
             except Exception:
                 ver = "dev"
-            return {"request": request, "active": request.url.path, "version": ver, "page": page}
+            return {"active": request.url.path, "version": ver, "page": page}
 
+        # Starlette >= 0.29 / 1.x signature: TemplateResponse(request, name, context)
         @app.get("/")
         async def ui_dashboard(request: Request):
-            return templates.TemplateResponse("dashboard.html", _tpl_ctx(request, "dashboard"))
+            return templates.TemplateResponse(request, "dashboard.html", _tpl_ctx(request, "dashboard"))
 
         @app.get("/inventory")
         async def ui_inventory(request: Request):
-            return templates.TemplateResponse("inventory.html", _tpl_ctx(request, "inventory"))
+            return templates.TemplateResponse(request, "inventory.html", _tpl_ctx(request, "inventory"))
 
         @app.get("/jobs")
         async def ui_jobs(request: Request):
-            return templates.TemplateResponse("jobs.html", _tpl_ctx(request, "jobs"))
+            return templates.TemplateResponse(request, "jobs.html", _tpl_ctx(request, "jobs"))
 
         @app.get("/config")
         async def ui_config(request: Request):
-            return templates.TemplateResponse("config.html", _tpl_ctx(request, "config"))
+            return templates.TemplateResponse(request, "config.html", _tpl_ctx(request, "config"))
 
         @app.get("/logs")
         async def ui_logs(request: Request):
-            return templates.TemplateResponse("logs.html", _tpl_ctx(request, "logs"))
+            return templates.TemplateResponse(request, "logs.html", _tpl_ctx(request, "logs"))
 
         @app.get("/storage")
         async def ui_storage(request: Request):
-            return templates.TemplateResponse("storage.html", _tpl_ctx(request, "storage"))
+            return templates.TemplateResponse(request, "storage.html", _tpl_ctx(request, "storage"))
 
     return app
