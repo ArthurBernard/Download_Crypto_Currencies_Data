@@ -190,6 +190,11 @@ async def backfill(
             from dccd.transport.paginate import paginate_ohlc
 
             span = target.span or 3600
+            if cap.spans and span not in cap.spans:
+                raise ValueError(
+                    f"Span {span}s not supported by {target.exchange}. "
+                    f"Supported spans: {sorted(cap.spans)}"
+                )
             sym = target.symbol
 
             async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:

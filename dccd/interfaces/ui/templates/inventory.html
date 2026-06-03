@@ -37,9 +37,18 @@
             <option value="orderbook">Order Book</option>
           </select>
         </div>
-        <div style="flex:1">
-          <label class="muted" style="font-size:.8rem">Span (s) — OHLC only *</label>
-          <input id="bf-span" placeholder="3600" style="width:100%;margin-top:.2rem">
+        <div style="flex:1" id="bf-span-row">
+          <label class="muted" style="font-size:.8rem">Span — OHLC only *</label>
+          <select id="bf-span" style="width:100%;margin-top:.2rem">
+            <option value="60">1 min (60s)</option>
+            <option value="300">5 min (300s)</option>
+            <option value="900">15 min (900s)</option>
+            <option value="1800">30 min (1800s)</option>
+            <option value="3600" selected>1 hour (3600s)</option>
+            <option value="14400">4 hours (14400s)</option>
+            <option value="86400">1 day (86400s)</option>
+            <option value="604800">1 week (604800s)</option>
+          </select>
         </div>
       </div>
       <div>
@@ -68,7 +77,7 @@
 <script>
 function onBfTypeChange() {
   const isOhlc = document.getElementById('bf-type').value === 'ohlc';
-  document.getElementById('bf-span').disabled = !isOhlc;
+  document.getElementById('bf-span-row').style.visibility = isOhlc ? '' : 'hidden';
 }
 function onStartChange() {
   const val = document.getElementById('bf-start').value;
@@ -123,7 +132,7 @@ function prefillModal(exchange, symbol, dataType, span) {
   document.getElementById('bf-exchange').value = exchange;
   document.getElementById('bf-symbol').value   = symbol;
   document.getElementById('bf-type').value     = dataType;
-  document.getElementById('bf-span').value     = span != null ? span : '';
+  if (span != null) document.getElementById('bf-span').value = String(span);
   document.getElementById('bf-start').value    = 'last';
   document.getElementById('bf-date-row').style.display = 'none';
   setStatusEl('', '');
@@ -149,11 +158,10 @@ async function launchBackfill() {
   const exchange = document.getElementById('bf-exchange').value;
   const symbol   = document.getElementById('bf-symbol').value.trim();
   const dataType = document.getElementById('bf-type').value;
-  const spanVal  = document.getElementById('bf-span').value.trim();
+  const spanVal  = dataType === 'ohlc' ? document.getElementById('bf-span').value : '';
   const startSel = document.getElementById('bf-start').value;
 
   if (!symbol) { setStatusEl('Symbol is required (e.g. BTC/USDT).', 'err'); return; }
-  if (dataType === 'ohlc' && !spanVal) { setStatusEl('Span is required for OHLC (e.g. 3600).', 'err'); return; }
 
   let startVal = startSel;
   if (startSel === 'custom') {
