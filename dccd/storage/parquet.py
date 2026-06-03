@@ -49,6 +49,44 @@ _BOOK_SCHEMA = {
     "is_snapshot": pl.Boolean,
 }
 
+_SCHEMAS = {
+    DataType.OHLC: _OHLC_SCHEMA,
+    DataType.TRADES: _TRADES_SCHEMA,
+    DataType.ORDERBOOK: _BOOK_SCHEMA,
+}
+
+# Legacy (v2) → canonical (v3) column renames. ``weightedAverage`` is dropped:
+# v3 has no equivalent (it carries a trade-count instead, unrecoverable here).
+_LEGACY_RENAME = {"quoteVolume": "quote_volume"}
+_LEGACY_DROP = ("weightedAverage",)
+
+
+def canonicalize(df: pl.DataFrame, data_type: DataType) -> pl.DataFrame:
+    """Coerce a (possibly legacy v2) frame to the canonical v3 schema.
+
+    Renames legacy columns, drops unsupported ones, fills missing canonical
+    columns with nulls, and selects them in canonical order. Idempotent on
+    frames already in v3 schema. This is the single normalisation point shared
+    by reads, merges and migration, so legacy data is never lost on ``concat``.
+    """
+    schema = _SCHEMAS[data_type]
+    if df.is_empty() and not df.columns:
+        return df
+    rename = {k: v for k, v in _LEGACY_RENAME.items() if k in df.columns and v not in df.columns}
+    if rename:
+        df = df.rename(rename)
+    drop = [c for c in _LEGACY_DROP if c in df.columns]
+    if drop:
+        df = df.drop(drop)
+    missing = [
+        pl.lit(None, dtype=dtype).alias(name)
+        for name, dtype in schema.items()
+        if name not in df.columns
+    ]
+    if missing:
+        df = df.with_columns(missing)
+    return df.select(list(schema.keys()))
+
 
 class ParquetStore:
     """Read/write interface for a single DatasetId.
@@ -153,7 +191,7 @@ class ParquetStore:
         pieces = []
         for f in files:
             try:
-                df = pl.read_parquet(f)
+                df = canonicalize(pl.read_parquet(f), ds.data_type)
                 if start_ns is not None:
                     df = df.filter(pl.col("TS") >= start_ns)
                 if end_ns is not None:
@@ -377,20 +415,22 @@ class ParquetStore:
             return pl.DataFrame(rows, schema=_BOOK_SCHEMA)
 
     def _merge(self, file_path: pathlib.Path, new: pl.DataFrame, ds: DatasetId) -> pl.DataFrame:
-        """Merge new data with existing file, deduplicating on TS."""
+        """Merge new data with existing file, deduplicating on TS.
+
+        The existing file is **canonicalised** before the concat so that legacy
+        (v2) files — whose columns differ (``quoteVolume``/``weightedAverage``)
+        — are aligned to the v3 schema instead of raising a schema error. We
+        never silently overwrite on a read error: an unreadable file is a fault
+        worth surfacing, not a reason to drop its rows.
+        """
         if not file_path.exists():
             return new.unique(subset=["TS"], keep="last").sort("TS")
-        try:
-            existing = pl.read_parquet(file_path)
-            merged = (
-                pl.concat([existing, new])
-                .unique(subset=["TS"], keep="last")
-                .sort("TS")
-            )
-            return merged
-        except Exception:
-            logger.warning("Could not read %s — overwriting", file_path)
-            return new.unique(subset=["TS"], keep="last").sort("TS")
+        existing = canonicalize(pl.read_parquet(file_path), ds.data_type)
+        return (
+            pl.concat([existing, new])
+            .unique(subset=["TS"], keep="last")
+            .sort("TS")
+        )
 
     def _write_parquet(
         self,
@@ -401,4 +441,20 @@ class ParquetStore:
         meta: dict[str, str] = {}
         if provenance is not None:
             meta["dccd.provenance"] = provenance.model_dump_json()
-        df.write_parquet(file_path, compression="snappy")
+        # Polars >=1.x persists key/value metadata into the Parquet footer.
+        df.write_parquet(file_path, compression="snappy", metadata=meta or None)
+
+    @staticmethod
+    def read_provenance(file_path: str | pathlib.Path) -> Provenance | None:
+        """Return the :class:`Provenance` stored in a Parquet file, if any."""
+        import json
+
+        import pyarrow.parquet as pq
+
+        kv = pq.read_metadata(str(file_path)).metadata or {}
+        raw = kv.get(b"dccd.provenance") or kv.get("dccd.provenance")
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        return Provenance(**json.loads(raw))
