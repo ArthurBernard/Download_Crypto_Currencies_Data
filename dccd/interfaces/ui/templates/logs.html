@@ -42,7 +42,7 @@ function clearLive() {
 
 function connect() {
   if (es) es.close();
-  es = new EventSource('/api/events');
+  es = new EventSource('/api/events' + (DCCD_TOKEN ? '?token=' + encodeURIComponent(DCCD_TOKEN) : ''));
   es.onopen = () => { statusEl.innerHTML = '<span class="ok">● Connected</span>'; };
   es.onmessage = (e) => {
     if (e.data.startsWith(':')) return;

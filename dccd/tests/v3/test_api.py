@@ -34,6 +34,34 @@ class TestHealthEndpoint:
         assert resp.json()["status"] == "ok"
 
 
+class TestAuth:
+    @pytest.fixture
+    def auth_client(self, tmp_data_path):
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.settings.ui_auth_token = "s3cret"
+        with TestClient(create_app(config=cfg)) as c:
+            yield c
+
+    def test_api_requires_token(self, auth_client):
+        assert auth_client.get("/api/inventory").status_code == 401
+
+    def test_api_accepts_bearer(self, auth_client):
+        r = auth_client.get("/api/inventory", headers={"Authorization": "Bearer s3cret"})
+        assert r.status_code == 200
+
+    def test_api_rejects_wrong_token(self, auth_client):
+        r = auth_client.get("/api/inventory", headers={"Authorization": "Bearer nope"})
+        assert r.status_code == 401
+
+    def test_health_stays_open(self, auth_client):
+        assert auth_client.get("/health").status_code == 200
+
+    def test_no_token_means_open(self, client):
+        assert client.get("/api/inventory").status_code == 200
+
+
 class TestOperationsEndpoint:
     def test_list_operations(self, client):
         resp = client.get("/api/operations")

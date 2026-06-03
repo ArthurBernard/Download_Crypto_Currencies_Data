@@ -147,8 +147,10 @@
       root.appendChild(el);
       setTimeout(function () { el.remove(); }, kind === 'err' ? 6000 : 3500);
     }
+    const DCCD_TOKEN = "{{ auth_token }}";
     async function api(method, url, body) {
       const opts = { method, headers: {} };
+      if (DCCD_TOKEN) opts.headers['Authorization'] = 'Bearer ' + DCCD_TOKEN;
       if (body !== undefined) {
         opts.headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(body);

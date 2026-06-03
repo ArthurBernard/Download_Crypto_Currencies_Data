@@ -28,7 +28,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -164,12 +164,41 @@ def create_app(
         # --- shutdown ---
 
     app = FastAPI(title="dccd v3", version="3.0.0", lifespan=lifespan)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+
+    # CORS: no wildcard. The UI is served same-origin, so it needs no CORS at
+    # all; allowing every origin let any website's JS drive the local API
+    # (reachable on 127.0.0.1 from the user's browser). Cross-origin access is
+    # opt-in via settings.ui_allow_origins.
+    allow_origins = list(getattr(getattr(config, "settings", None), "ui_allow_origins", []) or [])
+    if allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    @app.middleware("http")
+    async def _auth_guard(request: Request, call_next):
+        """Require a Bearer token on /api/* when settings.ui_auth_token is set.
+
+        Page routes are intentionally not gated (browsers can't send Bearer on
+        navigation); for untrusted networks, front the UI with a reverse proxy.
+        """
+        cfg = getattr(request.app.state, "config", None)
+        token = getattr(getattr(cfg, "settings", None), "ui_auth_token", None)
+        if (
+            token
+            and request.url.path.startswith("/api/")
+            and request.method != "OPTIONS"
+        ):
+            # Header for normal calls; query param for EventSource (SSE), which
+            # cannot set Authorization headers.
+            bearer = request.headers.get("Authorization") == f"Bearer {token}"
+            query = request.query_params.get("token") == token
+            if not (bearer or query):
+                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
 
     if _STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
@@ -536,7 +565,12 @@ def create_app(
                 ver = _pkg_version("dccd")
             except Exception:
                 ver = "dev"
-            return {"active": request.url.path, "version": ver, "page": page}
+            cfg = getattr(request.app.state, "config", None)
+            token = getattr(getattr(cfg, "settings", None), "ui_auth_token", None)
+            return {
+                "active": request.url.path, "version": ver, "page": page,
+                "auth_token": token or "",
+            }
 
         # Starlette >= 0.29 / 1.x signature: TemplateResponse(request, name, context)
         @app.get("/")

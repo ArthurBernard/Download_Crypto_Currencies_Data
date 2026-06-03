@@ -41,6 +41,7 @@ class SettingsConfig(BaseModel):
     ui_host: str = "127.0.0.1"
     ui_port: int = 8080
     ui_auth_token: str | None = None
+    ui_allow_origins: list[str] = Field(default_factory=list)
 
     @field_validator("data_path")
     @classmethod
