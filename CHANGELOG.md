@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-06-04
+
 ### Added
 
 - `dccd/daemon/api.py` — web UI and JSON API (FastAPI + Jinja2 + htmx): a thin
