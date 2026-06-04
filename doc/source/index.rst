@@ -175,8 +175,15 @@ cursor-paginated and drain the full requested window.
 
 .. toctree::
    :hidden:
-   :caption: Reference
+   :caption: Interfaces
 
    cli
+   http-api
+   web-ui
+
+.. toctree::
+   :hidden:
+   :caption: Reference
+
    configuration
    api
