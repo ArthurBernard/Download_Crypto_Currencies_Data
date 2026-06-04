@@ -82,22 +82,44 @@ as ``null`` — never fabricated.
      - — null
      - — null
 
-Per-exchange notes
+Per-exchange pages
 ==================
 
-- **Binance** — full history (klines, aggTrades, depth 5000); the reference
-  implementation for cursor pagination.
-- **Coinbase** — 300 candles/request (windowed automatically); trades are recent
-  only (header cursors are not exposed by the JSON transport).
-- **Kraken** — OHLC REST serves the 720 most recent bars (``history="recent"``):
-  a deep request is **clamped to that window with a warning**. Trades are full
-  history via the ``since`` cursor.
-- **Bybit** — full OHLC; spot has **no trade history** (WS only) → declared as
-  :class:`~dccd.domain.errors.NoCapability` for trades backfill.
-- **OKX** — deep history via ``history-candles`` / ``history-trades``.
-- **Bitfinex** — up to 10 000 items/request. Tether is labelled ``UST``, so
-  ``BTC/USDT`` maps to ``tBTCUST`` automatically.
-- **BitMEX** — bucketed OHLC (1m/5m/1h/1d only); full trade history.
+.. grid:: 2 3 4 4
+   :gutter: 2
+
+   .. grid-item-card:: Binance
+      :link: binance
+      :link-type: doc
+   .. grid-item-card:: Coinbase
+      :link: coinbase
+      :link-type: doc
+   .. grid-item-card:: Kraken
+      :link: kraken
+      :link-type: doc
+   .. grid-item-card:: Bybit
+      :link: bybit
+      :link-type: doc
+   .. grid-item-card:: OKX
+      :link: okx
+      :link-type: doc
+   .. grid-item-card:: Bitfinex
+      :link: bitfinex
+      :link-type: doc
+   .. grid-item-card:: BitMEX
+      :link: bitmex
+      :link-type: doc
+
+.. toctree::
+   :hidden:
+
+   binance
+   coinbase
+   kraken
+   bybit
+   okx
+   bitfinex
+   bitmex
 
 Adding an exchange
 ==================
