@@ -87,6 +87,7 @@ class RunsStore:
         data_type: str,
         started_at: int | None = None,
     ) -> None:
+        """Insert a new run row in the ``running`` state."""
         import time
         now = int(time.time() * 1_000_000_000)
         with self._conn() as conn:
@@ -105,6 +106,7 @@ class RunsStore:
         rows_written: int = 0,
         error: str | None = None,
     ) -> None:
+        """Mark a run finished with its final state, row count and optional error."""
         import time
         if ended_at is None:
             ended_at = int(time.time() * 1_000_000_000)
@@ -116,6 +118,7 @@ class RunsStore:
             )
 
     def update_progress(self, run_id: str, progress: dict[str, Any]) -> None:
+        """Persist the latest progress dict for *run_id* (polled by the UI)."""
         with self._conn() as conn:
             conn.execute(
                 "UPDATE runs SET progress=? WHERE run_id=?",
@@ -123,6 +126,7 @@ class RunsStore:
             )
 
     def append_log(self, run_id: str, msg: str, max_lines: int = 100) -> None:
+        """Append a log line to the run's bounded ``log_tail``."""
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT log_tail FROM runs WHERE run_id=?", (run_id,)
@@ -139,6 +143,7 @@ class RunsStore:
             )
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
+        """Return one run as a dict, or None if unknown."""
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM runs WHERE run_id=?", (run_id,)
@@ -151,6 +156,7 @@ class RunsStore:
         state: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
+        """List recent runs, most recent first, optionally filtered."""
         conditions = []
         params: list[Any] = []
         if spec_id:
@@ -169,4 +175,5 @@ class RunsStore:
             return [dict(r) for r in rows]
 
     def active_runs(self) -> list[dict[str, Any]]:
+        """Runs currently ``running`` or ``reconnecting``."""
         return self.list_runs(state="running") + self.list_runs(state="reconnecting")

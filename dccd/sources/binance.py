@@ -69,6 +69,7 @@ class BinanceSource(
         self._owned_http = http is None
 
     def capabilities(self) -> list[Capability]:
+        """Declared capabilities, one per (data type × transport × mode)."""
         return [
             Capability(
                 data_type=DataType.OHLC, transport="rest", mode="historical",
@@ -101,6 +102,7 @@ class BinanceSource(
         end_ns: int,
         limit: int,
     ) -> list[OHLCBar]:
+        """Fetch one page of OHLC bars (see :meth:`~dccd.sources.base.OHLCHistory.fetch_ohlc_page`)."""
         interval = binance_interval(span)
         if not interval:
             return []
@@ -180,6 +182,7 @@ class BinanceSource(
         return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         params = {"symbol": self.render_symbol(symbol), "limit": min(depth, 5000)}
         async with self._http as client:
             data = await client.get(f"{_BASE_REST}/depth", params)
@@ -190,17 +193,20 @@ class BinanceSource(
         return OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks)
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         interval = binance_interval(span) or "1m"
         pair = self.render_symbol(symbol).lower()
         ws = _BinanceKlineWS(pair, interval)
         return ws.stream()
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         pair = self.render_symbol(symbol).lower()
         ws = _BinanceTradeWS(pair)
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         pair = self.render_symbol(symbol).lower()
         ws = _BinanceDepthWS(pair)
         return ws.stream()
@@ -211,6 +217,7 @@ class _BinanceKlineWS(WebSocketBase):
         super().__init__(f"wss://stream.binance.com:9443/ws/{pair}@kline_{interval}")
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[OHLCBar]:
+        """Parse a raw WebSocket frame into domain records."""
         data = json.loads(raw)
         if data.get("e") != "kline":
             return
@@ -232,6 +239,7 @@ class _BinanceTradeWS(WebSocketBase):
         super().__init__(f"wss://stream.binance.com:9443/ws/{pair}@aggTrade")
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Trade]:
+        """Parse a raw WebSocket frame into domain records."""
         data = json.loads(raw)
         if data.get("e") != "aggTrade":
             return
@@ -249,6 +257,7 @@ class _BinanceDepthWS(WebSocketBase):
         super().__init__(f"wss://stream.binance.com:9443/ws/{pair}@depth@100ms")
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[OrderBookSnapshot]:
+        """Parse a raw WebSocket frame into domain records."""
         import time
         data = json.loads(raw)
         bids = [OrderBookLevel(price=float(b[0]), amount=float(b[1])) for b in data.get("b", [])]

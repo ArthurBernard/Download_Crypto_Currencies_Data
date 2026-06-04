@@ -171,6 +171,7 @@ class AppConfig(BaseModel):
         return self
 
     def all_job_specs(self) -> list[JobSpec]:
+        """Expand every :class:`JobConfig` into its per-pair :class:`JobSpec` list."""
         specs = []
         for job in self.jobs:
             specs.extend(job.to_job_specs())
@@ -178,6 +179,7 @@ class AppConfig(BaseModel):
 
 
 def resolve_config_path(path: str | pathlib.Path | None = None) -> pathlib.Path:
+    """Resolve the config path (explicit, then ``./config.yml``, then XDG)."""
     if path is not None:
         return pathlib.Path(path).expanduser()
     xdg_cfg = (
@@ -193,6 +195,7 @@ def resolve_config_path(path: str | pathlib.Path | None = None) -> pathlib.Path:
 
 
 def load_config(path: str | pathlib.Path) -> AppConfig:
+    """Load and validate a YAML config into an :class:`AppConfig`."""
     with open(path) as f:
         data = yaml.safe_load(f) or {}
     return AppConfig.model_validate(data)

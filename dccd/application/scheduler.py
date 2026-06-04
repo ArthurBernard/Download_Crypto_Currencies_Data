@@ -38,15 +38,18 @@ class _StreamWorker:
 
     @property
     def is_running(self) -> bool:
+        """Whether the supervised stream task is currently alive."""
         return self._task is not None and not self._task.done()
 
     def start(self) -> None:
+        """Start all enabled specs (streams supervised, intervals looped, once run)."""
         if self.is_running:
             return
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run_forever())
 
     async def stop(self) -> None:
+        """Cancel interval tasks and stop every stream worker."""
         self._stop_event.set()
         if self._task:
             self._task.cancel()
@@ -176,6 +179,7 @@ class Scheduler:
             logger.error("Scheduled job %s failed: %s", spec.id, exc)
 
     def start_stream(self, spec_id: str) -> bool:
+        """Start one registered stream by spec id; return whether it existed."""
         worker = self._streams.get(spec_id)
         if worker:
             worker.start()
@@ -183,6 +187,7 @@ class Scheduler:
         return False
 
     async def stop_stream(self, spec_id: str) -> bool:
+        """Stop one registered stream by spec id; return whether it existed."""
         worker = self._streams.get(spec_id)
         if worker:
             await worker.stop()
@@ -190,4 +195,5 @@ class Scheduler:
         return False
 
     def stream_status(self) -> dict[str, bool]:
+        """Map of stream spec id to running state."""
         return {sid: w.is_running for sid, w in self._streams.items()}
