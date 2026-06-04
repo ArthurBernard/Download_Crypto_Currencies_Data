@@ -144,7 +144,19 @@ cursor-paginated and drain the full requested window.
 
 .. toctree::
    :hidden:
-   :caption: Guides
+   :caption: Tutorials
+
+   tutorials/index
+
+.. toctree::
+   :hidden:
+   :caption: How-to guides
+
+   how-to/index
+
+.. toctree::
+   :hidden:
+   :caption: Explanation
 
    architecture
    exchanges
