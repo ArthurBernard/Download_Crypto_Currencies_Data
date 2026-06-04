@@ -14,6 +14,7 @@ __all__ = ["Trigger", "JobTarget", "JobParams", "JobSpec", "JobRun", "RunState"]
 
 
 class RunState(str, Enum):
+    """Lifecycle state of a job run."""
     PENDING = "pending"
     RUNNING = "running"
     RECONNECTING = "reconnecting"
@@ -69,6 +70,7 @@ class JobSpec(BaseModel):
 
     @classmethod
     def make_id(cls, operation: str, target: JobTarget) -> str:
+        """Build a stable job id from the operation and target."""
         parts = [operation, target.exchange, str(target.symbol), target.data_type.value]
         if target.span:
             parts.append(f"{target.span}s")

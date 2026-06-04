@@ -36,6 +36,7 @@ SUPPORTED_EXCHANGES: frozenset[str] = frozenset(
 
 
 class SettingsConfig(BaseModel):
+    """Global settings: data path, timezone, and web-UI bind/auth."""
     data_path: str = "./data/crypto"
     timezone: str = "local"
     ui_host: str = "127.0.0.1"
@@ -62,17 +63,20 @@ class SettingsConfig(BaseModel):
 
 
 class RemoteConfig(BaseModel):
+    """One rclone remote target for sync."""
     provider: str = "rclone"
     remote: str
 
 
 class StorageConfig(BaseModel):
+    """Storage settings: local path, rclone remotes, and sync interval."""
     local_path: str = ""
     remotes: list[RemoteConfig] = Field(default_factory=list)
     sync_interval: int = 3600
 
 
 class AlertConfig(BaseModel):
+    """Health-alert settings: webhook URL and error threshold."""
     webhook_url: str | None = None
     max_consecutive_errors: int = 3
 
@@ -159,6 +163,7 @@ class JobConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
+    """Top-level config: settings, storage, alerts and the list of jobs."""
     settings: SettingsConfig = Field(default_factory=SettingsConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     alerts: AlertConfig = Field(default_factory=AlertConfig)
