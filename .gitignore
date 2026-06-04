@@ -21,7 +21,6 @@ __pycache__/
 .pytest_cache/
 
 # Local only (not committed)
-CLAUDE.md
 TODO.md
 todo/
 done/
