@@ -137,16 +137,24 @@ autodoc_typehints = 'none'
 #                         Autodoc skip-member hook                            #
 # --------------------------------------------------------------------------- #
 
+import enum as _enum
+
 import pydantic as _pydantic
 
-_PYDANTIC_BASE_MEMBERS = frozenset(dir(_pydantic.BaseModel))
+# Members inherited from third-party / builtin bases are noise on our pages
+# (Pydantic internals, str/Enum methods like ``maketrans`` on str-based enums).
+_INHERITED_NOISE = (
+    frozenset(dir(_pydantic.BaseModel))
+    | frozenset(dir(str))
+    | frozenset(dir(_enum.Enum))
+)
 
 
 def _skip_pydantic_member(app, what, name, obj, skip, options):
-    """ Skip Pydantic BaseModel methods — their docstrings contain broken RST. """
+    """ Skip members inherited from Pydantic/str/Enum bases (broken or noisy RST). """
     if skip:
         return True
-    if name in _PYDANTIC_BASE_MEMBERS and name not in ('__init__', '__doc__'):
+    if name in _INHERITED_NOISE and name not in ('__init__', '__doc__'):
         return True
     return skip
 
