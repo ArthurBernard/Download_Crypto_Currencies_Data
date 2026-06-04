@@ -13,9 +13,9 @@
 <div class="card" style="margin-bottom:1rem">
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.4rem">
     <strong>Live events</strong>
-    <span class="muted" style="font-size:.8rem">Real-time SSE stream — start a job to see events here</span>
+    <span class="muted" style="font-size:.8rem">A live console for a running job — streams its log/progress/status as it happens. Empty when nothing is running; see <em>Recent runs</em> below for past logs.</span>
   </div>
-  <pre id="log-out" style="min-height:8rem;max-height:20rem;overflow-y:auto;background:var(--bg);border:1px solid var(--border);padding:.5rem;border-radius:4px;font-size:.8rem">Waiting for events…
+  <pre id="log-out" style="min-height:8rem;max-height:20rem;overflow-y:auto;background:var(--bg);border:1px solid var(--border);padding:.5rem;border-radius:4px;font-size:.8rem">Idle — start or run a job (or watch a stream) and its events appear here live.
 </pre>
 </div>
 
@@ -83,7 +83,8 @@ async function loadHistory() {
     let html = '';
     for (const r of runs) {
       const stateClass = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : '';
-      const prog = r.progress ? ` · ${r.progress.done}/${r.progress.total} windows` : '';
+      const prog = (r.progress && r.progress.total > 0)
+        ? ` · ${Math.min(100, Math.round(r.progress.done / r.progress.total * 100))}%` : '';
       const rows = r.rows_written ? ` · ${r.rows_written.toLocaleString()} rows` : '';
       const logs = Array.isArray(r.log_tail) && r.log_tail.length
         ? r.log_tail.join('\n')

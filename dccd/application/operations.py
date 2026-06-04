@@ -61,15 +61,22 @@ def _emit_progress(
     done: int,
     total: int,
     rows_so_far: int = 0,
+    unit: str = "windows",
+    at: int | None = None,
 ) -> None:
-    """Emit progress to EventBus AND persist in RunsStore for polling."""
+    """Emit progress to EventBus AND persist in RunsStore for polling.
+
+    For ``unit="time"`` (backfills), ``done``/``total`` are nanoseconds covered
+    of the requested window and ``at`` is the timestamp reached — which gives a
+    real, smooth progress bar even for cursor-paginated trades (no page total).
+    """
     if events is not None:
         events.progress(done, total)
     if runs_store is not None:
-        runs_store.update_progress(
-            run_id,
-            {"done": done, "total": total, "unit": "windows", "rows": rows_so_far},
-        )
+        prog: dict[str, Any] = {"done": done, "total": total, "unit": unit, "rows": rows_so_far}
+        if at is not None:
+            prog["at"] = at
+        runs_store.update_progress(run_id, prog)
 
 
 def _emit_log(
@@ -191,12 +198,17 @@ async def backfill(
     prov_src = f"{target.exchange}:rest"
 
     # Counts every item received from the paginator, including unflushed ones.
-    # Updated per-item so the progress callback always reflects actual progress
-    # (not just post-flush checkpoints).
     _collected: list[int] = [0]
 
-    def _on_progress(done: int, total: int) -> None:
-        _emit_progress(events, runs_store, run_id, done, total, _collected[0])
+    # Progress is reported by *time covered* of the requested window, which gives
+    # a real, smooth bar for both OHLC and cursor-paginated trades (the latter
+    # have no page total). ``at`` is the timestamp reached; the window is fixed.
+    _window = max(1, end_ns - start_ns)
+
+    def _emit_time(last_ts: int) -> None:
+        done = min(_window, max(0, last_ts - start_ns))
+        _emit_progress(events, runs_store, run_id, done, _window,
+                       _collected[0], unit="time", at=last_ts)
 
     try:
         adapter = registry.get(target.exchange)
@@ -238,18 +250,18 @@ async def backfill(
                 return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)
 
             bars: list[OHLCBar] = []
-            async for bar in paginate_ohlc(
-                _fetch_ohlc, cap, start_ns, end_ns, span,
-                emit_progress=_on_progress,
-            ):
+            async for bar in paginate_ohlc(_fetch_ohlc, cap, start_ns, end_ns, span):
                 if stop_event and stop_event.is_set():
                     break
                 bars.append(bar)
                 _collected[0] += 1
+                if _collected[0] % 200 == 0:
+                    _emit_time(bar.ts)
                 if len(bars) >= _FLUSH_BATCH:
                     total_written += await _flush(store, ds, bars, prov_src)
 
             total_written += await _flush(store, ds, bars, prov_src)
+            _emit_time(end_ns)
 
         elif target.data_type == DataType.TRADES:
             if not isinstance(adapter, TradesHistory):
@@ -276,18 +288,19 @@ async def backfill(
                 return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit, cursor)
 
             batch: list[Trade] = []
-            async for trade in paginate_trades(
-                _fetch_trades, cap, start_ns, end_ns,
-                emit_progress=_on_progress,
-            ):
+            async for trade in paginate_trades(_fetch_trades, cap, start_ns, end_ns):
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(trade)
                 _collected[0] += 1
+                if _collected[0] % 1000 == 0:
+                    _emit_time(trade.ts)  # progress by time covered, not page count
                 if len(batch) >= _FLUSH_BATCH:
                     total_written += await _flush(store, ds, batch, prov_src)
 
             total_written += await _flush(store, ds, batch, prov_src)
+            if not (stop_event and stop_event.is_set()):
+                _emit_time(end_ns)
 
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookSnapshotREST):

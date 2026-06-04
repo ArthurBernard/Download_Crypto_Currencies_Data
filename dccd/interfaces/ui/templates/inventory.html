@@ -140,7 +140,8 @@ async function loadInventory() {
           <td class="muted" style="font-size:.82em">${fmtNs(d.min_ts)}</td>
           <td class="muted" style="font-size:.82em">${fmtNs(d.max_ts)}</td>
           <td><button style="font-size:.75rem;padding:.2rem .5rem"
-            onclick='prefillModal(${attrJson(ex)}, ${attrJson(sym)}, ${attrJson(d.data_type)}, ${JSON.stringify(d.span)})'>Backfill</button></td>
+            title="${d.data_type === 'orderbook' ? 'Capture one current order-book snapshot' : 'Download more history for this dataset'}"
+            onclick='prefillModal(${attrJson(ex)}, ${attrJson(sym)}, ${attrJson(d.data_type)}, ${JSON.stringify(d.span)})'>${d.data_type === 'orderbook' ? 'Snapshot' : 'Backfill'}</button></td>
         </tr>`;
       }
       html += '</tbody></table>';
@@ -191,14 +192,18 @@ function showProgress(run) {
   wrap.style.display = '';
   const prog = run.progress;
   const rows = (prog?.rows ?? run.rows_written ?? 0).toLocaleString();
+  const st = `<span class="${run.state === 'succeeded' ? 'ok' : run.state === 'failed' ? 'err' : ''}">${escapeHtml(run.state)}</span>`;
   if (prog && prog.total > 0) {
-    const p = Math.round(prog.done / prog.total * 100);
+    const p = Math.min(100, Math.round(prog.done / prog.total * 100));
     bar.style.width = p + '%';
-    label.innerHTML = `<span class="${run.state === 'succeeded' ? 'ok' : run.state === 'failed' ? 'err' : ''}">${escapeHtml(run.state)}</span> — ${prog.done}/${prog.total} pages · ${rows} rows`;
+    const detail = (prog.unit === 'time' && prog.at)
+      ? `${rows} rows · reached ${fmtNs(prog.at)}`
+      : `${prog.done}/${prog.total} · ${rows} rows`;
+    label.innerHTML = `${st} — ${detail}`;
     pct.textContent = p + '%';
   } else {
     bar.style.width = run.state === 'succeeded' ? '100%' : '5%';
-    label.innerHTML = `<span class="${run.state === 'succeeded' ? 'ok' : run.state === 'failed' ? 'err' : ''}">${escapeHtml(run.state)}</span> · ${rows} rows`;
+    label.innerHTML = `${st} · ${rows} rows`;
     pct.textContent = '';
   }
 }

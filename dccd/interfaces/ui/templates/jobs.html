@@ -26,50 +26,54 @@ async function loadJobs() {
         </div>`;
       return;
     }
-    const backfillJobs = jobs.filter(j => j.operation === 'backfill');
-    const streamJobs   = jobs.filter(j => j.operation === 'stream');
+    // Group by exchange, then split backfill / stream within each.
+    const byExchange = {};
+    for (const j of jobs) { (byExchange[j.exchange] ||= []).push(j); }
     let html = '';
 
-    if (backfillJobs.length) {
-      html += '<h2>Backfill / Update jobs</h2>';
-      html += `<table><thead><tr>
-        <th>Exchange</th><th>Symbol</th><th>Type</th><th>Span</th><th>Trigger</th><th>Enabled</th><th></th>
-      </tr></thead><tbody>`;
-      for (const j of backfillJobs) {
-        html += `<tr>
-          <td>${escapeHtml(j.exchange)}</td>
-          <td>${escapeHtml(j.symbol)}</td>
-          <td>${escapeHtml(j.data_type)}</td>
-          <td>${j.span ?? '-'}</td>
-          <td class="muted">${escapeHtml(j.trigger)}</td>
-          <td>${j.enabled ? '<span class="ok">✓</span>' : '<span class="muted">✗</span>'}</td>
-          <td>
-            <button style="font-size:.75rem;padding:.2rem .5rem"
-              onclick='runJob(${attrJson(j.id)})' id='btn-${escapeHtml(j.id)}'>Run now</button>
-          </td>
-        </tr>`;
-      }
-      html += '</tbody></table>';
-    }
+    for (const ex of Object.keys(byExchange).sort()) {
+      const list = byExchange[ex];
+      const backfillJobs = list.filter(j => j.operation === 'backfill');
+      const streamJobs   = list.filter(j => j.operation === 'stream');
+      html += `<h2 style="margin-bottom:.2rem">${escapeHtml(ex)}</h2>`;
 
-    if (streamJobs.length) {
-      html += '<h2>Stream jobs</h2>';
-      html += `<table><thead><tr>
-        <th>Exchange</th><th>Symbol</th><th>Type</th><th>Status</th><th></th>
-      </tr></thead><tbody>`;
-      for (const j of streamJobs) {
-        html += `<tr id="stream-row-${escapeHtml(j.id)}">
-          <td>${escapeHtml(j.exchange)}</td>
-          <td>${escapeHtml(j.symbol)}</td>
-          <td>${escapeHtml(j.data_type)}</td>
-          <td><span class="${j.running ? 'ok' : 'muted'}">${j.running ? '● Running' : '○ Stopped'}</span></td>
-          <td>${j.running
-            ? `<button class="ghost" style="font-size:.75rem;padding:.2rem .5rem" onclick='stopStream(${attrJson(j.id)})'>Stop</button>`
-            : `<button style="font-size:.75rem;padding:.2rem .5rem" onclick='startStream(${attrJson(j.id)})'>Start</button>`
-          }</td>
-        </tr>`;
+      if (backfillJobs.length) {
+        html += '<div class="muted" style="font-size:.8rem;margin:.2rem 0">Backfill / Update</div>';
+        html += `<table><thead><tr>
+          <th>Symbol</th><th>Type</th><th>Span</th><th>Trigger</th><th>Enabled</th><th></th>
+        </tr></thead><tbody>`;
+        for (const j of backfillJobs) {
+          html += `<tr>
+            <td>${escapeHtml(j.symbol)}</td>
+            <td>${escapeHtml(j.data_type)}</td>
+            <td>${j.span ?? '-'}</td>
+            <td class="muted">${escapeHtml(j.trigger)}</td>
+            <td>${j.enabled ? '<span class="ok">✓</span>' : '<span class="muted">✗</span>'}</td>
+            <td><button style="font-size:.75rem;padding:.2rem .5rem"
+                onclick='runJob(${attrJson(j.id)})' id='btn-${escapeHtml(j.id)}'>Run now</button></td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
       }
-      html += '</tbody></table>';
+
+      if (streamJobs.length) {
+        html += '<div class="muted" style="font-size:.8rem;margin:.4rem 0 .2rem">Streams</div>';
+        html += `<table><thead><tr>
+          <th>Symbol</th><th>Type</th><th>Status</th><th></th>
+        </tr></thead><tbody>`;
+        for (const j of streamJobs) {
+          html += `<tr id="stream-row-${escapeHtml(j.id)}">
+            <td>${escapeHtml(j.symbol)}</td>
+            <td>${escapeHtml(j.data_type)}</td>
+            <td><span class="${j.running ? 'ok' : 'muted'}">${j.running ? '● Running' : '○ Stopped'}</span></td>
+            <td>${j.running
+              ? `<button class="ghost" style="font-size:.75rem;padding:.2rem .5rem" onclick='stopStream(${attrJson(j.id)})'>Stop</button>`
+              : `<button style="font-size:.75rem;padding:.2rem .5rem" onclick='startStream(${attrJson(j.id)})'>Start</button>`
+            }</td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+      }
     }
 
     document.getElementById('jobs-content').innerHTML = html;

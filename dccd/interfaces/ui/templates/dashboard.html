@@ -40,9 +40,11 @@ async function load() {
     if (active.length) {
       el.innerHTML = active.map(r => {
         const prog = r.progress;
-        const pct  = prog && prog.total > 0 ? Math.round(prog.done / prog.total * 100) : null;
+        const pct  = prog && prog.total > 0 ? Math.min(100, Math.round(prog.done / prog.total * 100)) : null;
         const rows = (prog?.rows ?? r.rows_written ?? 0).toLocaleString();
-        const progTxt = prog ? `${prog.done}/${prog.total} pages` : 'starting…';
+        const progTxt = (prog && prog.unit === 'time' && prog.at)
+          ? `reached ${fmtNs(prog.at)}`
+          : (prog ? `${prog.done}/${prog.total}` : 'starting…');
         return `<div class="card" style="border-left:3px solid var(--accent);padding:.6rem 1rem;margin:.3rem 0">
           <div class="row" style="justify-content:space-between;margin-bottom:.3rem">
             <span><span class="ok">●</span> <strong>${escapeHtml(r.operation)}</strong> ${escapeHtml(r.exchange)} ${escapeHtml(r.symbol)} ${escapeHtml(r.data_type)}</span>
