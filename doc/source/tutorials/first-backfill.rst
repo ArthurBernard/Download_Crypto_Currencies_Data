@@ -9,7 +9,7 @@ needed.
 .. note::
 
    New to dccd? This is a *tutorial* — follow it top to bottom. For a specific
-   task see the :doc:`how-to guides </how-to/index>`; for the exact arguments,
+   task see the **How-to guides** (in the sidebar); for the exact arguments,
    the :doc:`API reference </api>`.
 
 Install
@@ -91,6 +91,7 @@ Next steps
 ==========
 
 - :doc:`stream-live` — record live trades as they happen.
-- :doc:`/how-to/index` — schedule daily collection, deep trade history, syncing.
+- :doc:`/how-to/schedule-daily` and the other How-to guides — scheduling, deep
+  trade history, syncing, migration.
 - :doc:`/cli` — do the same from the command line: ``dccd backfill -e binance
   -s BTC/USDT -t ohlc --span 3600 --start 2026-06-01``.

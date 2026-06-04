@@ -155,38 +155,45 @@ cursor-paginated and drain the full requested window.
 
    installation
    quickstart
-   changelog
 
 .. toctree::
    :hidden:
    :caption: Tutorials
 
-   tutorials/index
+   tutorials/first-backfill
+   tutorials/stream-live
 
 .. toctree::
    :hidden:
    :caption: How-to guides
 
-   how-to/index
+   how-to/schedule-daily
+   how-to/deep-trades
+   how-to/analyse
+   how-to/sync-remote
+   how-to/migrate
+   how-to/protect-ui
+   how-to/add-exchange
 
 .. toctree::
    :hidden:
-   :caption: Explanation
+   :caption: Concepts
 
    architecture
    exchanges
 
 .. toctree::
    :hidden:
-   :caption: Interfaces
+   :caption: Reference
 
+   api
    cli
    http-api
+   configuration
    web-ui
 
 .. toctree::
    :hidden:
-   :caption: Reference
+   :caption: About
 
-   configuration
-   api
+   changelog
