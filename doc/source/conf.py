@@ -40,17 +40,46 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.coverage',
+    'sphinx.ext.doctest',
     'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
     'sphinx.ext.intersphinx',
     'numpydoc',
     'sphinx_design',
     'sphinx_copybutton',
+    'sphinx_click',
+    'sphinxcontrib.autodoc_pydantic',
 ]
+
+# autodoc-pydantic: render config models as field references, not method dumps.
+autodoc_pydantic_model_show_json = False
+autodoc_pydantic_model_show_config_summary = False
+autodoc_pydantic_model_show_validator_summary = False
+autodoc_pydantic_model_show_validator_members = False
+autodoc_pydantic_model_member_order = 'bysource'
+autodoc_pydantic_field_list_validators = False
+autodoc_pydantic_field_show_constraints = True
+autodoc_pydantic_model_show_field_summary = True
 
 # sphinx-copybutton: strip prompts when copying code blocks
 copybutton_prompt_text = r">>> |\.\.\. |\$ "
 copybutton_prompt_is_regexp = True
+
+# sphinx.ext.doctest: make the common public API available to every example
+# (numpy-style — examples stay focused and still run in CI).
+doctest_global_setup = """
+import asyncio, os, tempfile
+from dccd import Client
+from dccd.domain.symbol import Symbol
+from dccd.domain.types import DataType
+from dccd.domain.records import OHLCBar, Trade, OrderBookSnapshot, OrderBookLevel
+from dccd.domain.dataset import DatasetId, Provenance
+from dccd.domain.capability import Capability
+from dccd.domain.transforms import aggregate_ohlc
+from dccd.storage.parquet import ParquetStore
+from dccd.storage.runs_sqlite import RunsStore
+from dccd.sources.registry import SourceRegistry
+"""
 
 project = 'Download Crypto Currencies Data'
 copyright = '2017-{}, Arthur Bernard'.format(date.today().year)
@@ -115,6 +144,8 @@ html_file_suffix = '.html'
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/dev', None),
+    'polars': ('https://docs.pola.rs/api/python/stable/', None),
+    'pydantic': ('https://docs.pydantic.dev/latest/', None),
     'fynance': ('https://fynance.readthedocs.io/en/latest/', None),
 }
 

@@ -41,10 +41,28 @@ class CoinbaseSource(
     TradesLive,
     OrderBookLive,
 ):
-    """Coinbase adapter.
+    """Coinbase source adapter.
 
-    OHLC: 300 candles per request (mandatory windowing via Paginator).
-    Trades: cursor-based, 100 per page (recent data only in practice).
+    - **Backfill**: OHLC (full, 300 candles/req — windowed automatically),
+      trades (recent only — see Notes), order-book snapshot (level 2).
+    - **Stream**: trades only.
+
+    Notes
+    -----
+    Coinbase paginates trades through ``CB-AFTER`` response *headers*, which the
+    JSON-only transport does not expose, so trades backfill returns a single
+    recent page (declared ``history="recent"``). Live OHLC / order book are not
+    implemented and are not declared as capabilities.
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+
+    Examples
+    --------
+    >>> from dccd.sources.coinbase import CoinbaseSource
+    >>> CoinbaseSource().capability_for(DataType.OHLC, 'rest', 'historical').max_per_request
+    300
     """
 
     exchange = "coinbase"

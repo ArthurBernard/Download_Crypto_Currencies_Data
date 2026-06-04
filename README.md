@@ -40,22 +40,25 @@ Interfaces: CLI · HTTP API · Web UI · Python Client
 
 ## Supported exchanges
 
-| Exchange | OHLC REST | Trades REST | Book REST | WebSocket (live) |
-|----------|-----------|-------------|-----------|------------------|
-| Binance  | ✅ full   | ✅ full     | ✅   | OHLC · trades · book |
-| Coinbase | ✅ full (300/req) | ⚠️ recent only | ✅ | trades |
-| Kraken   | ⚠️ 720 recent | ✅ full  | ✅   | OHLC · trades · book |
-| Bybit    | ✅ full   | ❌ no spot history | ✅   | OHLC · trades · book |
-| OKX      | ✅ full   | ✅ full     | ✅   | OHLC · trades · book |
-| Bitfinex | ✅ full   | ✅ full     | ✅   | OHLC · trades |
-| BitMEX   | ✅ full (4 spans) | ✅ full | ✅ | OHLC · trades · book |
+You pick a **data type** (OHLC · trades · order book) and an **operation** —
+**backfill** (history) or **stream** (live):
 
-Trades REST is **cursor-paginated**: a backfill drains the full window, not just
-the first capped page. `⚠️ recent only` means the exchange exposes no deep trade
-history through the JSON API (a deep request is rejected early, not silently
-truncated). The **WebSocket** column lists only channels with a real
-implementation — undeclared channels are rejected with `NoCapability` rather
-than running an empty stream.
+| Exchange | Backfill (history) | Stream (live) |
+|----------|--------------------|---------------|
+| Binance  | OHLC · trades · book | OHLC · trades · book |
+| Coinbase | OHLC · book · trades *(recent)* | trades |
+| Kraken   | OHLC *(720 recent)* · trades · book | OHLC · trades · book |
+| Bybit    | OHLC · book | OHLC · trades · book |
+| OKX      | OHLC · trades · book | OHLC · trades · book |
+| Bitfinex | OHLC · trades · book | OHLC · trades |
+| BitMEX   | OHLC *(1m/5m/1h/1d)* · trades · book | OHLC · trades · book |
+
+Trades backfill is **cursor-paginated** (drains the full window, not just the
+first page). *recent* = no deep history via the public API (a deeper request is
+rejected/clamped early, never silently truncated); Bybit spot has no trade
+history. **Order-book backfill** is a single snapshot — use a stream to record
+the book over time. Stream channels are only listed where really implemented
+(undeclared ones raise `NoCapability`).
 
 ### OHLC field fidelity
 

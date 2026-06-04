@@ -90,71 +90,47 @@ multiple exchanges via REST and WebSocket APIs.
 Supported exchanges
 -------------------
 
+You pick a **data type** (OHLC · trades · order book) and an **operation** —
+**backfill** (download history) or **stream** (collect live). Each cell lists
+the data types an exchange supports for that operation.
+
 .. list-table::
    :header-rows: 1
    :stub-columns: 1
+   :widths: 16 44 40
 
    * - Exchange
-     - REST OHLCV
-     - REST Trades
-     - REST Order Book
-     - WS OHLCV
-     - WS Trades
-     - WS Order Book
+     - Backfill (history)
+     - Stream (live)
    * - Binance
-     - ✓
-     - ✓
-     - ✓
-     -
-     - ✓
-     - ✓
+     - OHLC · trades · book
+     - OHLC · trades · book
    * - Coinbase
-     - ✓
-     - ✓ †
-     - ✓
-     -
-     -
-     -
+     - OHLC · book · trades [#recent]_
+     - trades
    * - Kraken
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
+     - OHLC [#kr]_ · trades · book
+     - OHLC · trades · book
    * - Bybit
-     - ✓
-     - ✓ †
-     - ✓
-     -
-     - ✓
-     - ✓
+     - OHLC · book
+     - OHLC · trades · book
    * - OKX
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
+     - OHLC · trades · book
+     - OHLC · trades · book
    * - Bitfinex
-     -
-     -
-     -
-     - ✓ \*
-     - ✓
-     - ✓
-   * - Bitmex
-     -
-     -
-     -
-     -
-     - ✓
-     - ✓
+     - OHLC · trades · book
+     - OHLC · trades
+   * - BitMEX
+     - OHLC · trades · book
+     - OHLC · trades · book
 
-\* Bitfinex WS OHLCV is delivered natively on the ``candles`` channel.
+.. [#recent] Coinbase trades backfill returns recent trades only (no deep
+   history). Bybit spot has no trade history at all.
+.. [#kr] Kraken OHLC backfill serves the 720 most recent bars; a deeper request
+   is clamped to that window. Order-book "backfill" is a single point-in-time
+   snapshot.
 
-† Recent trades only (Coinbase) — no deep historical pagination via the public
-REST API; a deep request is rejected early rather than silently truncated.
+See :doc:`exchanges` for per-exchange notes and OHLC field fidelity.
 Bybit spot has no trade history at all (WS only). All other trade backfills are
 cursor-paginated and drain the full requested window.
 
@@ -168,7 +144,19 @@ cursor-paginated and drain the full requested window.
 
 .. toctree::
    :hidden:
-   :caption: Guides
+   :caption: Tutorials
+
+   tutorials/index
+
+.. toctree::
+   :hidden:
+   :caption: How-to guides
+
+   how-to/index
+
+.. toctree::
+   :hidden:
+   :caption: Explanation
 
    architecture
    exchanges

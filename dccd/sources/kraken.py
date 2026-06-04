@@ -78,9 +78,25 @@ class KrakenSource(
 ):
     """Kraken source adapter.
 
-    OHLC REST: most recent 720 bars only (``history="recent"``).
-    Full OHLC history requires derivation from Trades (deferred, M3).
-    Trades REST: full history via ``since`` cursor.
+    - **Backfill**: OHLC (recent only — see Notes), trades (full, ``since``
+      cursor), order-book snapshot.
+    - **Stream**: OHLC, trades, order book (snapshot + deltas reconstructed).
+
+    Notes
+    -----
+    Kraken's OHLC REST returns only the **720 most recent bars**
+    (``history="recent"``); a deeper backfill is clamped to that window with a
+    warning. Full deep OHLC would have to be derived from trades (deferred).
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+
+    Examples
+    --------
+    >>> from dccd.sources.kraken import KrakenSource
+    >>> KrakenSource().capability_for(DataType.OHLC, 'rest', 'historical').history
+    'recent'
     """
 
     exchange = "kraken"

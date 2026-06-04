@@ -39,10 +39,27 @@ class BinanceSource(
     TradesLive,
     OrderBookLive,
 ):
-    """Binance adapter for OHLC, trades and order book.
+    """Binance source adapter (spot).
 
-    Supports: REST historical (klines 1000/req, aggTrades 1000/req, depth 5000),
-    WebSocket live (kline, aggTrade, depth).
+    The reference adapter — full historical depth and every live channel.
+
+    - **Backfill**: OHLC (``klines``, 1 000/req), trades (``aggTrades``,
+      cursor-paginated by ``fromId``), order-book snapshot (``depth``, ≤ 5 000).
+    - **Stream**: OHLC (``kline``), trades (``aggTrade``), order book (``depth``).
+
+    Adapters are not used directly — they are resolved by the engine from the
+    registry. Drive them through :class:`dccd.Client` or the CLI.
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+    dccd.sources.registry.SourceRegistry : adapter resolution.
+
+    Examples
+    --------
+    >>> from dccd.sources.binance import BinanceSource
+    >>> sorted({c.data_type.value for c in BinanceSource().capabilities()})
+    ['ohlc', 'orderbook', 'trades']
     """
 
     exchange = "binance"
