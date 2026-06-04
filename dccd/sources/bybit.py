@@ -31,10 +31,27 @@ _BASE = "https://api.bybit.com/v5/market"
 
 
 class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, OrderBookLive):
-    """Bybit adapter.
+    """Bybit source adapter (spot).
 
-    Trades: spot has only 60 recent trades (no history) → TradesHistory NOT implemented.
-    OHLC REST: full history available.
+    - **Backfill**: OHLC (full), order-book snapshot. **No trades** (see Notes).
+    - **Stream**: OHLC, trades, order book.
+
+    Notes
+    -----
+    Bybit spot exposes only the ~60 most recent trades and no history, so
+    ``TradesHistory`` is deliberately **not implemented** — a trades backfill
+    raises :class:`~dccd.domain.errors.NoCapability` rather than returning a
+    misleading recent slice. Live trades are still available via the stream.
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+
+    Examples
+    --------
+    >>> from dccd.sources.bybit import BybitSource
+    >>> BybitSource().capability_for(DataType.TRADES, 'rest', 'historical') is None
+    True
     """
 
     exchange = "bybit"

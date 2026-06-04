@@ -53,7 +53,29 @@ def _bfx_symbol(s: Symbol) -> str:
 
 
 class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, TradesLive, OrderBookLive):
-    """Bitfinex adapter — 10000 bars/trades per request (largest limit)."""
+    """Bitfinex source adapter.
+
+    - **Backfill**: OHLC, trades, order-book snapshot — up to **10 000 items per
+      request** (the largest limit of any adapter).
+    - **Stream**: OHLC (``candles``), trades. Order-book streaming is not
+      implemented and not declared.
+
+    Notes
+    -----
+    Bitfinex labels Tether ``UST``, so ``BTC/USDT`` is rendered as ``tBTCUST``
+    (``tBTCUSDT`` returns an empty list). Symbols with a part longer than three
+    characters use the ``tBASE:QUOTE`` form.
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+
+    Examples
+    --------
+    >>> from dccd.sources.bitfinex import _bfx_symbol
+    >>> _bfx_symbol(Symbol(base='BTC', quote='USDT'))
+    'tBTCUST'
+    """
 
     exchange = "bitfinex"
 

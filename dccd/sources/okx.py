@@ -40,7 +40,22 @@ class OKXSource(
     TradesLive,
     OrderBookLive,
 ):
-    """OKX adapter — uses history-candles for deep OHLC, history-trades for deep trades."""
+    """OKX source adapter.
+
+    - **Backfill**: OHLC (full, via ``history-candles``), trades (full, via
+      ``history-trades``, paged backward by timestamp), order-book snapshot.
+    - **Stream**: OHLC, trades, order book.
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+
+    Examples
+    --------
+    >>> from dccd.sources.okx import OKXSource
+    >>> OKXSource().capability_for(DataType.TRADES, 'rest', 'historical').history
+    'full'
+    """
 
     exchange = "okx"
 

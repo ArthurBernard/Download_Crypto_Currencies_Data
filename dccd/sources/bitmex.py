@@ -35,7 +35,27 @@ _BITMEX_BINS = {60: "1m", 300: "5m", 3600: "1h", 86400: "1d"}
 
 
 class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, TradesLive, OrderBookLive):
-    """BitMEX adapter — bucketed (1m/5m/1h/1d) OHLC, full trades history."""
+    """BitMEX source adapter.
+
+    - **Backfill**: OHLC (bucketed — **1m / 5m / 1h / 1d only**), trades (full),
+      order-book snapshot (``orderBook/L2``).
+    - **Stream**: OHLC, trades, order book.
+
+    Notes
+    -----
+    BitMEX buckets candles, so only the four spans above are available; other
+    spans raise. BTC is rendered ``XBT`` (e.g. ``XBTUSD``).
+
+    See Also
+    --------
+    dccd.Client : the public facade.
+
+    Examples
+    --------
+    >>> from dccd.sources.bitmex import BitMEXSource
+    >>> sorted(BitMEXSource().capability_for(DataType.OHLC, 'rest', 'historical').spans)
+    [60, 300, 3600, 86400]
+    """
 
     exchange = "bitmex"
 
