@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -109,6 +110,23 @@ class ParquetStore:
 
     def __init__(self, data_path: str | pathlib.Path) -> None:
         self._root = pathlib.Path(data_path)
+        # save() is a read-modify-write per period file and runs in worker
+        # threads (operations flush via asyncio.to_thread). Concurrent saves to
+        # the *same* file (e.g. "run all jobs", or a scheduled job overlapping a
+        # manual one) would otherwise interleave and corrupt the Parquet. One
+        # lock per file path serialises those while leaving different files
+        # (datasets/periods) fully parallel.
+        self._file_locks: dict[str, threading.Lock] = {}
+        self._file_locks_guard = threading.Lock()
+
+    def _lock_for(self, file_path: pathlib.Path) -> threading.Lock:
+        key = str(file_path)
+        with self._file_locks_guard:
+            lock = self._file_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._file_locks[key] = lock
+            return lock
 
     def directory(self, ds: DatasetId) -> pathlib.Path:
         """Return the directory for *ds*, creating it if needed."""
@@ -171,8 +189,11 @@ class ParquetStore:
             # should see as "rows written" (not the post-dedup file size).
             total_written += len(incoming)
             file_path = self._file_path(ds, period)
-            merged = self._merge(file_path, incoming, ds)
-            self._write_parquet(file_path, merged, provenance)
+            # Serialise the read-modify-write of this file against concurrent
+            # saves so the Parquet can't be corrupted or lose an update.
+            with self._lock_for(file_path):
+                merged = self._merge(file_path, incoming, ds)
+                self._write_parquet(file_path, merged, provenance)
 
         return total_written
 
@@ -454,8 +475,19 @@ class ParquetStore:
         meta: dict[str, str] = {}
         if provenance is not None:
             meta["dccd.provenance"] = provenance.model_dump_json()
-        # Polars >=1.x persists key/value metadata into the Parquet footer.
-        df.write_parquet(file_path, compression="snappy", metadata=meta or None)
+        # Write to a temp file then atomically rename, so a concurrent reader
+        # (load/last_timestamp/inventory) never sees a half-written file — it
+        # observes either the old complete file or the new one.
+        import os
+
+        tmp = file_path.with_suffix(file_path.suffix + f".tmp.{os.getpid()}.{threading.get_ident()}")
+        try:
+            # Polars >=1.x persists key/value metadata into the Parquet footer.
+            df.write_parquet(tmp, compression="snappy", metadata=meta or None)
+            os.replace(tmp, file_path)
+        finally:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
 
     @staticmethod
     def read_provenance(file_path: str | pathlib.Path) -> Provenance | None:

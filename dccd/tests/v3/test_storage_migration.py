@@ -157,6 +157,32 @@ class TestDedupKey:
         assert len(store.load(ds)) == 3
 
 
+class TestConcurrentSave:
+    def test_concurrent_writes_same_file_no_loss(self, tmp_path):
+        """Parallel saves to the same Parquet must not corrupt it or lose rows."""
+        import threading
+
+        from dccd.domain.records import OHLCBar
+        store = ParquetStore(tmp_path)
+        ds = DatasetId(exchange="x", symbol=Symbol(base="BTC", quote="USDT"),
+                       data_type=DataType.OHLC, span=3600)
+        base = 1_735_689_600
+
+        def worker(off: int) -> None:
+            bars = [OHLCBar(ts=(base + off * 1000 + i) * NS, open=1, high=2,
+                            low=0.5, close=1.5, volume=1) for i in range(200)]
+            store.save(ds, bars)
+
+        threads = [threading.Thread(target=worker, args=(k,)) for k in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        df = store.load(ds)
+        assert len(df) == 8 * 200  # every distinct bar survived, no corruption
+
+
 class TestProvenance:
     def test_provenance_round_trip(self, tmp_path):
         store = ParquetStore(tmp_path)
