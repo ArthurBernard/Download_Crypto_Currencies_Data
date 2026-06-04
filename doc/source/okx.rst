@@ -23,4 +23,8 @@ Example
    async with Client() as c:
        await c.backfill("okx", "BTC/USDT", "trades", start="2024-01-01")
 
-See :class:`~dccd.sources.okx.OKXSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.okx.OKXSource
+   :members:

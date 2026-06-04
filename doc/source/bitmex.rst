@@ -28,4 +28,8 @@ Example
        await c.backfill("bitmex", "BTC/USD", "ohlc", span=3600, start="2024-01-01")
        await c.backfill("bitmex", "BTC/USD", "trades", start="2024-01-01")
 
-See :class:`~dccd.sources.bitmex.BitMEXSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.bitmex.BitMEXSource
+   :members:

@@ -31,4 +31,8 @@ Example
        await c.backfill("kraken", "BTC/USD", "trades", start="2024-01-01")  # full history
        await c.backfill("kraken", "BTC/USD", "ohlc", span=3600, start="last")  # 720 recent
 
-See :class:`~dccd.sources.kraken.KrakenSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.kraken.KrakenSource
+   :members:
