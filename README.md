@@ -1,9 +1,9 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-dark-transparent.svg">
-  <img alt="dccd logo" src="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg" height="130px" align="left">
+  <img alt="dccd logo" src="https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/develop/doc/source/_static/logo-light-transparent.svg" height="180px" align="left">
 </picture>
 
-# Download Crypto-Currency Data
+# **Download Crypto-Currency Data**
 
 [![Python versions](https://img.shields.io/pypi/pyversions/dccd)](https://pypi.org/project/dccd/)
 [![PyPI](https://img.shields.io/pypi/v/dccd.svg)](https://pypi.org/project/dccd/)
@@ -14,6 +14,8 @@
 [![Coverage](https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data/branch/master/graph/badge.svg)](https://codecov.io/gh/ArthurBernard/Download_Crypto_Currencies_Data)
 [![Docstring coverage](https://raw.githubusercontent.com/ArthurBernard/Download_Crypto_Currencies_Data/badges/interrogate_badge.svg)](https://github.com/ArthurBernard/Download_Crypto_Currencies_Data)
 [![Downloads](https://pepy.tech/badge/dccd)](https://pepy.tech/project/dccd)
+
+___
 
 Python package to download crypto-currency data (OHLCV, trades, order book) from multiple
 exchanges via REST and WebSocket APIs. Data can be saved to CSV, Excel, SQLite, PostgreSQL,
@@ -29,6 +31,12 @@ With autonomous daemon support (APScheduler + PyYAML):
 
 ```bash
 pip install "dccd[daemon]"
+```
+
+With the web UI (FastAPI + htmx — `dccd ui`):
+
+```bash
+pip install "dccd[daemon,ui]"
 ```
 
 From source:
@@ -64,6 +72,9 @@ Stream real-time data (order book, trades) via WebSocket with automatic reconnec
 
 **Daemon** `dccd.daemon`  
 Autonomous, server-side collector driven by a YAML config. Runs REST jobs on a schedule (APScheduler), opens WebSocket streams for real-time collection, and periodically syncs all local data to one or more remote destinations (NAS, S3, SFTP, …) via rclone. Multiple remotes and a configurable sync interval are supported; collection is never blocked by remote availability.
+
+**Web UI** `dccd.daemon.api`  
+Optional browser interface (FastAPI + htmx) mirroring the CLI: dashboard of live health metrics, data inventory, job management (add/remove pairs, launch and cancel backfills), log tail, config editor, and remote-storage status. Runs standalone (`dccd ui`) or embedded in `dccd start`.
 
 ### Output formats
 
@@ -178,6 +189,9 @@ dccd remove --exchange kraken --pair ETH/USD --span 86400 --config config.yml
 
 # Inspect all data on disk (OHLC, trades, orderbook)
 dccd inventory --config config.yml
+
+# Web UI — dashboard, inventory, jobs, logs, config (needs: pip install "dccd[daemon,ui]")
+dccd ui --config config.yml          # http://127.0.0.1:8080
 
 # Enable shell tab-completion (run once after install)
 dccd --install-completion

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Storage{% endblock %}
+{% block content %}
+<h1>Storage</h1>
+<div class="card" id="storage-card">
+  <p class="muted">Loading…</p>
+</div>
+<div class="row">
+  <button id="sync-btn" onclick="syncNow()">Sync now</button>
+  <span id="sync-msg" class="muted"></span>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function loadStorage() {
+    const card = document.getElementById('storage-card');
+    try {
+      const s = await api('GET', '/api/storage');
+      const rclone = s.rclone_available
+        ? '<span class="ok">available</span>'
+        : '<span class="err">not found</span>';
+      const remotes = s.remotes.length
+        ? s.remotes.map(function (r) { return '<li>' + r.remote + ' (' + r.provider + ')</li>'; }).join('')
+        : '<li class="muted">none</li>';
+      const last = s.last_sync
+        ? fmtTs(s.last_sync.last_sync_at)
+        : 'never';
+      card.innerHTML =
+        '<div>rclone: ' + rclone + '</div>' +
+        '<div>sync interval: ' + s.sync_interval + 's</div>' +
+        '<div>last sync: ' + last + '</div>' +
+        '<div>remotes:<ul>' + remotes + '</ul></div>';
+      document.getElementById('sync-btn').disabled = !s.remotes.length;
+    } catch (e) {
+      card.innerHTML = '<p class="err">' + e.message + '</p>';
+    }
+  }
+
+  async function syncNow() {
+    const msg = document.getElementById('sync-msg');
+    try {
+      await api('POST', '/api/storage/sync');
+      msg.className = 'ok'; msg.textContent = 'Sync started…';
+      setTimeout(loadStorage, 3000);
+    } catch (e) { msg.className = 'err'; msg.textContent = e.message; }
+  }
+
+  loadStorage();
+  setInterval(loadStorage, 5000);
+</script>
+{% endblock %}

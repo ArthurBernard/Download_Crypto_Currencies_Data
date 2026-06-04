@@ -36,6 +36,29 @@ def test_import_data(loader, mock_coinbase):
         assert key in data[0]
 
 
+def test_import_data_chunks_large_window(tmp_data_path, monkeypatch):
+    # Coinbase caps ~300 candles/request; a window wider than 300*span must be
+    # paged into multiple requests instead of one oversized (HTTP 400) call.
+    from unittest.mock import MagicMock
+
+    loader = fc(tmp_data_path, 'XBT', 60, 'USD')
+    calls = []
+
+    def fake_get(url, params=None, *a, **kw):
+        calls.append(params)
+        m = MagicMock()
+        m.status_code = 200
+        m.json.return_value = [[params['start'] and 1_700_000_000, 1, 2, 0, 1, 5]]
+        return m
+
+    monkeypatch.setattr('requests.get', fake_get)
+    end = 1_700_040_000
+    start = end - 40_000  # > 300*60 = 18000 → at least 3 chunks
+    data = loader._import_data(start=start, end=end)
+    assert len(calls) >= 3
+    assert len(data) == len(calls)
+
+
 def test_http_500_raises(loader, mock_http_500):
     with pytest.raises(ValueError):
         loader._import_data(start=0)

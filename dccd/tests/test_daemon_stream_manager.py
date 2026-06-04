@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -276,7 +277,19 @@ def test_run_forever_stops_immediately_if_stop_set(tmp_path):
     mgr._stop_event.set()
 
     with patch.object(mgr, '_run_once') as mock_once:
-        mgr._run_forever(_stream_job(), 'BTC/USDT', ['trades'])
+        mgr._run_forever(_stream_job(), 'BTC/USDT', ['trades'], threading.Event())
+
+    mock_once.assert_not_called()
+
+
+def test_run_forever_stops_on_per_key_stop(tmp_path):
+    cfg = _make_config(tmp_path)
+    mgr = StreamManager(cfg)
+    stop = threading.Event()
+    stop.set()
+
+    with patch.object(mgr, '_run_once') as mock_once:
+        mgr._run_forever(_stream_job(), 'BTC/USDT', ['trades'], stop)
 
     mock_once.assert_not_called()
 
@@ -284,6 +297,7 @@ def test_run_forever_stops_immediately_if_stop_set(tmp_path):
 def test_run_forever_restarts_on_exception(tmp_path):
     cfg = _make_config(tmp_path)
     mgr = StreamManager(cfg)
+    stop = threading.Event()
     call_count = 0
 
     def _side_effect(*args, **kwargs):
@@ -291,11 +305,11 @@ def test_run_forever_restarts_on_exception(tmp_path):
         call_count += 1
         if call_count == 1:
             raise RuntimeError('crash')
-        mgr._stop_event.set()  # stop after second call
+        stop.set()  # stop after second call
 
     with patch.object(mgr, '_run_once', side_effect=_side_effect):
-        with patch.object(mgr._stop_event, 'wait', return_value=False):
-            mgr._run_forever(_stream_job(), 'BTC/USDT', ['trades'])
+        with patch.object(stop, 'wait', return_value=False):
+            mgr._run_forever(_stream_job(), 'BTC/USDT', ['trades'], stop)
 
     assert call_count == 2
 
@@ -366,3 +380,157 @@ def test_run_once_bitfinex_sets_parser(tmp_path):
 
     mock_obj.get_parser.assert_called_once_with('trades')
     assert mock_obj.parser is mock_obj.get_parser.return_value
+
+
+# ---------------------------------------------------------------------------
+# StreamManager.start_one / stop_one / status / running_keys
+# ---------------------------------------------------------------------------
+
+def test_key_format():
+    assert StreamManager._key('binance', 'BTC/USDT', ['trades', 'book']) == \
+        'binance_BTC_USDT_trades_book'
+
+
+def test_start_one_starts_thread(tmp_path):
+    job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+
+    with patch.object(mgr, '_run_forever'):
+        key = mgr.start_one(job, 'BTC/USDT', ['trades'])
+
+    assert key == 'binance_BTC_USDT_trades'
+    assert key in mgr._threads
+    assert key in mgr._stops
+
+
+def test_start_one_idempotent_while_alive(tmp_path):
+    job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+
+    fake = MagicMock()
+    fake.is_alive.return_value = True
+    key = StreamManager._key('binance', 'BTC/USDT', ['trades'])
+    mgr._threads[key] = fake
+
+    with patch('threading.Thread') as mock_thread:
+        out = mgr.start_one(job, 'BTC/USDT', ['trades'])
+
+    assert out == key
+    mock_thread.assert_not_called()
+
+
+def test_stop_one_signals_event_and_downloader(tmp_path):
+    cfg = _make_config(tmp_path)
+    mgr = StreamManager(cfg)
+    key = StreamManager._key('binance', 'BTC/USDT', ['trades'])
+
+    ev = threading.Event()
+    mgr._stops[key] = ev
+    dl = MagicMock()
+    dl.until = time.time() + 9999
+    dl.is_connect = True
+    mgr._downloaders[key] = dl
+
+    assert mgr.stop_one(key) is True
+    assert ev.is_set()
+    assert dl.is_connect is False
+    assert dl.until <= time.time()
+
+
+def test_stop_one_unknown_key_returns_false(tmp_path):
+    cfg = _make_config(tmp_path)
+    mgr = StreamManager(cfg)
+    assert mgr.stop_one('nope') is False
+
+
+def test_stop_one_frees_slot_for_restart(tmp_path):
+    # A stop immediately followed by a start must spawn a fresh thread rather
+    # than reuse the one still winding down (start-after-stop race).
+    job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+    key = StreamManager._key('binance', 'BTC/USDT', ['trades'])
+
+    winding_down = MagicMock()
+    winding_down.is_alive.return_value = True
+    mgr._threads[key] = winding_down
+    ev = threading.Event()
+    mgr._stops[key] = ev
+
+    assert mgr.stop_one(key) is True
+    assert ev.is_set()
+    assert key not in mgr._threads
+    assert key not in mgr._stops
+
+    with patch.object(mgr, '_run_forever'):
+        new_key = mgr.start_one(job, 'BTC/USDT', ['trades'])
+
+    assert new_key == key
+    assert mgr._threads[key] is not winding_down
+
+
+def test_run_once_finally_keeps_restarted_downloader(tmp_path):
+    # The dying thread must not remove a downloader a restart registered under
+    # the same key (identity-guarded cleanup).
+    import dccd.daemon.stream_manager as sm
+
+    job = _stream_job(exchange='binance', channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+    key = StreamManager._key('binance', 'BTC/USDT', ['trades'])
+
+    fresh = MagicMock()  # downloader registered by the restarted thread
+    mock_cls = MagicMock(return_value=MagicMock())
+
+    original = sm._STREAM_CLASSES.copy()
+    sm._STREAM_CLASSES['binance'] = mock_cls
+    try:
+        with patch('asyncio.new_event_loop') as mock_loop_fn, \
+             patch('asyncio.set_event_loop'), \
+             patch('asyncio.gather'):
+            mock_loop = MagicMock()
+            mock_loop_fn.return_value = mock_loop
+            # Simulate a concurrent restart swapping in a fresh downloader
+            # while this run is inside run_until_complete.
+            def _swap(*a, **k):
+                mgr._downloaders[key] = fresh
+            mock_loop.run_until_complete.side_effect = _swap
+            mgr._run_once(job, 'BTC/USDT', ['trades'])
+    finally:
+        sm._STREAM_CLASSES.update(original)
+
+    assert mgr._downloaders[key] is fresh
+
+
+def test_status_reports_running_state(tmp_path):
+    job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+
+    with patch.object(mgr, '_run_forever'):
+        key = mgr.start_one(job, 'BTC/USDT', ['trades'])
+    # join the (patched, instant) thread so is_alive() is deterministic
+    mgr._threads[key].join(timeout=1)
+
+    st = mgr.status()
+    assert len(st) == 1
+    entry = st[0]
+    assert entry['key'] == key
+    assert entry['exchange'] == 'binance'
+    assert entry['pair'] == 'BTC/USDT'
+    assert entry['channels'] == ['trades']
+    # the patched _run_forever returns immediately → thread no longer alive
+    assert entry['running'] is False
+
+
+def test_status_no_streams_when_idle(tmp_path):
+    job = _stream_job(exchange='binance', pairs=['BTC/USDT'], channels=['trades'])
+    cfg = _make_config(tmp_path, jobs=[job])
+    mgr = StreamManager(cfg)
+
+    st = mgr.status()
+    assert len(st) == 1
+    assert st[0]['running'] is False
+    assert mgr.running_keys() == []

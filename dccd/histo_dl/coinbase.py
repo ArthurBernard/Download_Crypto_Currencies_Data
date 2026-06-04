@@ -115,33 +115,40 @@ class FromCoinbase(ImportDataCryptoCurrencies):
         )
         self.pair = self.format_pair(crypto, fiat)
 
+    # Coinbase Exchange caps each candles request at ~300 bars; larger
+    # windows return HTTP 400, so we page through the range in chunks.
+    _MAX_CANDLES = 300
+
     def _import_data(self, start: int | str = 'last', end: int | str = 'now') -> list[dict[str, Any]]:
         self.start, self.end = self._set_time(start, end)
-        param = {
-            'start': datetime.fromtimestamp(self.start, tz=timezone.utc).isoformat(),
-            'end':   datetime.fromtimestamp(self.end,   tz=timezone.utc).isoformat(),
-            'granularity': self.span,
-        }
-        r = self._fetch(
-            'https://api.exchange.coinbase.com/products/{}/candles'.format(
-                self.pair
-            ),
-            param,
+        url = 'https://api.exchange.coinbase.com/products/{}/candles'.format(
+            self.pair
         )
-        text = r.json()
-        if not isinstance(text, list):
-            raise RuntimeError(f"Coinbase API error: {text!r:.200}")
-        if text and not isinstance(text[0], (list, tuple)):
-            raise RuntimeError(f"Coinbase unexpected response: {text[:3]!r:.200}")
-        data = [{
-            'date': float(e[0]),
-            'open': float(e[3]),
-            'high': float(e[2]),
-            'low': float(e[1]),
-            'close': float(e[4]),
-            'volume': float(e[5]),
-            'quoteVolume': float(e[4]) * float(e[5]),
-        } for e in text]
+        window = self._MAX_CANDLES * self.span
+        data: list[dict[str, Any]] = []
+        current = self.start
+        while current < self.end:
+            chunk_end = min(current + window, self.end)
+            param = {
+                'start': datetime.fromtimestamp(current, tz=timezone.utc).isoformat(),
+                'end':   datetime.fromtimestamp(chunk_end, tz=timezone.utc).isoformat(),
+                'granularity': self.span,
+            }
+            text = self._fetch(url, param).json()
+            if not isinstance(text, list):
+                raise RuntimeError(f"Coinbase API error: {text!r:.200}")
+            if text and not isinstance(text[0], (list, tuple)):
+                raise RuntimeError(f"Coinbase unexpected response: {text[:3]!r:.200}")
+            data.extend({
+                'date': float(e[0]),
+                'open': float(e[3]),
+                'high': float(e[2]),
+                'low': float(e[1]),
+                'close': float(e[4]),
+                'volume': float(e[5]),
+                'quoteVolume': float(e[4]) * float(e[5]),
+            } for e in text)
+            current = chunk_end
 
         return data
 
