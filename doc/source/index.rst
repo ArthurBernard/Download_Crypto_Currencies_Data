@@ -95,66 +95,47 @@ Supported exchanges
    :stub-columns: 1
 
    * - Exchange
-     - REST OHLCV
-     - REST Trades
-     - REST Order Book
-     - WS OHLCV
-     - WS Trades
-     - WS Order Book
+     - OHLC REST
+     - Trades REST
+     - Book REST
+     - WebSocket (live)
    * - Binance
-     - ✓
-     - ✓
-     - ✓
-     -
-     - ✓
-     - ✓
+     - ✅ full
+     - ✅ full
+     - ✅
+     - OHLC · trades · book
    * - Coinbase
-     - ✓
-     - ✓ †
-     - ✓
-     -
-     -
-     -
+     - ✅ full
+     - ⚠️ recent only
+     - ✅
+     - trades
    * - Kraken
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
+     - ⚠️ 720 recent
+     - ✅ full
+     - ✅
+     - OHLC · trades · book
    * - Bybit
-     - ✓
-     - ✓ †
-     - ✓
-     -
-     - ✓
-     - ✓
+     - ✅ full
+     - ❌ no spot history
+     - ✅
+     - OHLC · trades · book
    * - OKX
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
+     - ✅ full
+     - ✅ full
+     - ✅
+     - OHLC · trades · book
    * - Bitfinex
-     -
-     -
-     -
-     - ✓ \*
-     - ✓
-     - ✓
-   * - Bitmex
-     -
-     -
-     -
-     -
-     - ✓
-     - ✓
+     - ✅ full
+     - ✅ full
+     - ✅
+     - OHLC · trades
+   * - BitMEX
+     - ✅ full (4 spans)
+     - ✅ full
+     - ✅
+     - OHLC · trades · book
 
-\* Bitfinex WS OHLCV is delivered natively on the ``candles`` channel.
-
-† Recent trades only (Coinbase) — no deep historical pagination via the public
-REST API; a deep request is rejected early rather than silently truncated.
+See :doc:`exchanges` for per-exchange notes and OHLC field fidelity.
 Bybit spot has no trade history at all (WS only). All other trade backfills are
 cursor-paginated and drain the full requested window.
 
