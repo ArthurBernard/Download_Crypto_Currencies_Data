@@ -34,6 +34,11 @@ class TestHealthEndpoint:
         assert resp.json()["status"] == "ok"
 
 
+class TestBackfillCancel:
+    def test_cancel_unknown_run_404(self, client):
+        assert client.delete("/api/backfill/nope").status_code == 404
+
+
 class TestAuth:
     @pytest.fixture
     def auth_client(self, tmp_data_path):

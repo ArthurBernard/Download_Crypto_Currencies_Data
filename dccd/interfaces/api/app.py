@@ -160,6 +160,10 @@ def create_app(
         # Keeps strong references to background tasks so Python's GC doesn't
         # collect them mid-execution (asyncio only holds a weak ref internally).
         app.state.bg_tasks = set()
+        # Per-run stop events so a running backfill can be cancelled via
+        # DELETE /api/backfill/{run_id} (e.g. a runaway multi-million-row trades
+        # backfill the user launched by mistake).
+        app.state.backfill_stops = {}
 
         yield
         # --- shutdown ---
@@ -247,6 +251,29 @@ def create_app(
     def _bus(request: Request) -> EventBus:
         return cast(EventBus, request.app.state.event_bus)
 
+    def _run_backfill_tracked(request: Request, spec: JobSpec, run_id: str) -> None:
+        """Spawn a backfill with a cancellable stop event registered by run_id."""
+        reg = _reg(request)
+        store = _store(request)
+        runs_store = _runs(request)
+        bus = _bus(request)
+        stops = request.app.state.backfill_stops
+        stop_event = asyncio.Event()
+        stops[run_id] = stop_event
+
+        async def _run() -> None:
+            from dccd.application.operations import backfill
+            try:
+                await backfill(spec, registry=reg, store=store, runs_store=runs_store,
+                               events=bus.for_run(run_id), run_id=run_id,
+                               stop_event=stop_event)
+            except Exception as exc:
+                logger.error("Backfill task %s failed: %s", run_id, exc)
+            finally:
+                stops.pop(run_id, None)
+
+        _spawn(request, _run())
+
     # -----------------------------------------------------------------------
     # Operations
     # -----------------------------------------------------------------------
@@ -307,24 +334,7 @@ def create_app(
         # may contain '/' from the symbol (e.g. BTC/USDT) and would break routing.
         import uuid as _uuid
         run_id = str(_uuid.uuid4())
-
-        # Capture state objects before creating the task — the Request object
-        # is recycled by Starlette after the response is sent.
-        reg = _reg(request)
-        store = _store(request)
-        runs_store = _runs(request)
-        bus = _bus(request)
-
-        async def _run() -> None:
-            from dccd.application.operations import backfill
-            evts = bus.for_run(run_id)
-            try:
-                await backfill(spec, registry=reg, store=store,
-                               runs_store=runs_store, events=evts, run_id=run_id)
-            except Exception as exc:
-                logger.error("Backfill task %s failed: %s", run_id, exc)
-
-        _spawn(request, _run())
+        _run_backfill_tracked(request, spec, run_id)
         return {"run_id": run_id, "status": "started"}
 
     @app.get("/api/backfill/{run_id}")
@@ -334,6 +344,15 @@ def create_app(
         if not run:
             raise HTTPException(404, f"Run {run_id!r} not found")
         return _parse_run(run)
+
+    @app.delete("/api/backfill/{run_id}")
+    async def cancel_backfill(run_id: str, request: Request) -> dict[str, Any]:
+        """Cancel a running backfill (cooperative — stops at the next page)."""
+        ev = request.app.state.backfill_stops.get(run_id)
+        if ev is None:
+            raise HTTPException(404, f"No running backfill {run_id!r}")
+        ev.set()
+        return {"status": "cancelling", "run_id": run_id}
 
     @app.get("/api/runs")
     async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
@@ -408,21 +427,8 @@ def create_app(
             raise HTTPException(400, "Only backfill jobs can be triggered manually; use /api/streams/start for stream jobs")
 
         run_id = str(_uuid.uuid4())
-        reg = _reg(request)
-        store = _store(request)
-        runs_store = _runs(request)
-        bus = _bus(request)
+        _run_backfill_tracked(request, spec, run_id)
 
-        async def _run() -> None:
-            from dccd.application.operations import backfill
-            evts = bus.for_run(run_id)
-            try:
-                await backfill(spec, registry=reg, store=store,
-                               runs_store=runs_store, events=evts, run_id=run_id)
-            except Exception as exc:
-                logger.error("Job %s run failed: %s", job_id, exc)
-
-        _spawn(request, _run())
         return {"run_id": run_id, "status": "started", "job_id": job_id}
 
     @app.post("/api/jobs/run-all")
@@ -433,25 +439,10 @@ def create_app(
         backfill_specs = [s for s in specs if s.operation == "backfill" and s.enabled]
 
         run_ids = []
-        reg = _reg(request)
-        store = _store(request)
-        runs_store = _runs(request)
-        bus = _bus(request)
-
         for spec in backfill_specs:
             run_id = str(_uuid.uuid4())
             run_ids.append({"run_id": run_id, "job_id": spec.id})
-
-            async def _run(s=spec, rid=run_id) -> None:
-                from dccd.application.operations import backfill
-                evts = bus.for_run(rid)
-                try:
-                    await backfill(s, registry=reg, store=store,
-                                   runs_store=runs_store, events=evts, run_id=rid)
-                except Exception as exc:
-                    logger.error("Job %s run failed: %s", s.id, exc)
-
-            _spawn(request, _run())
+            _run_backfill_tracked(request, spec, run_id)
 
         return {"started": len(run_ids), "runs": run_ids}
 

@@ -69,7 +69,8 @@ just data you happen to have. Click <em>Backfill</em> to extend a dataset's hist
     </div>
     <div class="row" style="margin-top:1rem;gap:.5rem">
       <button id="bf-launch-btn" onclick="launchBackfill()">Launch</button>
-      <button class="ghost" onclick="closeModal('bf-modal')">Cancel</button>
+      <button id="bf-stop-btn" onclick="stopBackfill()" style="display:none;background:var(--err);border-color:var(--err)">Stop</button>
+      <button class="ghost" onclick="closeModal('bf-modal')">Close</button>
     </div>
     <div id="bf-status" style="margin-top:.8rem;padding:.5rem;border-radius:4px;display:none"></div>
     <div id="bf-progress-wrap" style="display:none;margin-top:.6rem">
@@ -162,6 +163,9 @@ function prefillModal(exchange, symbol, dataType, span) {
   document.getElementById('bf-prog-bar').style.width = '0%';
   document.getElementById('bf-launch-btn').disabled = false;
   document.getElementById('bf-launch-btn').textContent = 'Launch';
+  document.getElementById('bf-stop-btn').style.display = 'none';
+  document.getElementById('bf-stop-btn').disabled = false;
+  document.getElementById('bf-stop-btn').textContent = 'Stop';
   bfRunId = null;
   if (bfPollInterval) { clearInterval(bfPollInterval); bfPollInterval = null; }
   onBfTypeChange();
@@ -227,10 +231,24 @@ async function launchBackfill() {
     bfRunId = run_id;
     setStatusEl('', '');
     btn.textContent = 'Running…';
+    document.getElementById('bf-stop-btn').style.display = '';
     startPolling();
   } catch (e) {
     setStatusEl(e.message, 'err');
     btn.disabled = false; btn.textContent = 'Launch';
+  }
+}
+
+async function stopBackfill() {
+  if (!bfRunId) return;
+  const sb = document.getElementById('bf-stop-btn');
+  sb.disabled = true; sb.textContent = 'Stopping…';
+  try {
+    await api('DELETE', '/api/backfill/' + bfRunId);
+    setStatusEl('Cancelling — will stop at the next page…', 'ok');
+  } catch (e) {
+    setStatusEl(e.message, 'err');
+    sb.disabled = false; sb.textContent = 'Stop';
   }
 }
 
@@ -250,6 +268,9 @@ async function _doPoll() {
       clearInterval(bfPollInterval);
       const btn = document.getElementById('bf-launch-btn');
       btn.disabled = false; btn.textContent = 'Launch';
+      const sb = document.getElementById('bf-stop-btn');
+      sb.style.display = 'none'; sb.disabled = false; sb.textContent = 'Stop';
+      if (run.state === 'cancelled') toast(`Cancelled — ${(run.rows_written||0).toLocaleString()} rows kept`, 'ok');
       if (run.state === 'succeeded') {
         toast(`Done — ${(run.rows_written||0).toLocaleString()} rows written`, 'ok');
         loadInventory();
