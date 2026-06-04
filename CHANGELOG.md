@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+
 - `doc/source/` — complete Sphinx documentation overhaul: redesigned homepage
   with sphinx-design cards, captioned toctrees (Getting Started / Data Collection /
   Reference), new pages (`installation`, `quickstart`, `changelog`, `cli`,
