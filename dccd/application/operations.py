@@ -35,9 +35,14 @@ __all__ = ["backfill", "stream", "read", "inventory"]
 logger = logging.getLogger(__name__)
 
 _FLUSH_BATCH = 10_000
-# Default lookback when no previous data exists and start="last".
-# Avoids a 56-year paginator run from epoch 0.
-_DEFAULT_LOOKBACK_NS = 30 * 86400 * NS  # 30 days
+# Default lookback per data type when start="last" and no data exists yet.
+# Bounds the very first backfill so it can't silently run for millions of rows
+# (trades) or from epoch 0. Deep history is opt-in via an explicit start date.
+_DEFAULT_LOOKBACK_NS = {
+    DataType.OHLC: 30 * 86400 * NS,      # ~720 1h bars / 43k 1m bars
+    DataType.TRADES: 3600 * NS,          # 1 hour of trades
+    DataType.ORDERBOOK: 3600 * NS,       # single snapshot anyway
+}
 
 
 def _make_dataset_id(target: JobTarget) -> DatasetId:
@@ -160,9 +165,17 @@ async def backfill(
         if last is not None:
             start_ns: int = last + 1
         else:
-            # No data yet — start 30 days back instead of epoch 0.
-            start_ns = end_ns - _DEFAULT_LOOKBACK_NS
-            _emit_log(events, runs_store, run_id, "No existing data — starting from 30 days ago")
+            # No data yet — pick a *bounded* default so "Backfill" with the
+            # default start never silently triggers a multi-million-row run. The
+            # safe window is data-type-aware: 30 days of OHLC is ~720 1h bars,
+            # but 30 days of trades is tens of millions — so trades default to a
+            # short recent window (use a custom start date for deep history).
+            lookback = _DEFAULT_LOOKBACK_NS.get(target.data_type, 30 * 86400 * NS)
+            start_ns = end_ns - lookback
+            human = "1 hour" if target.data_type == DataType.TRADES else "30 days"
+            _emit_log(events, runs_store, run_id,
+                      f"No existing data — starting from {human} ago "
+                      "(set a custom start date for more)")
     elif params.start == "origin":
         start_ns = 0
     else:
