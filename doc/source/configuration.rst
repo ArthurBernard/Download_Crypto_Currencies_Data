@@ -2,8 +2,9 @@
 Configuration Reference
 =======================
 
-The daemon and CLI are driven by a YAML config validated by Pydantic
-(:class:`dccd.application.config.AppConfig`). Validate it with:
+The daemon and CLI are driven by a YAML config validated by Pydantic. The field
+tables below are generated from the models, so defaults and constraints are
+always accurate. Validate a file with:
 
 .. code-block:: bash
 
@@ -48,25 +49,25 @@ Example
        trigger_kind: supervised
        start: last
 
-Sections
-========
+Schema
+======
 
-``settings``
-   ``data_path`` (root for Parquet files), ``timezone`` (``local``/``UTC``/IANA),
-   web UI ``ui_host`` / ``ui_port``, optional ``ui_auth_token`` (enables Bearer
-   auth on ``/api/*``) and ``ui_allow_origins`` (opt-in CORS).
+.. currentmodule:: dccd.application.config
 
-``storage``
-   ``local_path``, rclone ``remotes``, and ``sync_interval`` (seconds; ``0``
-   disables periodic sync).
+.. autopydantic_model:: AppConfig
+   :inherited-members: BaseModel
 
-``alerts``
-   ``webhook_url`` and ``max_consecutive_errors`` for health alerts.
+.. autopydantic_model:: SettingsConfig
+   :inherited-members: BaseModel
 
-``jobs``
-   A list of job definitions. Each expands over ``pairs`` into one job spec per
-   pair. Key fields: ``exchange``, ``data_type`` (``ohlc``/``trades``/
-   ``orderbook``), ``operation`` (``backfill``/``stream``), ``span`` (required
-   for OHLC), ``trigger_kind`` (``interval``/``cron``/``supervised``/``once``),
-   ``every`` / ``cron`` for scheduling, ``start``, ``depth`` and
-   ``snapshot_interval`` (order book).
+.. autopydantic_model:: StorageConfig
+   :inherited-members: BaseModel
+
+.. autopydantic_model:: RemoteConfig
+   :inherited-members: BaseModel
+
+.. autopydantic_model:: AlertConfig
+   :inherited-members: BaseModel
+
+.. autopydantic_model:: JobConfig
+   :inherited-members: BaseModel

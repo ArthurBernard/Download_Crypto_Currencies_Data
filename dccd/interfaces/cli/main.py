@@ -250,3 +250,8 @@ def cmd_ui(
     ui_port = port or cfg.settings.ui_port
     typer.echo(f"UI at http://{ui_host}:{ui_port}")
     uvicorn.run(fastapi_app, host=ui_host, port=ui_port)
+
+
+# Click command object exposed for documentation (sphinx-click). Building the
+# CLI reference from the live app keeps the docs from drifting.
+cli = typer.main.get_command(app)
