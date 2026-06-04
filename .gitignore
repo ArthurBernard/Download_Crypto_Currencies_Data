@@ -21,7 +21,6 @@ __pycache__/
 .pytest_cache/
 
 # Local only (not committed)
-CLAUDE.md
 TODO.md
 todo/
 done/
@@ -35,3 +34,11 @@ coverage.xml
 # Sphinx generated files
 doc/source/generated/
 doc/build/
+
+# Runtime / data / build artifacts
+data/
+doc/_build/
+pytest-of-arthur/
+scripts/
+.python-version
+*.db

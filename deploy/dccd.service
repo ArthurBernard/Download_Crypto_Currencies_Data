@@ -1,0 +1,33 @@
+# systemd unit for the dccd v3 daemon (scheduler + streams + web UI).
+#
+# Install:
+#   sudo cp deploy/dccd.service /etc/systemd/system/dccd.service
+#   sudo useradd --system --home /var/lib/dccd --create-home dccd   # if absent
+#   # place your config at /etc/dccd/config.yml (data_path: /var/lib/dccd/data)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now dccd
+#
+# Adjust ExecStart to the absolute path of the dccd entry point in your venv
+# (e.g. /opt/dccd/venv/bin/dccd) if not installed system-wide.
+[Unit]
+Description=dccd v3 — crypto data daemon (scheduler + streams + web UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dccd
+Group=dccd
+Environment=XDG_CONFIG_HOME=/etc
+ExecStart=/usr/local/bin/dccd start
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/dccd
+
+[Install]
+WantedBy=multi-user.target

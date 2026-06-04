@@ -6,6 +6,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v3 remediation, pre-3.0.0)
+
+- Cursor-based trades pagination: the engine now follows each adapter's opaque
+  cursor until a window is drained, instead of advancing by a fixed time window.
+  Fixes silent loss of >95% of trades on every liquid pair (all exchanges).
+- Complete v2→v3 Parquet migration (`dccd migrate`): renames `quoteVolume`→
+  `quote_volume`, drops `weightedAverage`, adds a `trades` column, rescales
+  second timestamps to nanoseconds — schema-aware and idempotent.
+- Bearer auth on `/api/*` when `settings.ui_auth_token` is set, with a `?token=`
+  fallback for Server-Sent Events; `settings.ui_allow_origins` for opt-in CORS.
+- Public async `Client.read()` and `Client.stream()`; `Client` wires adapters
+  via `service_factory` (single source of truth).
+- Network-marked end-to-end tests (`pytest -m network`) validating pagination
+  against live exchange APIs.
+
+### Fixed
+
+- Data loss on merge: writing into an existing legacy v2 Parquet file no longer
+  silently overwrites it; existing rows are canonicalised and preserved.
+- Provenance is now actually written into the Parquet footer (was computed but
+  dropped).
+- Custom ISO start date for backfill no longer raises (`JobParams.start`).
+- `dccd inventory` no longer crashes on OHLC datasets.
+- Streams with no real implementation (Coinbase OHLC/order book, Bitfinex order
+  book) are rejected with `NoCapability` instead of "running" with zero output.
+- `history="recent"` exchanges (Kraken OHLC) are clamped + warned instead of
+  silently returning wrong deep history.
+- `mypy dccd/` runs and passes again (it had been aborting on the dev Sphinx).
+
+### Changed / Removed
+
+- Honest OHLC fidelity: Coinbase `quote_volume` is null (was a fabricated
+  `close×volume`); Kraken now fills its native trade count.
+- Removed the dead `parallel` backfill flag, the unused `Page` model and the
+  unused bundled `htmx.min.js`.
+
+> v3 is a full hexagonal rewrite. It **removes** the v2 daemon web UI shipped in
+> 2.4.0 (`dccd/daemon/*`) and replaces it with `dccd/interfaces/` (api/cli/ui).
+
 ## [2.4.0] - 2026-06-04
 
 ### Added

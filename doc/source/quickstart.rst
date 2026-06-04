@@ -6,183 +6,85 @@ See :doc:`installation` for prerequisites and install instructions.
 
 ----
 
-Historical API
+Python API
+==========
+
+Use the async :class:`dccd.Client` as a context manager. It resolves the config
+(via ``$XDG_CONFIG_HOME/dccd/config.yml`` or ``./config.yml``) and wires every
+exchange adapter.
+
+.. code-block:: python
+
+   import asyncio
+   from dccd import Client
+
+
+   async def main():
+       async with Client() as c:
+           # Backfill hourly OHLC candles (resumes from the last stored bar).
+           result = await c.backfill("binance", "BTC/USDT", "ohlc",
+                                     span=3600, start="last")
+           print(result["rows_written"], "rows")
+
+           # Read them back as a Polars DataFrame.
+           df = c.read("binance", "BTC/USDT", "ohlc", span=3600)
+           print(df.tail())
+
+
+   asyncio.run(main())
+
+``start`` accepts ``"last"`` (resume), ``"origin"`` (full history), an ISO date
+(``"2024-01-01"``), or a nanosecond integer. ``data_type`` is ``"ohlc"``,
+``"trades"`` or ``"orderbook"``.
+
+Trades backfills are **cursor-paginated**: the engine follows each exchange's
+cursor until the requested window is fully drained.
+
+Live streaming
 --------------
 
-Download OHLCV candles via REST, save to Parquet, and load as a DataFrame:
-
 .. code-block:: python
 
-   from dccd.histo_dl import FromBinance
+   import asyncio
+   from dccd import Client
 
-   obj = FromBinance('/data/crypto/', 'BTC', span=3600, fiat='USDT')
+   async def main():
+       async with Client() as c:
+           stop = asyncio.Event()
+           asyncio.get_event_loop().call_later(60, stop.set)  # stop after 60s
+           await c.stream("binance", "BTC/USDT", "trades", stop_event=stop)
 
-   # Full date range
-   obj.import_data(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
-   obj.save(form='parquet')
+   asyncio.run(main())
 
-   df = obj.get_data()
-   print(df.head())
-
-All five exchange classes share the same interface: :class:`~dccd.histo_dl.binance.FromBinance`,
-:class:`~dccd.histo_dl.kraken.FromKraken`, :class:`~dccd.histo_dl.coinbase.FromCoinbase`,
-:class:`~dccd.histo_dl.bybit.FromBybit`, :class:`~dccd.histo_dl.okx.FromOKX`.
-
-See :doc:`histo_dl` for the full API reference.
-
-----
-
-Incremental updates
--------------------
-
-Pass ``start='last'`` to resume from the last saved timestamp, with no
-duplicate rows:
-
-.. code-block:: python
-
-   # On first run downloads everything; on subsequent runs resumes from
-   # the most recent saved candle.
-   obj.import_data(start='last', end='now').save(form='parquet')
-
-This is the recommended pattern for scheduled collection: run it daily or
-hourly via cron or the :doc:`daemon`.
-
-----
-
-Trades and Order Book
----------------------
-
-The same fluent API works for trade history and order book snapshots:
-
-.. code-block:: python
-
-   from dccd.histo_dl import FromKraken, FromBinance
-
-   # Trade history — full historical pagination (Kraken, OKX)
-   obj = FromKraken('/data/crypto/', 'BTC', span=3600, fiat='USD')
-   obj.import_trades(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
-   obj.save_trades(form='parquet')
-
-   # Order book snapshot (depth = number of price levels per side)
-   obj2 = FromBinance('/data/crypto/', 'BTC', span=3600, fiat='USDT')
-   obj2.import_orderbook(depth=20)
-   obj2.save_orderbook(form='parquet')
-
-.. note::
-
-   **Bybit and Coinbase** return only recent trades (≤ 1 000 and ≤ 100
-   respectively) — their public REST APIs do not support deep historical
-   pagination.  Use :class:`~dccd.histo_dl.kraken.FromKraken` or
-   :class:`~dccd.histo_dl.okx.FromOKX` for full trade history.
-
-----
-
-Output formats
---------------
-
-The ``form`` parameter of ``.save()`` / ``.save_trades()`` controls the file
-format.  ``get_data()`` returns a :class:`polars.DataFrame` by default.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 15 15 70
-
-   * - ``form=``
-     - Extension
-     - When to use
-   * - ``'parquet'``
-     - ``.parquet``
-     - Recommended — columnar, compressed, fastest for Polars/Pandas loads.
-   * - ``'csv'``
-     - ``.csv``
-     - Universal export, readable without libraries, largest file size.
-   * - ``'xlsx'``
-     - ``.xlsx``
-     - Excel-compatible, good for small datasets.
-   * - ``'sqlite'``
-     - ``.db``
-     - Local SQL queries via SQLAlchemy.
-   * - ``'sql'``
-     - —
-     - Remote database (PostgreSQL, MySQL, …) via SQLAlchemy connection string.
-
-To get a :class:`pandas.DataFrame` instead of the default Polars output:
-
-.. code-block:: python
-
-   df_polars = obj.get_data()               # polars.DataFrame (default)
-   df_pandas = obj.get_data(format='pandas') # pandas.DataFrame
-
-----
-
-Continuous (WebSocket) API
----------------------------
-
-Stream order book and trades from Binance for one hour, saving a snapshot
-every 60 seconds:
-
-.. code-block:: python
-
-   from dccd.continuous_dl import get_data_binance
-
-   get_data_binance(
-       path='/data/crypto/',
-       pair='BTCUSDT',
-       time_step=60,   # snapshot interval in seconds
-       until=3600,     # total duration in seconds
-       form='parquet',
-   )
-
-For fine-grained control use the downloader class directly:
-
-.. code-block:: python
-
-   from dccd.continuous_dl import DownloadBinanceData
-   from dccd.tools.io import IODataBase
-
-   dl = DownloadBinanceData(pair='BTCUSDT', time_step=60, until=3600)
-   dl.set_trades_saver(IODataBase('/data/crypto/trades', method='parquet'))
-   dl.set_book_saver(IODataBase('/data/crypto/book', method='parquet'))
-   dl.run()
-
-See :doc:`continuous_dl` for all six exchange classes.
-
-----
-
-CLI Daemon
-----------
-
-Create a minimal config file ``config.yml``:
-
-.. code-block:: yaml
-
-   storage:
-     local_path: /data/crypto
-
-   histo_jobs:
-     - exchange: binance
-       pairs: [BTC/USDT, ETH/USDT]
-       span: 3600
-
-   stream_jobs:
-     - exchange: binance
-       pairs: [BTC/USDT]
-       channels: [trades, book]
-       time_step: 60
-
-Validate the config, backfill history, then start the daemon:
+CLI
+===
 
 .. code-block:: bash
 
-   dccd validate --config config.yml
-   dccd backfill --config config.yml
-   dccd start   --config config.yml
+   # One-off backfill
+   dccd backfill -e binance -s BTC/USDT -t ohlc --span 3600 --start last
 
-Check the status of running jobs:
+   # Run all stream jobs from the config
+   dccd stream
+
+   # Full daemon (scheduler + streams + web UI)
+   dccd start
+
+   # Inspect what is stored
+   dccd inventory
+
+See :doc:`cli` for the full command reference and :doc:`configuration` for the
+YAML config.
+
+Migrating existing v2 data
+==========================
+
+If you have Parquet files from dccd v2, migrate them to the v3 schema
+(``quote_volume``/``trades`` columns, nanosecond timestamps) in place:
 
 .. code-block:: bash
 
-   dccd status --config config.yml
+   dccd migrate --dry-run    # preview
+   dccd migrate --no-dry-run # apply
 
-See :doc:`daemon` for the full daemon reference including remote sync,
-health monitoring, and all CLI commands.
+The migration is idempotent and never drops rows.

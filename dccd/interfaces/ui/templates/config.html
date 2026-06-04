@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}Config{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+  <h1 style="margin:0">Config</h1>
+  <div class="row" style="gap:.5rem">
+    <button onclick="saveConfig()">Save</button>
+    <button class="ghost" onclick="loadConfig()">Reload</button>
+    <span id="save-status" style="font-size:.85rem"></span>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="row" style="gap:0;margin-bottom:1rem;border-bottom:1px solid var(--border)">
+  <button class="ghost" id="tab-form-btn" onclick="showTab('form')" style="border-radius:0;border-bottom:2px solid var(--accent);color:var(--fg)">Settings &amp; Jobs</button>
+  <button class="ghost" id="tab-json-btn" onclick="showTab('json')" style="border-radius:0;border-bottom:2px solid transparent">Raw JSON</button>
+</div>
+
+<!-- Form view -->
+<div id="tab-form">
+  <h2>Settings</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;max-width:640px">
+    <div>
+      <label class="muted" style="font-size:.8rem">Data path</label>
+      <input id="s-data-path" style="width:100%;margin-top:.2rem">
+    </div>
+    <div>
+      <label class="muted" style="font-size:.8rem">Timezone</label>
+      <input id="s-timezone" placeholder="local / UTC / Europe/Paris" style="width:100%;margin-top:.2rem">
+    </div>
+    <div>
+      <label class="muted" style="font-size:.8rem">UI host</label>
+      <input id="s-ui-host" style="width:100%;margin-top:.2rem">
+    </div>
+    <div>
+      <label class="muted" style="font-size:.8rem">UI port</label>
+      <input id="s-ui-port" type="number" style="width:100%;margin-top:.2rem">
+    </div>
+    <div style="grid-column:span 2">
+      <label class="muted" style="font-size:.8rem">Auth token (optional — protects the UI with a Bearer token)</label>
+      <input id="s-auth-token" placeholder="leave empty for no auth" style="width:100%;margin-top:.2rem">
+    </div>
+  </div>
+
+  <h2 style="margin-top:1.5rem">Alerts</h2>
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:.6rem;max-width:640px">
+    <div>
+      <label class="muted" style="font-size:.8rem">Webhook URL (Slack / generic POST on error)</label>
+      <input id="a-webhook" placeholder="https://hooks.slack.com/…" style="width:100%;margin-top:.2rem">
+    </div>
+    <div>
+      <label class="muted" style="font-size:.8rem">Alert after N consecutive errors</label>
+      <input id="a-max-errors" type="number" min="1" placeholder="3" style="width:100%;margin-top:.2rem">
+    </div>
+  </div>
+
+  <h2 style="margin-top:1.5rem">Jobs <button onclick="addJob()" style="font-size:.75rem;padding:.2rem .5rem;margin-left:.5rem">+ Add</button></h2>
+  <p class="muted" style="font-size:.85rem">
+    Required fields are marked <strong>*</strong>. Each job maps to one exchange + one data type.
+    Use multiple jobs for multiple pairs or exchanges.
+  </p>
+  <div id="jobs-form"></div>
+
+  <h2 style="margin-top:1.5rem">Remote storage (rclone)</h2>
+  <p class="muted" style="font-size:.85rem">Sync local Parquet files to a remote destination via rclone.</p>
+  <div id="remotes-form"></div>
+  <div class="row" style="gap:.5rem;margin-top:.4rem;align-items:center">
+    <button class="ghost" onclick="addRemote()" style="font-size:.8rem">+ Add remote</button>
+    <div>
+      <label class="muted" style="font-size:.8rem;margin-right:.3rem">Sync every (s)</label>
+      <input id="sync-interval" type="number" min="60" placeholder="3600" style="width:90px">
+    </div>
+  </div>
+</div>
+
+<!-- Raw JSON -->
+<div id="tab-json" style="display:none">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.4rem">
+    <span class="muted" style="font-size:.85rem">Full config as JSON — edit directly or use the form above.</span>
+    <button class="ghost" style="font-size:.8rem" onclick="fmtJson()">Format ↻</button>
+  </div>
+  <textarea id="cfg-editor" spellcheck="false" style="min-height:60vh;font-size:.82rem;font-family:monospace"></textarea>
+  <details style="margin-top:.8rem">
+    <summary class="muted" style="cursor:pointer;font-size:.85rem">All available fields</summary>
+    <pre style="font-size:.78rem;margin-top:.4rem;background:var(--bg);border:1px solid var(--border);padding:.6rem;border-radius:4px;overflow-x:auto">{
+  "settings": {
+    "data_path": "./data/crypto",   // where Parquet files are stored
+    "timezone": "local",            // local | UTC | Europe/Paris | …
+    "ui_host": "127.0.0.1",
+    "ui_port": 8080,
+    "ui_auth_token": null           // Bearer token, null = no auth
+  },
+  "storage": {
+    "local_path": "",               // auto-set from data_path
+    "sync_interval": 3600,          // rclone sync period (seconds)
+    "remotes": [
+      { "provider": "rclone", "remote": "s3:mybucket/dccd" }
+    ]
+  },
+  "alerts": {
+    "webhook_url": null,            // POST on error (Slack compatible)
+    "max_consecutive_errors": 3
+  },
+  "jobs": [
+    {
+      "exchange": "binance",        // binance|coinbase|kraken|bybit|okx|bitfinex|bitmex
+      "pairs": ["BTC/USDT"],        // list of pairs, format BASE/QUOTE
+      "data_type": "ohlc",          // ohlc | trades | orderbook
+      "operation": "backfill",      // backfill | stream
+      "span": 3600,                 // seconds — required for ohlc
+      "trigger_kind": "interval",   // interval | cron | supervised | once
+      "every": 3600,                // seconds between backfill runs (interval trigger)
+      "cron": null,                 // cron expression (cron trigger)
+      "start": "last",              // last | origin | YYYY-MM-DD | ns integer
+      "depth": null,                // orderbook depth (orderbook only)
+      "snapshot_interval": null     // orderbook snapshot every N seconds (stream)
+    }
+  ]
+}</pre>
+  </details>
+</div>
+
+<!-- Job template (hidden) -->
+<template id="job-tpl">
+  <div class="card" style="margin:.4rem 0;padding:.7rem" data-job-idx="">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem">
+      <div>
+        <label class="muted" style="font-size:.75rem">Exchange *</label>
+        <select class="j-exchange" style="width:100%;margin-top:.15rem">
+          <option>binance</option><option>coinbase</option><option>kraken</option>
+          <option>bybit</option><option>okx</option><option>bitfinex</option><option>bitmex</option>
+        </select>
+      </div>
+      <div>
+        <label class="muted" style="font-size:.75rem">Data type *</label>
+        <select class="j-dtype" style="width:100%;margin-top:.15rem" onchange="onTypeChange(this)">
+          <option value="ohlc">OHLC</option>
+          <option value="trades">Trades</option>
+          <option value="orderbook">Order Book</option>
+        </select>
+      </div>
+      <div>
+        <label class="muted" style="font-size:.75rem">Operation</label>
+        <select class="j-op" style="width:100%;margin-top:.15rem" onchange="onOpChange(this)">
+          <option value="backfill">Backfill (scheduled)</option>
+          <option value="stream">Stream (live)</option>
+        </select>
+      </div>
+      <div style="grid-column:span 2">
+        <label class="muted" style="font-size:.75rem">Pairs * (one per line, e.g. BTC/USDT)</label>
+        <textarea class="j-pairs" rows="2" style="width:100%;margin-top:.15rem;min-height:unset"></textarea>
+      </div>
+      <div>
+        <label class="muted" style="font-size:.75rem">Span (s) — OHLC only *</label>
+        <input class="j-span" placeholder="e.g. 3600" style="width:100%;margin-top:.15rem">
+      </div>
+      <div>
+        <label class="muted" style="font-size:.75rem">Start (backfill)</label>
+        <select class="j-start" style="width:100%;margin-top:.15rem">
+          <option value="last">last — resume from last bar</option>
+          <option value="origin">origin — full history</option>
+        </select>
+      </div>
+      <div class="j-trigger-row" style="grid-column:span 2;display:grid;grid-template-columns:1fr 1fr;gap:.4rem">
+        <div>
+          <label class="muted" style="font-size:.75rem">Schedule</label>
+          <select class="j-trigger-kind" style="width:100%;margin-top:.15rem" onchange="onTriggerChange(this)">
+            <option value="interval">Interval</option>
+            <option value="cron">Cron</option>
+            <option value="supervised">Supervised (stream)</option>
+            <option value="once">Once</option>
+          </select>
+        </div>
+        <div class="j-every-row">
+          <label class="muted" style="font-size:.75rem">Every (seconds)</label>
+          <input class="j-every" type="number" placeholder="3600" style="width:100%;margin-top:.15rem">
+        </div>
+        <div class="j-cron-row" style="display:none">
+          <label class="muted" style="font-size:.75rem">Cron expression</label>
+          <input class="j-cron" placeholder="0 * * * *" style="width:100%;margin-top:.15rem">
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:.4rem;justify-content:flex-end">
+      <button class="ghost danger" style="font-size:.75rem;padding:.2rem .5rem" onclick="removeJob(this)">Remove</button>
+    </div>
+  </div>
+</template>
+{% endblock %}
+{% block scripts %}
+<script>
+let cfg = {};
+
+function showTab(name) {
+  const isJson = name === 'json';
+  document.getElementById('tab-form').style.display = isJson ? 'none' : '';
+  document.getElementById('tab-json').style.display = isJson ? '' : 'none';
+  document.getElementById('tab-form-btn').style.borderBottomColor = isJson ? 'transparent' : 'var(--accent)';
+  document.getElementById('tab-form-btn').style.color = isJson ? 'var(--muted)' : 'var(--fg)';
+  document.getElementById('tab-json-btn').style.borderBottomColor = isJson ? 'var(--accent)' : 'transparent';
+  document.getElementById('tab-json-btn').style.color = isJson ? 'var(--fg)' : 'var(--muted)';
+  if (isJson) {
+    try { document.getElementById('cfg-editor').value = JSON.stringify(formToCfg(), null, 2); } catch (_) {}
+  } else {
+    try { const j = JSON.parse(document.getElementById('cfg-editor').value); cfgToForm(j); } catch (_) {}
+  }
+}
+
+function fmtJson() {
+  try {
+    const v = JSON.parse(document.getElementById('cfg-editor').value);
+    document.getElementById('cfg-editor').value = JSON.stringify(v, null, 2);
+  } catch (e) {
+    toast('Invalid JSON: ' + e.message, 'err');
+  }
+}
+
+function cfgToForm(c) {
+  cfg = c;
+  const s = c.settings || {};
+  document.getElementById('s-data-path').value   = s.data_path || './data/crypto';
+  document.getElementById('s-timezone').value    = s.timezone || 'local';
+  document.getElementById('s-ui-host').value     = s.ui_host || '127.0.0.1';
+  document.getElementById('s-ui-port').value     = s.ui_port || 8080;
+  document.getElementById('s-auth-token').value  = s.ui_auth_token || '';
+
+  const al = c.alerts || {};
+  document.getElementById('a-webhook').value     = al.webhook_url || '';
+  document.getElementById('a-max-errors').value  = al.max_consecutive_errors ?? 3;
+
+  document.getElementById('sync-interval').value = c.storage?.sync_interval || 3600;
+
+  const container = document.getElementById('jobs-form');
+  container.innerHTML = '';
+  for (const j of (c.jobs || [])) addJob(j);
+
+  const rc = document.getElementById('remotes-form');
+  rc.innerHTML = '';
+  for (const r of (c.storage?.remotes || [])) addRemote(r);
+}
+
+function formToCfg() {
+  const data_path = document.getElementById('s-data-path').value.trim() || './data/crypto';
+  const authTok = document.getElementById('s-auth-token').value.trim() || null;
+  const settings = {
+    data_path,
+    timezone: document.getElementById('s-timezone').value.trim() || 'local',
+    ui_host:  document.getElementById('s-ui-host').value.trim() || '127.0.0.1',
+    ui_port:  parseInt(document.getElementById('s-ui-port').value) || 8080,
+    ...(authTok ? { ui_auth_token: authTok } : {}),
+  };
+
+  const webhookUrl = document.getElementById('a-webhook').value.trim() || null;
+  const alerts = {
+    max_consecutive_errors: parseInt(document.getElementById('a-max-errors').value) || 3,
+    ...(webhookUrl ? { webhook_url: webhookUrl } : {}),
+  };
+
+  const jobs = [];
+  for (const card of document.querySelectorAll('[data-job-idx]')) {
+    const pairs = card.querySelector('.j-pairs').value.trim().split('\n').map(p=>p.trim()).filter(Boolean);
+    const dtype = card.querySelector('.j-dtype').value;
+    const spanRaw = card.querySelector('.j-span').value.trim();
+    const span = spanRaw ? parseInt(spanRaw) : null;
+    const op   = card.querySelector('.j-op').value;
+    const kind = card.querySelector('.j-trigger-kind').value;
+    const everyRaw = card.querySelector('.j-every').value.trim();
+    const every = everyRaw ? parseInt(everyRaw) : null;
+    const cronVal = card.querySelector('.j-cron').value.trim() || null;
+    const job  = {
+      exchange: card.querySelector('.j-exchange').value,
+      pairs,
+      data_type: dtype,
+      operation: op,
+      trigger_kind: kind,
+      start: card.querySelector('.j-start').value,
+    };
+    if (dtype === 'ohlc' && span) job.span = span;
+    if (every) job.every = every;
+    if (cronVal) job.cron = cronVal;
+    jobs.push(job);
+  }
+
+  const remotes = [];
+  for (const row of document.querySelectorAll('[data-remote-idx]')) {
+    const remote = row.querySelector('.r-remote').value.trim();
+    if (remote) remotes.push({ provider: 'rclone', remote });
+  }
+
+  return {
+    settings,
+    storage: {
+      local_path: data_path,
+      remotes,
+      sync_interval: parseInt(document.getElementById('sync-interval').value) || 3600,
+    },
+    alerts,
+    jobs,
+  };
+}
+
+let jobIdx = 0;
+function addJob(data) {
+  const tpl = document.getElementById('job-tpl').content.cloneNode(true);
+  const card = tpl.querySelector('[data-job-idx]');
+  card.dataset.jobIdx = jobIdx++;
+  if (data) {
+    card.querySelector('.j-exchange').value = data.exchange || 'binance';
+    card.querySelector('.j-dtype').value    = data.data_type || 'ohlc';
+    card.querySelector('.j-op').value       = data.operation || 'backfill';
+    card.querySelector('.j-pairs').value    = (data.pairs || []).join('\n');
+    card.querySelector('.j-span').value     = data.span || '';
+    card.querySelector('.j-start').value    = data.start || 'last';
+    const kind = data.trigger_kind || (data.operation === 'stream' ? 'supervised' : 'interval');
+    card.querySelector('.j-trigger-kind').value = kind;
+    card.querySelector('.j-every').value   = data.every || '';
+    card.querySelector('.j-cron').value    = data.cron || '';
+    _syncTriggerUi(card, kind);
+  }
+  onTypeChange(card.querySelector('.j-dtype'));
+  document.getElementById('jobs-form').appendChild(tpl);
+}
+function removeJob(btn) { btn.closest('[data-job-idx]').remove(); }
+
+function onTypeChange(sel) {
+  const card = sel.closest('[data-job-idx]');
+  card.querySelector('.j-span').disabled = sel.value !== 'ohlc';
+}
+function onOpChange(sel) {
+  const card = sel.closest('[data-job-idx]');
+  const isStream = sel.value === 'stream';
+  card.querySelector('.j-start').disabled = isStream;
+  if (isStream) card.querySelector('.j-trigger-kind').value = 'supervised';
+}
+function onTriggerChange(sel) {
+  _syncTriggerUi(sel.closest('[data-job-idx]'), sel.value);
+}
+function _syncTriggerUi(card, kind) {
+  card.querySelector('.j-every-row').style.display = kind === 'interval' ? '' : 'none';
+  card.querySelector('.j-cron-row').style.display  = kind === 'cron' ? '' : 'none';
+}
+
+let remoteIdx = 0;
+function addRemote(data) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.dataset.remoteIdx = remoteIdx++;
+  row.style.cssText = 'gap:.5rem;margin:.3rem 0';
+  row.innerHTML = `<input class="r-remote" placeholder="remote:path/" style="flex:1" value="${escapeHtml((data||{}).remote||'')}">
+    <button class="ghost" style="font-size:.8rem" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById('remotes-form').appendChild(row);
+}
+
+async function loadConfig() {
+  try {
+    const c = await api('GET', '/api/config');
+    cfgToForm(c);
+    document.getElementById('cfg-editor').value = JSON.stringify(c, null, 2);
+    document.getElementById('save-status').innerHTML = '';
+  } catch (e) {
+    document.getElementById('save-status').innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+async function saveConfig() {
+  const el = document.getElementById('save-status');
+  el.textContent = '';
+  let data;
+  if (document.getElementById('tab-json').style.display !== 'none') {
+    try { data = JSON.parse(document.getElementById('cfg-editor').value); }
+    catch (e) { el.innerHTML = '<span class="err">Invalid JSON: ' + escapeHtml(e.message) + '</span>'; return; }
+  } else {
+    data = formToCfg();
+  }
+  try {
+    await api('PUT', '/api/config', data);
+    el.innerHTML = '<span class="ok">Saved ✓</span>';
+    setTimeout(loadConfig, 300);
+    setTimeout(() => el.textContent = '', 3500);
+  } catch (e) {
+    el.innerHTML = '<span class="err">' + escapeHtml(e.message) + '</span>';
+  }
+}
+
+loadConfig();
+</script>
+{% endblock %}

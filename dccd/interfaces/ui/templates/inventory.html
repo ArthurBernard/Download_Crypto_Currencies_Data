@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+  <h1 style="margin:0">Inventory</h1>
+  <button onclick="openModal('bf-modal')">＋ Backfill…</button>
+</div>
+<p class="muted">Everything stored on disk under <code>data_path</code>, grouped by exchange —
+including imported or historical data, <strong>independently of your configured jobs</strong>.
+Rows tagged <span class="ok">● job</span> are covered by a job in the config; the others are
+just data you happen to have. Click <em>Backfill</em> to extend a dataset's history.</p>
+
+<div id="inv-content"><span class="muted">Loading…</span></div>
+
+<!-- Backfill modal -->
+<div class="modal-bg" id="bf-modal">
+  <div class="modal" style="min-width:400px">
+    <button class="modal-close" onclick="closeModal('bf-modal')">×</button>
+    <h2 style="margin:0 0 1rem">Backfill</h2>
+    <div style="display:grid;gap:.5rem">
+      <div class="row" style="gap:.5rem">
+        <div style="flex:1">
+          <label class="muted" style="font-size:.8rem">Exchange *</label>
+          <select id="bf-exchange" style="width:100%;margin-top:.2rem">
+            <option>binance</option><option>coinbase</option><option>kraken</option>
+            <option>bybit</option><option>okx</option><option>bitfinex</option><option>bitmex</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label class="muted" style="font-size:.8rem">Symbol *</label>
+          <input id="bf-symbol" placeholder="BTC/USDT" style="width:100%;margin-top:.2rem">
+        </div>
+      </div>
+      <div class="row" style="gap:.5rem">
+        <div style="flex:1">
+          <label class="muted" style="font-size:.8rem">Data type</label>
+          <select id="bf-type" style="width:100%;margin-top:.2rem" onchange="onBfTypeChange()">
+            <option value="ohlc">OHLC</option>
+            <option value="trades">Trades</option>
+            <option value="orderbook">Order Book</option>
+          </select>
+        </div>
+        <div style="flex:1" id="bf-span-row">
+          <label class="muted" style="font-size:.8rem">Span — OHLC only *</label>
+          <select id="bf-span" style="width:100%;margin-top:.2rem">
+            <option value="60">1 min (60s)</option>
+            <option value="300">5 min (300s)</option>
+            <option value="900">15 min (900s)</option>
+            <option value="1800">30 min (1800s)</option>
+            <option value="3600" selected>1 hour (3600s)</option>
+            <option value="14400">4 hours (14400s)</option>
+            <option value="86400">1 day (86400s)</option>
+            <option value="604800">1 week (604800s)</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="muted" style="font-size:.8rem">Start</label>
+        <select id="bf-start" style="width:100%;margin-top:.2rem" onchange="onStartChange()">
+          <option value="last">Resume — from last stored bar (or a recent default if empty)</option>
+          <option value="custom">Custom date…</option>
+          <option value="origin">Full history (from exchange origin)</option>
+        </select>
+      </div>
+      <div id="bf-date-row" style="display:none">
+        <label class="muted" style="font-size:.8rem">Start date (UTC)</label>
+        <input id="bf-date" type="date" style="width:100%;margin-top:.2rem">
+      </div>
+    </div>
+    <div class="row" style="margin-top:1rem;gap:.5rem">
+      <button id="bf-launch-btn" onclick="launchBackfill()">Launch</button>
+      <button id="bf-stop-btn" onclick="stopBackfill()" style="display:none;background:var(--err);border-color:var(--err)">Stop</button>
+      <button class="ghost" onclick="closeModal('bf-modal')">Close</button>
+    </div>
+    <div id="bf-status" style="margin-top:.8rem;padding:.5rem;border-radius:4px;display:none"></div>
+    <div id="bf-progress-wrap" style="display:none;margin-top:.6rem">
+      <div class="row" style="justify-content:space-between;font-size:.82rem;margin-bottom:.2rem">
+        <span id="bf-prog-label">Starting…</span>
+        <span id="bf-prog-pct" class="muted"></span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px">
+        <div id="bf-prog-bar" style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .4s"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function onBfTypeChange() {
+  const isOhlc = document.getElementById('bf-type').value === 'ohlc';
+  document.getElementById('bf-span-row').style.visibility = isOhlc ? '' : 'hidden';
+}
+function onStartChange() {
+  const val = document.getElementById('bf-start').value;
+  document.getElementById('bf-date-row').style.display = val === 'custom' ? '' : 'none';
+}
+
+async function loadInventory() {
+  try {
+    const { datasets } = await api('GET', '/api/inventory');
+    // Which datasets are actually covered by a configured job?
+    let jobKeys = new Set();
+    try {
+      const { jobs } = await api('GET', '/api/jobs');
+      for (const j of jobs) {
+        if (j.enabled === false) continue;
+        jobKeys.add(`${j.exchange}|${j.symbol.replace('/','-')}|${j.data_type}`);
+      }
+    } catch (_) {}
+    if (!datasets.length) {
+      document.getElementById('inv-content').innerHTML =
+        `<div class="card" style="text-align:center;padding:2rem">
+          <div style="font-size:1.1rem">No datasets stored yet.</div>
+          <div class="muted" style="margin:.5rem 0 1rem">Use <strong>＋ Backfill…</strong> above to download your first data.</div>
+          <button onclick="openModal('bf-modal')">＋ Start first backfill</button>
+        </div>`;
+      return;
+    }
+    const byExchange = {};
+    for (const d of datasets) {
+      if (!byExchange[d.exchange]) byExchange[d.exchange] = [];
+      byExchange[d.exchange].push(d);
+    }
+    let html = '';
+    for (const [ex, ds] of Object.entries(byExchange)) {
+      html += `<h2 style="display:flex;align-items:center;gap:.5rem">${escapeHtml(ex)}</h2>`;
+      html += `<table><thead>
+        <tr><th>Pair</th><th>Type</th><th>Span</th><th>Rows</th><th>From</th><th>To</th><th></th></tr>
+      </thead><tbody>`;
+      for (const d of ds) {
+        const sym = d.pair.replace(/-/, '/');
+        const isJob = jobKeys.has(`${d.exchange}|${d.pair}|${d.data_type}`);
+        const tag = isJob ? ' <span class="ok" style="font-size:.7em" title="covered by a configured job">● job</span>' : '';
+        html += `<tr>
+          <td><strong>${escapeHtml(d.pair)}</strong>${tag}</td>
+          <td>${escapeHtml(d.data_type)}</td>
+          <td>${d.span ?? '-'}</td>
+          <td class="muted">${(d.rows ?? 0).toLocaleString()}</td>
+          <td class="muted" style="font-size:.82em">${fmtNs(d.min_ts)}</td>
+          <td class="muted" style="font-size:.82em">${fmtNs(d.max_ts)}</td>
+          <td><button style="font-size:.75rem;padding:.2rem .5rem"
+            title="${d.data_type === 'orderbook' ? 'Capture one current order-book snapshot' : 'Download more history for this dataset'}"
+            onclick='prefillModal(${attrJson(ex)}, ${attrJson(sym)}, ${attrJson(d.data_type)}, ${JSON.stringify(d.span)})'>${d.data_type === 'orderbook' ? 'Snapshot' : 'Backfill'}</button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+    document.getElementById('inv-content').innerHTML = html;
+  } catch (e) {
+    document.getElementById('inv-content').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function prefillModal(exchange, symbol, dataType, span) {
+  document.getElementById('bf-exchange').value = exchange;
+  document.getElementById('bf-symbol').value   = symbol;
+  document.getElementById('bf-type').value     = dataType;
+  if (span != null) document.getElementById('bf-span').value = String(span);
+  document.getElementById('bf-start').value    = 'last';
+  document.getElementById('bf-date-row').style.display = 'none';
+  setStatusEl('', '');
+  document.getElementById('bf-progress-wrap').style.display = 'none';
+  document.getElementById('bf-prog-bar').style.width = '0%';
+  document.getElementById('bf-launch-btn').disabled = false;
+  document.getElementById('bf-launch-btn').textContent = 'Launch';
+  document.getElementById('bf-stop-btn').style.display = 'none';
+  document.getElementById('bf-stop-btn').disabled = false;
+  document.getElementById('bf-stop-btn').textContent = 'Stop';
+  bfRunId = null;
+  if (bfPollInterval) { clearInterval(bfPollInterval); bfPollInterval = null; }
+  onBfTypeChange();
+  openModal('bf-modal');
+}
+
+function setStatusEl(msg, kind) {
+  const el = document.getElementById('bf-status');
+  if (!msg) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.style.background = kind === 'err' ? 'rgba(248,81,73,.15)' : 'rgba(63,185,80,.12)';
+  el.style.border = `1px solid ${kind === 'err' ? 'var(--err)' : 'var(--ok)'}`;
+  el.innerHTML = `<span class="${kind || 'ok'}">${escapeHtml(msg)}</span>`;
+}
+
+let bfRunId = null, bfPollInterval = null;
+
+function showProgress(run) {
+  const wrap = document.getElementById('bf-progress-wrap');
+  const label = document.getElementById('bf-prog-label');
+  const pct   = document.getElementById('bf-prog-pct');
+  const bar   = document.getElementById('bf-prog-bar');
+  wrap.style.display = '';
+  const prog = run.progress;
+  const rows = (prog?.rows ?? run.rows_written ?? 0).toLocaleString();
+  const st = `<span class="${run.state === 'succeeded' ? 'ok' : run.state === 'failed' ? 'err' : ''}">${escapeHtml(run.state)}</span>`;
+  if (prog && prog.total > 0) {
+    const p = Math.min(100, Math.round(prog.done / prog.total * 100));
+    bar.style.width = p + '%';
+    const detail = (prog.unit === 'time' && prog.at)
+      ? `${rows} rows · reached ${fmtNs(prog.at)}`
+      : `${prog.done}/${prog.total} · ${rows} rows`;
+    label.innerHTML = `${st} — ${detail}`;
+    pct.textContent = p + '%';
+  } else {
+    bar.style.width = run.state === 'succeeded' ? '100%' : '5%';
+    label.innerHTML = `${st} · ${rows} rows`;
+    pct.textContent = '';
+  }
+}
+
+async function launchBackfill() {
+  const exchange = document.getElementById('bf-exchange').value;
+  const symbol   = document.getElementById('bf-symbol').value.trim();
+  const dataType = document.getElementById('bf-type').value;
+  const spanVal  = dataType === 'ohlc' ? document.getElementById('bf-span').value : '';
+  const startSel = document.getElementById('bf-start').value;
+
+  if (!symbol) { setStatusEl('Symbol is required (e.g. BTC/USDT).', 'err'); return; }
+
+  let startVal = startSel;
+  if (startSel === 'custom') {
+    const d = document.getElementById('bf-date').value;
+    if (!d) { setStatusEl('Pick a start date.', 'err'); return; }
+    startVal = d;
+  }
+
+  const payload = { exchange, symbol, data_type: dataType, start: startVal };
+  if (spanVal) payload.span = parseInt(spanVal, 10);
+
+  const btn = document.getElementById('bf-launch-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  setStatusEl('', '');
+
+  try {
+    const { run_id } = await api('POST', '/api/backfill', payload);
+    bfRunId = run_id;
+    setStatusEl('', '');
+    btn.textContent = 'Running…';
+    document.getElementById('bf-stop-btn').style.display = '';
+    startPolling();
+  } catch (e) {
+    setStatusEl(e.message, 'err');
+    btn.disabled = false; btn.textContent = 'Launch';
+  }
+}
+
+async function stopBackfill() {
+  if (!bfRunId) return;
+  const sb = document.getElementById('bf-stop-btn');
+  sb.disabled = true; sb.textContent = 'Stopping…';
+  try {
+    await api('DELETE', '/api/backfill/' + bfRunId);
+    setStatusEl('Cancelling — will stop at the next page…', 'ok');
+  } catch (e) {
+    setStatusEl(e.message, 'err');
+    sb.disabled = false; sb.textContent = 'Stop';
+  }
+}
+
+function startPolling() {
+  if (bfPollInterval) clearInterval(bfPollInterval);
+  // Poll immediately, then every 1s
+  _doPoll();
+  bfPollInterval = setInterval(_doPoll, 1000);
+}
+
+async function _doPoll() {
+  if (!bfRunId) return;
+  try {
+    const run = await api('GET', '/api/backfill/' + bfRunId);
+    showProgress(run);
+    if (['succeeded','failed','cancelled'].includes(run.state)) {
+      clearInterval(bfPollInterval);
+      const btn = document.getElementById('bf-launch-btn');
+      btn.disabled = false; btn.textContent = 'Launch';
+      const sb = document.getElementById('bf-stop-btn');
+      sb.style.display = 'none'; sb.disabled = false; sb.textContent = 'Stop';
+      if (run.state === 'cancelled') toast(`Cancelled — ${(run.rows_written||0).toLocaleString()} rows kept`, 'ok');
+      if (run.state === 'succeeded') {
+        toast(`Done — ${(run.rows_written||0).toLocaleString()} rows written`, 'ok');
+        loadInventory();
+      } else if (run.state === 'failed') {
+        toast(run.error || 'Backfill failed', 'err');
+        setStatusEl(run.error || 'Failed', 'err');
+      }
+    }
+  } catch (_) { /* run not yet in store, keep polling */ }
+}
+
+loadInventory();
+</script>
+{% endblock %}

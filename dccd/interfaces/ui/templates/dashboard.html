@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<!-- Active runs (top, most important) -->
+<div id="active-runs" style="margin-bottom:.5rem"></div>
+
+<div class="row" style="gap:1rem;align-items:flex-start">
+  <!-- Recent runs -->
+  <div class="card" style="flex:2;min-width:280px">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+      <strong>Recent runs</strong>
+      <a href="/jobs" style="font-size:.8rem;color:var(--muted)">Run all jobs →</a>
+    </div>
+    <div id="runs-body"><span class="muted">Loading…</span></div>
+  </div>
+
+  <!-- Streams -->
+  <div style="flex:1;min-width:180px">
+    <div class="card" style="margin-bottom:.5rem">
+      <strong>Stream jobs</strong>
+      <div id="streams-body" style="margin-top:.4rem"><span class="muted">Loading…</span></div>
+    </div>
+    <div class="card">
+      <strong>Datasets</strong>
+      <div id="inv-summary" style="margin-top:.4rem"><span class="muted">Loading…</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function load() {
+  // Active runs (running / reconnecting)
+  try {
+    const { runs } = await api('GET', '/api/runs?limit=50');
+    const active = runs.filter(r => r.state === 'running' || r.state === 'reconnecting');
+    const el = document.getElementById('active-runs');
+    if (active.length) {
+      el.innerHTML = active.map(r => {
+        const prog = r.progress;
+        const pct  = prog && prog.total > 0 ? Math.min(100, Math.round(prog.done / prog.total * 100)) : null;
+        const rows = (prog?.rows ?? r.rows_written ?? 0).toLocaleString();
+        const progTxt = (prog && prog.unit === 'time' && prog.at)
+          ? `reached ${fmtNs(prog.at)}`
+          : (prog ? `${prog.done}/${prog.total}` : 'starting…');
+        return `<div class="card" style="border-left:3px solid var(--accent);padding:.6rem 1rem;margin:.3rem 0">
+          <div class="row" style="justify-content:space-between;margin-bottom:.3rem">
+            <span><span class="ok">●</span> <strong>${escapeHtml(r.operation)}</strong> ${escapeHtml(r.exchange)} ${escapeHtml(r.symbol)} ${escapeHtml(r.data_type)}</span>
+            <span class="muted" style="font-size:.82em">${progTxt} · ${rows} rows${pct !== null ? ` · ${pct}%` : ''}</span>
+          </div>
+          ${pct !== null ? `<div style="height:4px;background:var(--border);border-radius:2px"><div style="height:100%;background:var(--accent);border-radius:2px;width:${pct}%"></div></div>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      el.innerHTML = '';
+    }
+  } catch (_) {}
+
+  // Recent runs table
+  try {
+    const { runs } = await api('GET', '/api/runs?limit=15');
+    const rows = runs.map(r => {
+      const cls = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : '';
+      const prog = r.progress ? ` (${r.progress.done}/${r.progress.total})` : '';
+      return `<tr>
+        <td><span class="muted" style="font-size:.8em">${escapeHtml(r.exchange)}</span> ${escapeHtml(r.symbol)}</td>
+        <td>${escapeHtml(r.data_type)}</td>
+        <td><span class="${cls}">${escapeHtml(r.state)}</span>${prog}</td>
+        <td class="muted" style="font-size:.8em">${(r.rows_written||0).toLocaleString()}</td>
+        <td class="muted" style="font-size:.8em">${fmtNs(r.started_at)}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" class="muted">No runs yet</td></tr>';
+    document.getElementById('runs-body').innerHTML =
+      `<table><thead><tr><th>Symbol</th><th>Type</th><th>State</th><th>Rows</th><th>Started</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) { document.getElementById('runs-body').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`; }
+
+  // Streams
+  try {
+    const { streams } = await api('GET', '/api/streams');
+    document.getElementById('streams-body').innerHTML = streams.length
+      ? streams.map(s => `<div class="row" style="margin:.25rem 0">
+            <span class="${s.running ? 'ok' : 'muted'}">${s.running ? '●' : '○'}</span>
+            <span style="font-size:.82em">${escapeHtml(s.id.split(':').slice(1,3).join(' '))}</span>
+          </div>`).join('')
+      : '<span class="muted">No streams</span>';
+  } catch (_) {}
+
+  // Inventory summary
+  try {
+    const { datasets } = await api('GET', '/api/inventory');
+    if (!datasets.length) {
+      document.getElementById('inv-summary').innerHTML = '<span class="muted">Empty — <a href="/inventory">start a backfill</a></span>';
+    } else {
+      const byEx = {};
+      let totalRows = 0;
+      for (const d of datasets) {
+        byEx[d.exchange] = (byEx[d.exchange] || 0) + 1;
+        totalRows += d.rows || 0;
+      }
+      document.getElementById('inv-summary').innerHTML =
+        `<div class="muted" style="font-size:.85em">${datasets.length} dataset(s) · ${totalRows.toLocaleString()} rows total</div>` +
+        Object.entries(byEx).map(([ex, n]) => `<div style="font-size:.82em">${escapeHtml(ex)}: ${n}</div>`).join('');
+    }
+  } catch (_) {}
+}
+
+load();
+setInterval(load, 8000);
+</script>
+{% endblock %}

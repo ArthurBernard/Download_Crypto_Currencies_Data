@@ -43,19 +43,19 @@ multiple exchanges via REST and WebSocket APIs.
       Historical REST downloads and real-time WebSocket streams — use
       ``dccd`` directly in your scripts or notebooks.
 
-   .. grid-item-card:: CLI Daemon
-      :link: daemon
+   .. grid-item-card:: CLI & Daemon
+      :link: cli
       :link-type: doc
 
-      Autonomous server-side collector driven by a YAML config with
-      scheduling, WebSocket streams, and rclone remote sync.
+      ``dccd`` command line: ``backfill``, ``stream``, ``start`` (daemon +
+      web UI), ``migrate``, ``inventory`` — driven by a YAML config.
 
-   .. grid-item-card:: Storage & Formats
-      :link: storage
+   .. grid-item-card:: API Reference
+      :link: api
       :link-type: doc
 
-      Annual Parquet files by default · CSV · Excel · SQLite ·
-      PostgreSQL · Polars & Pandas output.
+      The hexagonal layers — domain, transport, sources, storage,
+      application, interfaces.
 
 .. rubric:: Key features
 
@@ -132,9 +132,12 @@ Supported exchanges
      - ✓
      - ✓
 
-\* Bitfinex WS OHLCV is aggregated from the trades stream via :func:`~dccd.continuous_dl.bitfinex.get_ohlc_bitfinex`.
+\* Bitfinex WS OHLCV is delivered natively on the ``candles`` channel.
 
-† Recent trades only (Bybit ≤ 1 000, Coinbase ≤ 100) — no deep historical pagination via the public REST API.
+† Recent trades only (Coinbase) — no deep historical pagination via the public
+REST API; a deep request is rejected early rather than silently truncated.
+Bybit spot has no trade history at all (WS only). All other trade backfills are
+cursor-paginated and drain the full requested window.
 
 .. toctree::
    :hidden:
@@ -146,19 +149,8 @@ Supported exchanges
 
 .. toctree::
    :hidden:
-   :caption: Data Collection
-
-   histo_dl
-   continuous_dl
-   daemon
-
-.. toctree::
-   :hidden:
    :caption: Reference
 
-   storage
-   models
-   tools
-   process_data
    cli
    configuration
+   api
