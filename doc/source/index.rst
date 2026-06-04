@@ -59,12 +59,31 @@ multiple exchanges via REST and WebSocket APIs.
 
 .. rubric:: Key features
 
-- **7 exchanges** — Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, Bitmex
+- **7 exchanges** — Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, BitMEX
 - **3 data types** — OHLCV candles, trade history, order book snapshots
-- **Incremental updates** — ``start='last'`` resumes from the last saved timestamp, no duplicates
-- **Polars-native output** — ``get_data()`` returns a :class:`polars.DataFrame`; ``get_data(format='pandas')`` for Pandas
+- **Async-first** — ``async with Client() as c: await c.backfill(...)``; httpx + websockets
+- **Cursor-paginated trades** — backfills drain the full window (no silent loss)
+- **Incremental & idempotent** — ``start="last"`` resumes from the last bar; dedup on the natural key
+- **Nanosecond Parquet storage** — ns UTC ``int64``, provenance, atomic writes; read back as a :class:`polars.DataFrame`
 - **No API key required** — all endpoints used are public
-- **Autonomous daemon** — YAML config, APScheduler, WebSocket streams, rclone remote sync
+- **Autonomous daemon** — YAML config, async scheduler, WebSocket streams, rclone remote sync
+
+.. rubric:: Guides
+
+.. grid:: 1 2 2 2
+   :gutter: 3
+
+   .. grid-item-card:: Architecture
+      :link: architecture
+      :link-type: doc
+
+      The hexagonal layers and how a backfill flows through them.
+
+   .. grid-item-card:: Exchanges
+      :link: exchanges
+      :link-type: doc
+
+      Per-exchange capabilities and OHLC field fidelity.
 
 .. _supported-exchanges:
 
@@ -146,6 +165,13 @@ cursor-paginated and drain the full requested window.
    installation
    quickstart
    changelog
+
+.. toctree::
+   :hidden:
+   :caption: Guides
+
+   architecture
+   exchanges
 
 .. toctree::
    :hidden:

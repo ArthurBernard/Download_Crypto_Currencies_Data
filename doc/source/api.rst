@@ -2,67 +2,138 @@
 API Reference
 =============
 
-dccd v3 follows a hexagonal architecture: a pure, synchronous **domain** with
-no I/O, an async **transport** layer, exchange **sources**, **storage**, an
-**application** layer of operations, and thin **interfaces** (CLI / HTTP / UI /
-Python ``Client``).
+dccd v3 is a hexagonal architecture: a pure, synchronous **domain** with no I/O,
+an async **transport** layer, exchange **sources**, **storage**, an
+**application** layer of operations, and thin **interfaces** (CLI · HTTP API ·
+UI · Python ``Client``). See :doc:`architecture` for the big picture.
+
+Each object below links to its own page with the full signature, parameters and
+examples.
 
 Client
 ======
 
-.. autoclass:: dccd.Client
-   :members:
+The one-stop async facade — most users only need this.
+
+.. currentmodule:: dccd
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   Client
 
 Domain
 ======
 
-.. automodule:: dccd.domain.symbol
-   :members:
+Pure, synchronous value objects and helpers — no I/O. All timestamps are
+nanoseconds UTC (``int64``).
 
-.. automodule:: dccd.domain.records
-   :members:
+.. currentmodule:: dccd.domain
 
-.. automodule:: dccd.domain.capability
-   :members:
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
 
-.. automodule:: dccd.domain.timeutils
-   :members:
+   symbol.Symbol
+   types.DataType
+   records.OHLCBar
+   records.Trade
+   records.OrderBookSnapshot
+   records.OrderBookLevel
+   capability.Capability
+   dataset.DatasetId
+   dataset.Provenance
 
-.. automodule:: dccd.domain.transforms
-   :members:
+Pure transforms and time helpers:
 
-Application
-===========
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
 
-.. automodule:: dccd.application.operations
-   :members:
-
-.. automodule:: dccd.application.config
-   :members:
-
-.. automodule:: dccd.application.scheduler
-   :members:
+   transforms.aggregate_ohlc
 
 Sources
 =======
 
-.. automodule:: dccd.sources.base
-   :members:
+One adapter per exchange, implementing the fine-grained ``Source`` protocols,
+resolved through a registry. See :doc:`exchanges` for capabilities and fidelity.
 
-.. automodule:: dccd.sources.registry
-   :members:
+.. currentmodule:: dccd.sources
 
-Storage
-=======
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
 
-.. automodule:: dccd.storage.parquet
-   :members:
-
-.. automodule:: dccd.storage.migrate
-   :members:
+   registry.SourceRegistry
+   binance.BinanceSource
+   coinbase.CoinbaseSource
+   kraken.KrakenSource
+   bybit.BybitSource
+   okx.OKXSource
+   bitfinex.BitfinexSource
+   bitmex.BitMEXSource
 
 Transport
 =========
 
-.. automodule:: dccd.transport.paginate
-   :members:
+Async I/O building blocks shared by every adapter.
+
+.. currentmodule:: dccd.transport
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   http.AsyncHTTPClient
+   ws.WebSocketBase
+   ratelimit.RateLimiter
+   paginate.paginate_ohlc
+   paginate.paginate_trades
+
+Storage
+=======
+
+Parquet datasets (ns timestamps, provenance, per-type dedup) and the run history.
+
+.. currentmodule:: dccd.storage
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   parquet.ParquetStore
+   runs_sqlite.RunsStore
+   migrate.migrate_parquet_to_ns
+
+Application
+===========
+
+The operations and orchestration that wire domain, sources and storage together.
+
+.. currentmodule:: dccd.application
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   operations.backfill
+   operations.stream
+   operations.read
+   operations.inventory
+   scheduler.Scheduler
+   config.AppConfig
+   config.JobConfig
+   jobs.JobSpec
+   events.EventBus
+
+Interfaces
+==========
+
+.. currentmodule:: dccd.interfaces
+
+.. autosummary::
+   :toctree: generated/
+   :nosignatures:
+
+   api.app.create_app
