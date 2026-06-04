@@ -26,4 +26,8 @@ Example
        await c.backfill("binance", "BTC/USDT", "ohlc", span=3600, start="2024-01-01")
        await c.backfill("binance", "BTC/USDT", "trades", start="2024-01-01")
 
-See :class:`~dccd.sources.binance.BinanceSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.binance.BinanceSource
+   :members:

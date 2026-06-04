@@ -30,4 +30,8 @@ Example
    async with Client() as c:
        await c.backfill("coinbase", "BTC/USD", "ohlc", span=3600, start="2024-01-01")
 
-See :class:`~dccd.sources.coinbase.CoinbaseSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.coinbase.CoinbaseSource
+   :members:

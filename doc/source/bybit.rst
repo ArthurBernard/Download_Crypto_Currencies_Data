@@ -28,4 +28,8 @@ Example
    async with Client() as c:
        await c.backfill("bybit", "BTC/USDT", "ohlc", span=3600, start="2024-01-01")
 
-See :class:`~dccd.sources.bybit.BybitSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.bybit.BybitSource
+   :members:

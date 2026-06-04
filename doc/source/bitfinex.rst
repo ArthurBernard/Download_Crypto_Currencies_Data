@@ -30,4 +30,8 @@ Example
    async with Client() as c:
        await c.backfill("bitfinex", "BTC/USDT", "ohlc", span=3600, start="2024-01-01")
 
-See :class:`~dccd.sources.bitfinex.BitfinexSource` for the full API.
+API
+===
+
+.. autoclass:: dccd.sources.bitfinex.BitfinexSource
+   :members:
