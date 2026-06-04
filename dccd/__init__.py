@@ -35,20 +35,34 @@ __all__ = ["__version__", "Client"]
 
 
 class Client:
-    """Async context manager facade for dccd v3.
+    """Async facade for dccd — the one-stop entry point.
+
+    Wires every exchange adapter and the local Parquet store, and exposes the
+    four operations as methods: :meth:`backfill` (download history),
+    :meth:`stream` (collect live), :meth:`read` (load stored data) and
+    :meth:`inventory` (list datasets). Use it as an async context manager so the
+    shared HTTP client is opened and closed cleanly.
 
     Parameters
     ----------
     config_path : str or None
-        Path to config.yml.  Resolved via XDG fallback when None.
+        Path to ``config.yml``. Resolved via the XDG fallback when ``None``;
+        only ``settings.data_path`` is needed for direct use.
+
+    See Also
+    --------
+    dccd.application.operations.backfill : the underlying operation.
 
     Examples
     --------
     >>> import asyncio
-    >>> async def example():
-    ...     from dccd import Client
+    >>> async def main():
     ...     async with Client() as c:
-    ...         pass
+    ...         await c.backfill('binance', 'BTC/USDT', 'ohlc', span=3600,
+    ...                          start='2024-01-01')
+    ...         return c.read('binance', 'BTC/USDT', 'ohlc', span=3600).height
+    >>> asyncio.run(main())  # doctest: +SKIP
+    168
     """
 
     def __init__(self, config_path: str | None = None) -> None:
@@ -82,19 +96,44 @@ class Client:
 
     async def backfill(self, exchange: str, symbol: str, data_type: str = "ohlc",
                        span: int | None = None, start: str = "last") -> dict[str, Any]:
-        """Backfill one dataset.
+        """Download historical data for one dataset into the local store.
+
+        Resumes and deduplicates: running it again only adds what is missing.
+        Trades are cursor-paginated and drain the whole requested window.
 
         Parameters
         ----------
         exchange : str
+            Exchange name, e.g. ``'binance'``. See :doc:`/exchanges`.
         symbol : str
-            E.g. ``'BTC/USDT'`` or ``'BTC-USD'``.
-        data_type : str
-            ``'ohlc'``, ``'trades'``, or ``'orderbook'``.
+            Trading pair, ``'BTC/USDT'`` or ``'BTC-USD'``.
+        data_type : str, default 'ohlc'
+            ``'ohlc'``, ``'trades'`` or ``'orderbook'``.
         span : int or None
-            Required for OHLC.
-        start : str
-            ``'last'``, ``'origin'``, or ISO date.
+            Candle size in seconds — **required** for ``'ohlc'``.
+        start : str, default 'last'
+            ``'last'`` (resume from the last stored row), ``'origin'`` (full
+            history) or an ISO date such as ``'2024-01-01'``.
+
+        Returns
+        -------
+        dict
+            ``{'run_id', 'rows_written', 'start_ns', 'end_ns'}`` on success;
+            ``{'run_id', 'rows_written', 'error'}`` on failure.
+
+        See Also
+        --------
+        read : load the result. stream : live collection instead of history.
+
+        Examples
+        --------
+        >>> async def main():
+        ...     async with Client() as c:
+        ...         r = await c.backfill('binance', 'BTC/USDT', 'ohlc',
+        ...                              span=3600, start='2024-01-01')
+        ...         return r['rows_written']
+        >>> asyncio.run(main())  # doctest: +SKIP
+        168
         """
         from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
         from dccd.application.operations import backfill as do_backfill
@@ -123,10 +162,33 @@ class Client:
                      span: int | None = None, depth: int | None = None,
                      snapshot_interval: int | None = None,
                      stop_event: "asyncio.Event | None" = None) -> None:
-        """Stream live data until *stop_event* is set.
+        """Collect live data over WebSocket until *stop_event* is set.
 
-        Parameters mirror :meth:`backfill`; ``stop_event`` is an
-        :class:`asyncio.Event` used to stop the stream cleanly.
+        Parameters mirror :meth:`backfill`. ``depth`` / ``snapshot_interval``
+        apply to order-book streams. For long-running collection prefer a
+        ``supervised`` stream job in the config and ``dccd start`` (auto-reconnect).
+
+        Parameters
+        ----------
+        exchange, symbol : str
+        data_type : str, default 'trades'
+            ``'ohlc'``, ``'trades'`` or ``'orderbook'``.
+        span, depth, snapshot_interval : int or None
+        stop_event : asyncio.Event or None
+            Set it to stop the stream cleanly.
+
+        See Also
+        --------
+        backfill : download history instead of live data.
+
+        Examples
+        --------
+        >>> async def main():
+        ...     async with Client() as c:
+        ...         stop = asyncio.Event()
+        ...         asyncio.get_running_loop().call_later(10, stop.set)
+        ...         await c.stream('binance', 'BTC/USDT', 'trades', stop_event=stop)
+        >>> asyncio.run(main())  # doctest: +SKIP
         """
         from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
         from dccd.application.operations import stream as do_stream
@@ -149,7 +211,34 @@ class Client:
     def read(self, exchange: str, symbol: str, data_type: str = "ohlc",
              span: int | None = None, start_ns: int | None = None,
              end_ns: int | None = None) -> "pl.DataFrame":
-        """Read stored data for a dataset as a Polars DataFrame."""
+        """Read stored data for a dataset as a Polars DataFrame.
+
+        Parameters
+        ----------
+        exchange, symbol : str
+        data_type : str, default 'ohlc'
+        span : int or None
+            Required for ``'ohlc'``.
+        start_ns, end_ns : int or None
+            Optional inclusive nanosecond bounds.
+
+        Returns
+        -------
+        polars.DataFrame
+            Sorted by ``TS`` (nanoseconds UTC), deduplicated. Empty if no data.
+
+        See Also
+        --------
+        backfill : populate the dataset. inventory : list what is stored.
+
+        Examples
+        --------
+        >>> async def main():
+        ...     async with Client() as c:
+        ...         return c.read('binance', 'BTC/USDT', 'ohlc', span=3600).columns
+        >>> asyncio.run(main())  # doctest: +SKIP
+        ['TS', 'open', 'high', 'low', 'close', 'volume', 'quote_volume', 'trades']
+        """
         from typing import cast
 
         from dccd.application.jobs import JobTarget
@@ -163,7 +252,22 @@ class Client:
         return cast("pl.DataFrame", do_read(target, store=store, start_ns=start_ns, end_ns=end_ns))
 
     def inventory(self) -> list[dict[str, Any]]:
-        """List stored datasets."""
+        """List every stored dataset with its coverage.
+
+        Returns
+        -------
+        list of dict
+            One entry per dataset with ``exchange``, ``pair``, ``data_type``,
+            ``span``, ``rows``, ``min_ts`` and ``max_ts`` (nanoseconds UTC).
+
+        Examples
+        --------
+        >>> async def main():
+        ...     async with Client() as c:
+        ...         return [d['pair'] for d in c.inventory()]
+        >>> asyncio.run(main())  # doctest: +SKIP
+        ['BTC-USDT']
+        """
         from dccd.application.operations import inventory
         _, store = self._require_ready()
         return inventory(store=store)

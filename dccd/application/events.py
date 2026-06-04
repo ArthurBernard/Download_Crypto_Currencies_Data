@@ -41,7 +41,23 @@ Handler = Callable[[Event], Any]
 
 
 class EventBus:
-    """Simple pub-sub event bus for operation progress/log/status events."""
+    """Pub-sub bus carrying operation events to interested subscribers.
+
+    Operations emit :class:`ProgressEvent`, :class:`LogEvent` and
+    :class:`StatusEvent` (tagged by ``run_id``). Subscribers — the HTTP API's
+    SSE endpoint, the health monitor — receive them either by registering a
+    handler or by draining an internal queue (:meth:`enable_queue`). Use
+    :meth:`for_run` to get a small emitter bound to one ``run_id``.
+
+    Examples
+    --------
+    >>> bus = EventBus()
+    >>> seen = []
+    >>> bus.subscribe(seen.append)
+    >>> bus.for_run('r1').log('started')
+    >>> seen[0].message
+    'started'
+    """
 
     def __init__(self) -> None:
         self._handlers: list[Handler] = []
