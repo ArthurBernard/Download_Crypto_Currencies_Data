@@ -90,50 +90,45 @@ multiple exchanges via REST and WebSocket APIs.
 Supported exchanges
 -------------------
 
+You pick a **data type** (OHLC · trades · order book) and an **operation** —
+**backfill** (download history) or **stream** (collect live). Each cell lists
+the data types an exchange supports for that operation.
+
 .. list-table::
    :header-rows: 1
    :stub-columns: 1
+   :widths: 16 44 40
 
    * - Exchange
-     - OHLC REST
-     - Trades REST
-     - Book REST
-     - WebSocket (live)
+     - Backfill (history)
+     - Stream (live)
    * - Binance
-     - ✅ full
-     - ✅ full
-     - ✅
+     - OHLC · trades · book
      - OHLC · trades · book
    * - Coinbase
-     - ✅ full
-     - ⚠️ recent only
-     - ✅
+     - OHLC · book · trades [#recent]_
      - trades
    * - Kraken
-     - ⚠️ 720 recent
-     - ✅ full
-     - ✅
+     - OHLC [#kr]_ · trades · book
      - OHLC · trades · book
    * - Bybit
-     - ✅ full
-     - ❌ no spot history
-     - ✅
+     - OHLC · book
      - OHLC · trades · book
    * - OKX
-     - ✅ full
-     - ✅ full
-     - ✅
+     - OHLC · trades · book
      - OHLC · trades · book
    * - Bitfinex
-     - ✅ full
-     - ✅ full
-     - ✅
+     - OHLC · trades · book
      - OHLC · trades
    * - BitMEX
-     - ✅ full (4 spans)
-     - ✅ full
-     - ✅
      - OHLC · trades · book
+     - OHLC · trades · book
+
+.. [#recent] Coinbase trades backfill returns recent trades only (no deep
+   history). Bybit spot has no trade history at all.
+.. [#kr] Kraken OHLC backfill serves the 720 most recent bars; a deeper request
+   is clamped to that window. Order-book "backfill" is a single point-in-time
+   snapshot.
 
 See :doc:`exchanges` for per-exchange notes and OHLC field fidelity.
 Bybit spot has no trade history at all (WS only). All other trade backfills are

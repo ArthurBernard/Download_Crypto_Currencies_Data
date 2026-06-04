@@ -10,59 +10,51 @@ silently returning wrong or partial data.
 Capabilities
 ============
 
+You pick a **data type** and an **operation** — **backfill** (download history)
+or **stream** (collect live). Each cell lists the data types supported for that
+operation; the notes below qualify the limits.
+
 .. list-table::
    :header-rows: 1
    :stub-columns: 1
+   :widths: 16 44 40
 
    * - Exchange
-     - OHLC REST
-     - Trades REST
-     - Book REST
-     - WebSocket (live)
+     - Backfill (history)
+     - Stream (live)
    * - Binance
-     - ✅ full
-     - ✅ full
-     - ✅
+     - OHLC · trades · book
      - OHLC · trades · book
    * - Coinbase
-     - ✅ full (300/req)
-     - ⚠️ recent only
-     - ✅
+     - OHLC (300/req) · book · trades *(recent)*
      - trades
    * - Kraken
-     - ⚠️ 720 recent
-     - ✅ full
-     - ✅
+     - OHLC *(720 recent)* · trades · book
      - OHLC · trades · book
    * - Bybit
-     - ✅ full
-     - ❌ no spot history
-     - ✅
+     - OHLC · book
      - OHLC · trades · book
    * - OKX
-     - ✅ full
-     - ✅ full
-     - ✅
+     - OHLC · trades · book
      - OHLC · trades · book
    * - Bitfinex
-     - ✅ full
-     - ✅ full
-     - ✅
+     - OHLC · trades · book
      - OHLC · trades
    * - BitMEX
-     - ✅ full (4 spans)
-     - ✅ full
-     - ✅
+     - OHLC (1m/5m/1h/1d) · trades · book
      - OHLC · trades · book
 
 .. note::
 
-   **Trades REST is cursor-paginated** — a backfill drains the full requested
-   window, not just the first capped page. ``⚠️ recent only`` means the exchange
-   exposes no deep trade history through the public JSON API (a deep request is
-   rejected early, not silently truncated). The **WebSocket** column lists only
-   channels with a real implementation; undeclared channels raise
-   :class:`~dccd.domain.errors.NoCapability`.
+   - **Trades backfill is cursor-paginated** — it drains the full requested
+     window, not just the first capped page.
+   - *recent* means no deep history through the public API; a deeper request is
+     **rejected or clamped early**, never silently truncated. Bybit spot has no
+     trade history at all.
+   - **Order-book backfill** captures a single point-in-time snapshot (there is
+     no historical order book); use a **stream** to record the book over time.
+   - The **stream** column lists only channels with a real implementation;
+     undeclared channels raise :class:`~dccd.domain.errors.NoCapability`.
 
 OHLC field fidelity
 ===================
