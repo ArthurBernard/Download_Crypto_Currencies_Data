@@ -63,6 +63,7 @@ class OKXSource(
         self._http = http or AsyncHTTPClient()
 
     def capabilities(self) -> list[Capability]:
+        """Declared capabilities, one per (data type × transport × mode)."""
         return [
             Capability(
                 data_type=DataType.OHLC, transport="rest", mode="historical",
@@ -83,6 +84,7 @@ class OKXSource(
         ]
 
     def render_symbol(self, s: Symbol) -> str:
+        """Render a canonical :class:`~dccd.domain.symbol.Symbol` to this exchange's string."""
         return f"{s.base}-{s.quote}"
 
     async def fetch_ohlc_page(
@@ -93,6 +95,7 @@ class OKXSource(
         end_ns: int,
         limit: int,
     ) -> list[OHLCBar]:
+        """Fetch one page of OHLC bars (see :meth:`~dccd.sources.base.OHLCHistory.fetch_ohlc_page`)."""
         bar = okx_interval(span)
         if not bar:
             return []
@@ -164,6 +167,7 @@ class OKXSource(
         return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         pair = self.render_symbol(symbol)
         params = {"instId": pair, "sz": min(depth, 400)}
         async with self._http as client:
@@ -176,15 +180,18 @@ class OKXSource(
         return OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks)
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         bar = okx_interval(span) or "1m"
         ws = _OKXWS(self.render_symbol(symbol), "candle" + bar, "ohlc")
         return ws.stream()
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         ws = _OKXWS(self.render_symbol(symbol), "trades", "trades")
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         ws = _OKXWS(self.render_symbol(symbol), "books", "books")
         return ws.stream()
 
@@ -197,12 +204,14 @@ class _OKXWS(WebSocketBase):
         self._mode = mode
 
     async def on_connect(self, ws: Any) -> None:
+        """Send the subscription message after each (re)connect."""
         await ws.send(json.dumps({
             "op": "subscribe",
             "args": [{"channel": self._channel, "instId": self._instId}],
         }))
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
+        """Parse a raw WebSocket frame into domain records."""
         data = json.loads(raw)
         if "data" not in data:
             return

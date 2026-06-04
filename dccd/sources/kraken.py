@@ -105,6 +105,7 @@ class KrakenSource(
         self._http = http or AsyncHTTPClient()
 
     def capabilities(self) -> list[Capability]:
+        """Declared capabilities, one per (data type × transport × mode)."""
         return [
             Capability(
                 data_type=DataType.OHLC, transport="rest", mode="historical",
@@ -122,6 +123,7 @@ class KrakenSource(
         ]
 
     def render_symbol(self, s: Symbol) -> str:
+        """Render a canonical :class:`~dccd.domain.symbol.Symbol` to this exchange's string."""
         return _kraken_pair(s)
 
     async def fetch_ohlc_page(
@@ -220,6 +222,7 @@ class KrakenSource(
         return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         pair = _kraken_pair(symbol)
         async with self._http as client:
             data = await client.get(f"{_BASE}/Depth", {"pair": pair, "count": min(depth, 500)})
@@ -234,12 +237,15 @@ class KrakenSource(
         return OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks)
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         return _KrakenWS(_ws_pair(symbol), "ohlc", span // 60).stream_ohlc()
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         return _KrakenWS(_ws_pair(symbol), "trade").stream_trades()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         return _KrakenWS(_ws_pair(symbol), "book", depth).stream_orderbook()
 
 
@@ -251,6 +257,7 @@ class _KrakenWS(WebSocketBase):
         self._param = param
 
     async def on_connect(self, ws: Any) -> None:
+        """Send the subscription message after each (re)connect."""
         sub: dict[str, Any] = {
             "method": "subscribe",
             "params": {"channel": self._channel, "symbol": [self._pair]},
@@ -262,6 +269,7 @@ class _KrakenWS(WebSocketBase):
         await ws.send(json.dumps(sub))
 
     async def stream_ohlc(self) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if data.get("channel") != "ohlc":
@@ -277,6 +285,7 @@ class _KrakenWS(WebSocketBase):
                 )
 
     async def stream_trades(self) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if data.get("channel") != "trade":

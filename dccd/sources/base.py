@@ -43,6 +43,7 @@ class Source:
         transport: str,
         mode: str,
     ) -> Capability | None:
+        """Return the declared :class:`Capability` for this combination, or None."""
         for cap in self.capabilities():
             if (
                 cap.data_type == data_type
@@ -64,6 +65,7 @@ class OHLCHistory(Source):
         end_ns: int,
         limit: int,
     ) -> list[OHLCBar]:
+        """Fetch up to *limit* OHLC bars of *span* seconds in ``[start_ns, end_ns]``."""
         raise NotImplementedError
 
 
@@ -93,6 +95,7 @@ class TradesHistory(Source):
         limit: int,
         cursor: str | None = None,
     ) -> tuple[list[Trade], str | None]:
+        """Fetch one page of trades; return ``(trades, next_cursor)`` (see class)."""
         raise NotImplementedError
 
 
@@ -104,6 +107,7 @@ class OrderBookSnapshotREST(Source):
         symbol: Symbol,
         depth: int,
     ) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         raise NotImplementedError
 
 
@@ -111,6 +115,7 @@ class OHLCLive(Source):
     """Protocol: can stream live OHLC bars via WebSocket."""
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Yield live OHLC bars of *span* seconds over WebSocket."""
         raise NotImplementedError
 
 
@@ -118,6 +123,7 @@ class TradesLive(Source):
     """Protocol: can stream live trades via WebSocket."""
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Yield live trades over WebSocket."""
         raise NotImplementedError
 
 
@@ -125,4 +131,5 @@ class OrderBookLive(Source):
     """Protocol: can stream live order book snapshots/deltas via WebSocket."""
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Yield live order-book snapshots/deltas over WebSocket."""
         raise NotImplementedError

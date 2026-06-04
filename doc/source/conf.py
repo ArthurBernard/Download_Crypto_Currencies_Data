@@ -79,6 +79,7 @@ from dccd.domain.transforms import aggregate_ohlc
 from dccd.storage.parquet import ParquetStore
 from dccd.storage.runs_sqlite import RunsStore
 from dccd.sources.registry import SourceRegistry
+from dccd.application.events import EventBus
 """
 
 project = 'Download Crypto Currencies Data'
@@ -114,6 +115,7 @@ html_theme_options = {
 html_title = '{} v{} Reference Guide'.format(project, version)
 html_static_path = ['_static']
 html_css_files = ['custom.css']
+html_last_updated_fmt = '%Y-%m-%d'
 
 html_sidebars = {
     "**": [

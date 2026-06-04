@@ -30,6 +30,7 @@ class TokenBucket:
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
+        """Wait until a token is available for *exchange*, then consume it."""
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self._last
@@ -63,6 +64,7 @@ class RateLimiter:
         return self._buckets[exchange]
 
     async def acquire(self, exchange: str) -> None:
+        """Wait until a token is available for *exchange*, then consume it."""
         await self._bucket(exchange).acquire()
 
     @asynccontextmanager

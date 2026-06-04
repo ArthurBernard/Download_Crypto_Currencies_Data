@@ -71,6 +71,7 @@ class CoinbaseSource(
         self._http = http or AsyncHTTPClient()
 
     def capabilities(self) -> list[Capability]:
+        """Declared capabilities, one per (data type × transport × mode)."""
         return [
             Capability(
                 data_type=DataType.OHLC, transport="rest", mode="historical",
@@ -103,6 +104,7 @@ class CoinbaseSource(
         end_ns: int,
         limit: int,
     ) -> list[OHLCBar]:
+        """Fetch one page of OHLC bars (see :meth:`~dccd.sources.base.OHLCHistory.fetch_ohlc_page`)."""
         gran = coinbase_granularity(span)
         if not gran:
             logger.warning("Coinbase does not support span=%d", span)
@@ -183,6 +185,7 @@ class CoinbaseSource(
         return result, None
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         pair = self.render_symbol(symbol)
         async with self._http as client:
             data = await client.get(f"{_BASE}/products/{pair}/book", {"level": 2})
@@ -194,13 +197,16 @@ class CoinbaseSource(
         return OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks)
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         ws = _CoinbaseWS(self.render_symbol(symbol))
         return ws.stream_trades()
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         raise NotImplementedError("Coinbase live OHLC stream is not implemented")
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         raise NotImplementedError("Coinbase live order book stream is not implemented")
 
 
@@ -210,6 +216,7 @@ class _CoinbaseWS(WebSocketBase):
         self._pair = pair
 
     async def on_connect(self, ws: Any) -> None:
+        """Send the subscription message after each (re)connect."""
         await ws.send(json.dumps({
             "type": "subscribe",
             "product_ids": [self._pair],
@@ -217,6 +224,7 @@ class _CoinbaseWS(WebSocketBase):
         }))
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Trade]:
+        """Parse a raw WebSocket frame into domain records."""
         data = json.loads(raw)
         for event in data.get("events", []):
             for t in event.get("trades", []):
@@ -234,5 +242,6 @@ class _CoinbaseWS(WebSocketBase):
                     continue
 
     async def stream_trades(self) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         async for item in self.stream():
             yield item

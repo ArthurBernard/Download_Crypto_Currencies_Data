@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProgressEvent(BaseModel):
+    """Progress of a run (windows or time covered)."""
     kind: Literal["progress"] = "progress"
     run_id: str
     done: int
@@ -23,6 +24,7 @@ class ProgressEvent(BaseModel):
 
 
 class LogEvent(BaseModel):
+    """A log line emitted by a run."""
     kind: Literal["log"] = "log"
     run_id: str
     level: str = "info"
@@ -30,6 +32,7 @@ class LogEvent(BaseModel):
 
 
 class StatusEvent(BaseModel):
+    """A run state change (running, succeeded, failed, …)."""
     kind: Literal["status"] = "status"
     run_id: str
     state: str
@@ -41,19 +44,38 @@ Handler = Callable[[Event], Any]
 
 
 class EventBus:
-    """Simple pub-sub event bus for operation progress/log/status events."""
+    """Pub-sub bus carrying operation events to interested subscribers.
+
+    Operations emit :class:`ProgressEvent`, :class:`LogEvent` and
+    :class:`StatusEvent` (tagged by ``run_id``). Subscribers — the HTTP API's
+    SSE endpoint, the health monitor — receive them either by registering a
+    handler or by draining an internal queue (:meth:`enable_queue`). Use
+    :meth:`for_run` to get a small emitter bound to one ``run_id``.
+
+    Examples
+    --------
+    >>> bus = EventBus()
+    >>> seen = []
+    >>> bus.subscribe(seen.append)
+    >>> bus.for_run('r1').log('started')
+    >>> seen[0].message
+    'started'
+    """
 
     def __init__(self) -> None:
         self._handlers: list[Handler] = []
         self._queue: asyncio.Queue[Event] | None = None
 
     def subscribe(self, handler: Handler) -> None:
+        """Register a handler called for every published event."""
         self._handlers.append(handler)
 
     def unsubscribe(self, handler: Handler) -> None:
+        """Remove a previously registered handler."""
         self._handlers = [h for h in self._handlers if h != handler]
 
     def emit(self, event: Event) -> None:
+        """Publish an event to all handlers and the queue (if enabled)."""
         for handler in self._handlers:
             try:
                 handler(event)
@@ -66,10 +88,12 @@ class EventBus:
                 pass
 
     def enable_queue(self, maxsize: int = 1000) -> asyncio.Queue[Event]:
+        """Create and return an asyncio queue that receives every event (for SSE)."""
         self._queue = asyncio.Queue(maxsize=maxsize)
         return self._queue
 
     def for_run(self, run_id: str) -> "RunEvents":
+        """Return a small emitter bound to *run_id* (``.progress/.log/.status``)."""
         return RunEvents(self, run_id)
 
 
@@ -81,10 +105,13 @@ class RunEvents:
         self._run_id = run_id
 
     def progress(self, done: int, total: int, unit: str = "windows") -> None:
+        """Emit a :class:`ProgressEvent` for this run."""
         self._bus.emit(ProgressEvent(run_id=self._run_id, done=done, total=total, unit=unit))
 
     def log(self, msg: str, level: str = "info") -> None:
+        """Emit a :class:`LogEvent` for this run."""
         self._bus.emit(LogEvent(run_id=self._run_id, level=level, message=msg))
 
     def status(self, state: str) -> None:
+        """Emit a :class:`StatusEvent` for this run."""
         self._bus.emit(StatusEvent(run_id=self._run_id, state=state))

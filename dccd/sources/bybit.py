@@ -60,6 +60,7 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
         self._http = http or AsyncHTTPClient()
 
     def capabilities(self) -> list[Capability]:
+        """Declared capabilities, one per (data type × transport × mode)."""
         return [
             Capability(
                 data_type=DataType.OHLC, transport="rest", mode="historical",
@@ -76,6 +77,7 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
         ]
 
     def render_symbol(self, s: Symbol) -> str:
+        """Render a canonical :class:`~dccd.domain.symbol.Symbol` to this exchange's string."""
         return f"{s.base}{s.quote}"
 
     async def fetch_ohlc_page(
@@ -86,6 +88,7 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
         end_ns: int,
         limit: int,
     ) -> list[OHLCBar]:
+        """Fetch one page of OHLC bars (see :meth:`~dccd.sources.base.OHLCHistory.fetch_ohlc_page`)."""
         interval = bybit_interval(span)
         if not interval:
             return []
@@ -118,6 +121,7 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
         return bars
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         params = {"category": "spot", "symbol": self.render_symbol(symbol), "limit": min(depth, 200)}
         async with self._http as client:
             data = await client.get(f"{_BASE}/orderbook", params)
@@ -129,14 +133,17 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
         return OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks)
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         ws = _BybitWS(self.render_symbol(symbol), "kline", bybit_interval(span) or "1")
         return ws.stream_ohlc()
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         ws = _BybitWS(self.render_symbol(symbol), "publicTrade")
         return ws.stream_trades()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         ws = _BybitWS(self.render_symbol(symbol), "orderbook", str(depth))
         return ws.stream_orderbook()
 
@@ -149,14 +156,17 @@ class _BybitWS(WebSocketBase):
         self._param = param
 
     async def on_connect(self, ws: Any) -> None:
+        """Send the subscription message after each (re)connect."""
         full_topic = f"{self._topic}.{self._param}.{self._symbol}" if self._param else f"{self._topic}.{self._symbol}"
         await ws.send(json.dumps({"op": "subscribe", "args": [full_topic]}))
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
+        """Parse a raw WebSocket frame into domain records."""
         return
         yield
 
     async def stream_ohlc(self) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
@@ -172,6 +182,7 @@ class _BybitWS(WebSocketBase):
                 )
 
     async def stream_trades(self) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
@@ -186,6 +197,7 @@ class _BybitWS(WebSocketBase):
                 )
 
     async def stream_orderbook(self) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:

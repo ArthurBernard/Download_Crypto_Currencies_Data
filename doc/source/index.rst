@@ -27,11 +27,26 @@
    </div>
 
 ``dccd`` downloads crypto-currency data (OHLCV, trades, order book) from
-multiple exchanges via REST and WebSocket APIs.
+7 exchanges and stores it as nanosecond-precision Parquet — backfill history or
+stream live, from Python, a CLI, or a web UI. No API key required.
 
 .. code-block:: bash
 
    pip install dccd
+
+.. code-block:: python
+
+   import asyncio
+   from dccd import Client
+
+   async def main():
+       async with Client() as c:
+           await c.backfill("binance", "BTC/USDT", "ohlc", span=3600, start="2024-01-01")
+           print(c.read("binance", "BTC/USDT", "ohlc", span=3600).tail())
+
+   asyncio.run(main())              # → a Polars DataFrame of hourly candles
+
+New here? Start with :doc:`tutorials/first-backfill`.
 
 .. grid:: 1 1 2 3
    :gutter: 3

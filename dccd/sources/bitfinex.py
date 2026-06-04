@@ -83,6 +83,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         self._http = http or AsyncHTTPClient()
 
     def capabilities(self) -> list[Capability]:
+        """Declared capabilities, one per (data type × transport × mode)."""
         return [
             Capability(
                 data_type=DataType.OHLC, transport="rest", mode="historical",
@@ -104,6 +105,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         ]
 
     def render_symbol(self, s: Symbol) -> str:
+        """Render a canonical :class:`~dccd.domain.symbol.Symbol` to this exchange's string."""
         return _bfx_symbol(s)
 
     async def fetch_ohlc_page(
@@ -114,6 +116,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         end_ns: int,
         limit: int,
     ) -> list[OHLCBar]:
+        """Fetch one page of OHLC bars (see :meth:`~dccd.sources.base.OHLCHistory.fetch_ohlc_page`)."""
         tf = _BITFINEX_SPANS.get(span)
         if not tf:
             return []
@@ -184,6 +187,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         return trades, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
+        """Fetch a current order-book snapshot up to *depth* levels."""
         sym = _bfx_symbol(symbol)
         params = {"len": min(depth, 250)}
         async with self._http as client:
@@ -206,14 +210,17 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         )
 
     def stream_ohlc(self, symbol: Symbol, span: int) -> AsyncIterator[OHLCBar]:
+        """Stream live OHLC bars over WebSocket."""
         ws = _BitfinexWS(_bfx_symbol(symbol), "candles", _BITFINEX_SPANS.get(span, "1m"))
         return ws.stream()
 
     def stream_trades(self, symbol: Symbol) -> AsyncIterator[Trade]:
+        """Stream live trades over WebSocket."""
         ws = _BitfinexWS(_bfx_symbol(symbol), "trades")
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+        """Stream live order-book snapshots/deltas over WebSocket."""
         raise NotImplementedError("Bitfinex live order book stream is not implemented")
 
 
@@ -226,12 +233,14 @@ class _BitfinexWS(WebSocketBase):
         self._chan_id: int | None = None
 
     async def on_connect(self, ws: Any) -> None:
+        """Send the subscription message after each (re)connect."""
         sub: dict[str, Any] = {"event": "subscribe", "channel": self._channel, "symbol": self._symbol}
         if self._channel == "candles":
             sub["key"] = f"trade:{self._tf}:{self._symbol}"
         await ws.send(json.dumps(sub))
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
+        """Parse a raw WebSocket frame into domain records."""
         data = json.loads(raw)
         if isinstance(data, dict):
             if data.get("event") == "subscribed":

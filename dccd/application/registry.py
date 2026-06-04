@@ -28,15 +28,18 @@ class OperationRegistry:
         self._ops: dict[str, OperationSpec] = {}
 
     def register(self, spec: OperationSpec) -> None:
+        """Register an operation spec."""
         self._ops[spec.name] = spec
 
     def get(self, name: str) -> OperationSpec:
+        """Return the spec for *name* (raises KeyError if unknown)."""
         if name not in self._ops:
             raise KeyError(f"Unknown operation: {name!r}")
         return self._ops[name]
 
     @property
     def operations(self) -> list[str]:
+        """Names of all registered operations."""
         return list(self._ops.keys())
 
 
