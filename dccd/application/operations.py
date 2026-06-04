@@ -202,12 +202,14 @@ async def backfill(
 
     # Progress is reported by *time covered* of the requested window, which gives
     # a real, smooth bar for both OHLC and cursor-paginated trades (the latter
-    # have no page total). ``at`` is the timestamp reached; the window is fixed.
-    _window = max(1, end_ns - start_ns)
-
+    # have no page total). ``at`` is the timestamp reached. The window is read
+    # from the *current* start_ns at call time — it may be clamped later
+    # (history="recent"), and a precomputed window would leave the bar stuck
+    # well below 100 % (the "looks frozen" symptom).
     def _emit_time(last_ts: int) -> None:
-        done = min(_window, max(0, last_ts - start_ns))
-        _emit_progress(events, runs_store, run_id, done, _window,
+        win = max(1, end_ns - start_ns)
+        done = min(win, max(0, last_ts - start_ns))
+        _emit_progress(events, runs_store, run_id, done, win,
                        _collected[0], unit="time", at=last_ts)
 
     try:
