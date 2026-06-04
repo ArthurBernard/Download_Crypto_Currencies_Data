@@ -42,12 +42,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the dead `parallel` backfill flag, the unused `Page` model and the
   unused bundled `htmx.min.js`.
 
-> The previous `[Unreleased]` entry described the **v2 daemon** web UI
-> (`dccd/daemon/*`, removed in the v3 rewrite) and has been superseded.
+> v3 is a full hexagonal rewrite. It **removes** the v2 daemon web UI shipped in
+> 2.4.0 (`dccd/daemon/*`) and replaces it with `dccd/interfaces/` (api/cli/ui).
+
+## [2.4.0] - 2026-06-04
+
+### Added
+
+- `dccd/daemon/api.py` — web UI and JSON API (FastAPI + Jinja2 + htmx): a thin
+  HTTP layer over the existing daemon modules exposing dashboard (live health
+  metrics), inventory (stored data coverage), jobs (histo/stream list + add/remove
+  + live backfill progress), logs (tail), config (view/validate/save the YAML),
+  and storage (rclone status + manual sync). JSON-only API (`/api/*`) with
+  dumb-shell templates, so the front-end can be swapped without touching the API.
+  Optional Bearer-token auth via `settings.ui_auth_token`
+- `dccd/daemon/cli.py` — `dccd ui`: serve the web UI standalone; the UI is also
+  started automatically (background thread) by `dccd start` when the `[ui]` extra
+  is installed
+- `dccd/daemon/config.py` — `SettingsConfig.ui_host`, `ui_port`, `ui_auth_token`:
+  web UI bind address, port, and optional auth token
+- `dccd/daemon/backfill.py` — `progress_callback` and `stop_event` on
+  `_BackfillBase.run()` / `run_backfill()`: let the UI report live progress and
+  cancel a running backfill (defaults keep CLI behaviour unchanged)
+- `dccd/daemon/stream_manager.py` — `SyncService` writes
+  `{local_path}/.dccd/last_sync.json` after each successful remote push, so the UI
+  can display the last sync time
+- `pyproject.toml` — new optional extra `[ui]` (`fastapi`, `uvicorn[standard]`,
+  `jinja2`); install with `pip install dccd[daemon,ui]`
 
 ## [2.3.3] - 2026-05-31
 
 ### Added
+
 
 - `doc/source/` — complete Sphinx documentation overhaul: redesigned homepage
   with sphinx-design cards, captioned toctrees (Getting Started / Data Collection /
