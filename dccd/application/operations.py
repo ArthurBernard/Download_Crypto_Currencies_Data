@@ -421,8 +421,11 @@ async def stream(
             async for snap in adapter.stream_orderbook(target.symbol, params.depth or 50):
                 if stop_event and stop_event.is_set():
                     break
-                bid = snap.bids[0].price if snap.bids else None
-                ask = snap.asks[0].price if snap.asks else None
+                # Best bid = highest bid price, best ask = lowest ask price.
+                # Compute rather than trust ordering so a momentarily unsorted
+                # book can't surface a crossed bid/ask in the liveness sample.
+                bid = max((lvl.price for lvl in snap.bids if lvl.amount > 0), default=None)
+                ask = min((lvl.price for lvl in snap.asks if lvl.amount > 0), default=None)
                 _emit_sample(snap.ts, bid=bid, ask=ask)
                 if time.time() - last_save >= snapshot_interval:
                     await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))

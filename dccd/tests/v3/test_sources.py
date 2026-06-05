@@ -220,3 +220,58 @@ class TestSourceRegistry:
         self.reg.register("bybit", BybitSource())
         with pytest.raises(NoCapability):
             self.reg.resolve("bybit", DataType.TRADES, "rest", "historical")
+
+
+class TestOrderBookWSParsing:
+    """Live order-book WS frames must yield a sorted, uncrossed best bid/ask.
+
+    Guards the fix where binance/okx/bitmex were emitting unsorted deltas (or
+    snapshot/diff levels) that surfaced a crossed best bid/ask in the Live UI.
+    """
+
+    @staticmethod
+    async def _drain(agen):
+        return [x async for x in agen]
+
+    @pytest.mark.asyncio
+    async def test_binance_partial_book_sorted(self):
+        import json
+
+        from dccd.sources.binance import _BinanceDepthWS
+        ws = _BinanceDepthWS("btcusdt", 5)
+        frame = json.dumps({"bids": [["100.0", "1"], ["99.0", "2"]],
+                            "asks": [["101.0", "1"], ["102.0", "3"]]})
+        [snap] = await self._drain(ws.parse_message(frame))
+        assert snap.is_snapshot is True
+        assert snap.bids[0].price == 100.0  # best bid = highest
+        assert snap.asks[0].price == 101.0  # best ask = lowest
+        assert snap.bids[0].price < snap.asks[0].price
+
+    @pytest.mark.asyncio
+    async def test_okx_books5_parsed(self):
+        import json
+
+        from dccd.sources.okx import _OKXWS
+        ws = _OKXWS("BTC-USDT", "books5", "books")
+        frame = json.dumps({"arg": {"channel": "books5"},
+                            "data": [{"bids": [["100.0", "1", "0", "1"]],
+                                      "asks": [["101.0", "1", "0", "1"]],
+                                      "ts": "1700000000000"}]})
+        [snap] = await self._drain(ws.parse_message(frame))
+        assert snap.bids[0].price == 100.0 and snap.asks[0].price == 101.0
+        assert snap.bids[0].price < snap.asks[0].price
+
+    @pytest.mark.asyncio
+    async def test_bitmex_orderbook10_parsed(self):
+        import json
+
+        from dccd.sources.bitmex import _BitMEXWS
+        ws = _BitMEXWS("XBTUSD", "orderBook10", "book")
+        frame = json.dumps({"table": "orderBook10",
+                            "data": [{"symbol": "XBTUSD",
+                                      "bids": [[100.0, 1], [99.5, 2]],
+                                      "asks": [[101.0, 1], [101.5, 2]]}]})
+        [snap] = await self._drain(ws.parse_message(frame))
+        assert snap.is_snapshot is True
+        assert snap.bids[0].price == 100.0 and snap.asks[0].price == 101.0
+        assert snap.bids[0].price < snap.asks[0].price

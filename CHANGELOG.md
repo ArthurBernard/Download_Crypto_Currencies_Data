@@ -54,6 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom ISO start date for backfill no longer raises (`JobParams.start`).
 - Historical *first date* edit no longer reverts on reload: `GET /api/jobs` was
   not returning `start`, so the UI reset the field after every refresh. (#76)
+- Live order-book streams reported a crossed/incorrect best bid-ask: the WS
+  adapters emitted unmerged diff levels. binance/okx/bitmex now use full
+  snapshot channels (`@depth<N>`, `books5`, `orderBook10`) and bybit
+  reconstructs full state from snapshot+deltas (like kraken); best bid/ask is
+  computed defensively (`max` bid / `min` ask). (#76)
 - `dccd inventory` no longer crashes on OHLC datasets.
 - Streams with no real implementation (Coinbase OHLC/order book, Bitfinex order
   book) are rejected with `NoCapability` instead of "running" with zero output.
