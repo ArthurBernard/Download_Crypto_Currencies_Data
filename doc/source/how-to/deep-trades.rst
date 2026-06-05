@@ -9,8 +9,9 @@ pair is millions of rows. Give an explicit ``start`` date:
 
    dccd backfill -e okx -s BTC/USDT -t trades --start 2024-01-01
 
-From the web UI, the backfill modal shows live progress and a **Stop** button
-(it keeps everything already collected). Via the API:
+From the web UI, the **Historical** page shows the run's live progress on the
+dataset's coverage bar, and **Run** turns into **Stop** to cancel it (everything
+already collected is kept). Via the API:
 
 .. code-block:: bash
 

@@ -38,7 +38,7 @@ Inventory & data
      - Description
    * - ``GET``
      - ``/api/inventory``
-     - All stored datasets (exchange, pair, type, span, rows, time range).
+     - All stored datasets (exchange, pair, type, span, rows, time range, on-disk ``bytes``, file count; OHLC also gets ``expected_rows`` / ``missing_rows`` for gap detection).
    * - ``POST``
      - ``/api/read``
      - Read stored rows for a dataset; body ``{exchange, symbol, data_type, span, start_ns, end_ns}`` (returns up to 1 000 rows).
@@ -104,13 +104,25 @@ Jobs
      - Description
    * - ``GET``
      - ``/api/jobs``
-     - All configured job specs + state.
+     - All configured job specs + state (incl. ``start``, ``every``, ``snapshot_interval``, ``depth``).
+   * - ``POST``
+     - ``/api/jobs/create``
+     - Add a job; body ``{operation, exchange, symbol, data_type, span?, start?, trigger_kind?, every?, snapshot_interval?, depth?}``. Returns ``{job_id}``.
+   * - ``POST``
+     - ``/api/jobs/update``
+     - Change a job's start (first date); body ``{job_id, start}``.
+   * - ``POST``
+     - ``/api/jobs/delete``
+     - Remove a job (stored data is kept); body ``{job_id}``.
    * - ``POST``
      - ``/api/jobs/run``
      - Trigger one configured backfill job; body ``{job_id}``.
    * - ``POST``
      - ``/api/jobs/run-all``
      - Trigger every enabled backfill job.
+
+All three mutating routes persist to ``config.yml`` and reconcile stream workers
+(a deleted stream's worker is stopped and dropped).
 
 Config, events & storage
 ------------------------
@@ -127,7 +139,7 @@ Config, events & storage
      - Read / replace the configuration (validated; persisted to ``config.yml``).
    * - ``GET``
      - ``/api/events``
-     - **SSE** stream of live ``log`` / ``progress`` / ``status`` events.
+     - **SSE** stream of live ``log`` / ``progress`` / ``status`` / ``sample`` events (``sample`` carries a stream's last ``value`` or ``bid``/``ask`` for liveness). Fans out to multiple concurrent consumers.
    * - ``POST``
      - ``/api/migrate``
      - Migrate legacy v2 Parquet files; body ``{dry_run}``.
