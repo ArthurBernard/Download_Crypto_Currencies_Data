@@ -42,3 +42,6 @@ pytest-of-arthur/
 scripts/
 .python-version
 *.db
+
+# Archived (pre-rewrite) developer docs — local snapshot, not tracked
+doc/dev/_archive/
