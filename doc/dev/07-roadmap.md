@@ -1,0 +1,88 @@
+# 7 — Roadmap / next steps
+
+Planned work after the UI rework. The theme: **go from "runs on my machine" to
+"runs unattended on a remote server, reachable from anywhere, with data backed up
+off-box."** Much of the scaffolding already exists (`Dockerfile`,
+`deploy/dccd.service`, `ui_host`/`ui_auth_token`/`ui_allow_origins`,
+`storage/remote.py` rclone sync) — these steps are mostly *wiring, hardening, and
+UX*, not greenfield.
+
+Status legend: `[ ]` todo · `[~]` partially in place · `[x]` done.
+(Operational/local scratch backlog stays in the gitignored root `TODO.md`; this
+file is the tracked, Claude-oriented plan.)
+
+---
+
+## Epic A — Run the app on a remote server
+
+Goal: `dccd start` (scheduler + streams + UI) running 24/7 on a VPS/home server,
+surviving reboots and crashes.
+
+- [~] **Container image** — `Dockerfile` exists. Verify a clean `docker build` +
+  `docker run` with a mounted config + `/data` volume; pin/refresh base image.
+- [~] **systemd unit** — `deploy/dccd.service` exists. Verify install path,
+  `Restart=on-failure`, `User=dccd`, `/etc/dccd/config.yml`, data dir perms.
+- [ ] **Decide the deployment target** (bare systemd vs Docker vs compose) and
+  document one blessed path end-to-end in `doc/source/` (how-to: deploy).
+- [ ] **Persistence & restart safety** — confirm streams resume and the scheduler
+  re-arms after a restart; `RunsStore` (SQLite WAL) survives; data volume is
+  durable.
+- [ ] **Resource/ops** — log rotation, healthcheck (`/health`) wired into the
+  orchestrator, basic resource limits, alerting via the existing `HealthMonitor`
+  webhook.
+- [ ] **Secrets/config** — keep `config.yml` out of the image; document env/volume
+  injection of `ui_auth_token`.
+
+## Epic B — View the UI remotely (PC + mobile)
+
+Goal: open the dashboard securely from a laptop or phone, not just `localhost`.
+
+- [~] **Bind & auth building blocks** — `ui_host=0.0.0.0`, `ui_auth_token`
+  (Bearer), `ui_allow_origins` (CORS) already exist. The default stays
+  `127.0.0.1`; remote exposure must be a conscious, documented opt-in.
+- [ ] **TLS + reverse proxy** — document a Caddy/nginx (or Cloudflare Tunnel)
+  front with HTTPS; the API must never be exposed plaintext off-box. The token in
+  `?token=` for SSE only travels over TLS.
+- [ ] **Auth UX for browsers** — today the token is injected server-side into the
+  template. For true remote access decide the login story: a simple token prompt
+  page / cookie session, so a phone can authenticate without editing config.
+- [ ] **Mobile responsiveness pass** — audit Data/Historical/Live/Dashboard on a
+  narrow viewport (tables → stacked/cards, tap targets, the nav dropdowns). Extend
+  `ui_smoke.py` with a mobile viewport run.
+- [ ] **Harden for exposure** — rate-limit `/api/*`, confirm no wildcard CORS,
+  consider read-only vs control roles, audit that mutating routes require the
+  token (they do via the `/api/*` guard — verify under proxy).
+- [ ] **Threat model note** — write down the assumptions (LAN vs internet, tunnel
+  vs public) in the deploy how-to.
+
+## Epic C — Sync data to a remote space
+
+Goal: the Parquet store is mirrored to off-box storage (S3/B2/Drive/…) so a server
+loss doesn't lose data.
+
+- [~] **rclone sync exists** — `storage/remote.py` (`RemoteStorage.sync_one/
+  sync_all`) + `StorageConfig.remotes` + `sync_interval`. **Verify it's actually
+  scheduled** by `dccd start` (a periodic task), not just callable.
+- [ ] **Scheduled sync in the daemon** — if not wired, add a periodic sync task
+  (interval = `sync_interval`) with backoff + failure surfacing via EventBus/UI
+  ("last sync: …", already a v2 concept).
+- [ ] **Surface sync status in the UI** — last successful sync time + errors on
+  the Storage page; manual "Sync now" button (API endpoint).
+- [ ] **rclone provisioning docs** — how to configure a remote (`rclone config`)
+  in the container/host; mount or inject `rclone.conf` securely.
+- [ ] **Integrity** — one-way `sync` (mirror) semantics, dedup-safe; document
+  restore (pull a remote back into `data_path`). Consider a periodic verify
+  (counts/sizes) reusing the `data-e2e` skill.
+- [ ] **Optional: read-through restore** — ability to point a fresh instance at a
+  remote and hydrate the local store.
+
+---
+
+## Suggested sequence
+
+1. **C (sync)** first — protect the data before exposing anything.
+2. **A (remote run)** — get it running unattended with restart safety.
+3. **B (remote access)** — only then expose the UI, behind TLS + auth.
+
+Each epic should ship with a `doc/source/` how-to and, where it touches data,
+a pass of the `data-e2e` skill.

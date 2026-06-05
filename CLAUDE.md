@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Claude-oriented developer brief**: [`doc/dev/`](doc/dev/) contains an
+> orientation pack written specifically for Claude Code — overview, architecture,
+> design decisions & rationale, the per-exchange capability matrix, testing
+> methodology + findings, current status, and the roadmap. Start at
+> [`doc/dev/README.md`](doc/dev/README.md) for a fuller picture than this file
+> gives. `CLAUDE.md` remains authoritative for commands and invariants.
+
 ## Commands
 
 ```bash
@@ -206,7 +213,7 @@ a backfill writing 0 rows, a store losing 58 % of trades, and a "Stop" button
 that did nothing. For any data path: run the real operation, read what landed on
 Parquet, and compare it to what was requested. Back up before any in-place
 mutation. Full methodology + the catalogue of bugs this surfaced:
-[`doc/dev/v3-testing-and-findings.md`](doc/dev/v3-testing-and-findings.md);
+[`doc/dev/05-testing.md`](doc/dev/05-testing.md);
 UI smoke test: `doc/dev/ui_smoke.py`.
 
 ### Invariants — do not regress
