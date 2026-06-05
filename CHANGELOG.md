@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collection pages — **Historical** and **Live** — each with data-type tabs and
   per-exchange accordions. Jobs are created, edited (first date) and deleted
   inline on the page; the Live page shows a real-time liveness indicator (last
-  trade/quote + age) fed by a throttled stream heartbeat over SSE. (#XX)
+  trade/quote + age) fed by a throttled stream heartbeat over SSE. (#76)
 - Job CRUD over the API: `POST /api/jobs/create|delete|update`, backed by
   `AppConfig.add_job`/`remove_job`/`update_job_start` (persisted to `config.yml`).
 - `ParquetStore.inventory()` now reports on-disk `bytes` and, for OHLC,
