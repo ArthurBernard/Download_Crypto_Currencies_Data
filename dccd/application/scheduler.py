@@ -127,6 +127,21 @@ class Scheduler:
                 )
                 self._streams[spec.id] = worker
 
+    async def sync_streams(self, specs: list[JobSpec]) -> None:
+        """Reconcile registered stream workers with *specs*.
+
+        Registers workers for new stream specs and **stops + drops** workers
+        whose spec is no longer present (e.g. a job deleted from the UI). Without
+        the drop, a deleted stream would keep running and stay controllable via
+        ``/api/streams`` (its config entry is already gone).
+        """
+        wanted = {s.id for s in specs if s.operation == "stream" and s.enabled}
+        self.register_streams(specs)
+        for sid in list(self._streams):
+            if sid not in wanted:
+                await self._streams[sid].stop()
+                del self._streams[sid]
+
     async def run_now(self, spec: JobSpec) -> None:
         """Trigger a one-shot backfill for *spec* immediately."""
         self._track(asyncio.create_task(self._run_once(spec)))

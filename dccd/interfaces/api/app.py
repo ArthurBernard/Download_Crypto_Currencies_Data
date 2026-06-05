@@ -279,13 +279,13 @@ def create_app(
     def _bus(request: Request) -> EventBus:
         return cast(EventBus, request.app.state.event_bus)
 
-    def _persist_and_refresh(request: Request, new_cfg: AppConfig) -> None:
+    async def _persist_and_refresh(request: Request, new_cfg: AppConfig) -> None:
         """Persist *new_cfg* to disk (if a path is set) and refresh runtime state.
 
         Single source of truth for config mutations (PUT /config and the job
         CRUD endpoints): writes YAML, swaps ``app.state.config``, recomputes
-        ``all_specs`` and re-registers stream workers so the daemon reflects the
-        change without a restart.
+        ``all_specs`` and reconciles stream workers (adds new ones, stops+drops
+        deleted ones) so the daemon reflects the change without a restart.
         """
         cfg_path = request.app.state.config_path
         if cfg_path:
@@ -294,8 +294,7 @@ def create_app(
                 yaml.safe_dump(new_cfg.model_dump(), f)
         request.app.state.config = new_cfg
         request.app.state.all_specs = new_cfg.all_job_specs()
-        new_streams = [s for s in request.app.state.all_specs if s.operation == "stream"]
-        request.app.state.scheduler.register_streams(new_streams)
+        await request.app.state.scheduler.sync_streams(request.app.state.all_specs)
 
     def _run_backfill_tracked(request: Request, spec: JobSpec, run_id: str) -> None:
         """Spawn a backfill with a cancellable stop event registered by run_id."""
@@ -510,7 +509,7 @@ def create_app(
         except Exception as e:
             raise HTTPException(422, str(e))
 
-        _persist_and_refresh(request, new_cfg)
+        await _persist_and_refresh(request, new_cfg)
         return {"status": "ok"}
 
     @app.post("/api/jobs/create")
@@ -536,7 +535,7 @@ def create_app(
             )
         except ValueError as e:
             raise HTTPException(400, str(e))
-        _persist_and_refresh(request, new_cfg)
+        await _persist_and_refresh(request, new_cfg)
         return {"status": "created", "job_id": job_id}
 
     @app.post("/api/jobs/delete")
@@ -545,7 +544,7 @@ def create_app(
         new_cfg = _cfg(request).model_copy(deep=True)
         if not new_cfg.remove_job(body.job_id):
             raise HTTPException(404, f"Job {body.job_id!r} not found")
-        _persist_and_refresh(request, new_cfg)
+        await _persist_and_refresh(request, new_cfg)
         return {"status": "deleted", "job_id": body.job_id}
 
     @app.post("/api/jobs/update")
@@ -554,7 +553,7 @@ def create_app(
         new_cfg = _cfg(request).model_copy(deep=True)
         if not new_cfg.update_job_start(body.job_id, body.start):
             raise HTTPException(404, f"Job {body.job_id!r} not found")
-        _persist_and_refresh(request, new_cfg)
+        await _persist_and_refresh(request, new_cfg)
         return {"status": "updated", "job_id": body.job_id}
 
     # -----------------------------------------------------------------------

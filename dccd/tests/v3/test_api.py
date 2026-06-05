@@ -187,6 +187,18 @@ class TestJobCrudEndpoints:
         streams = client.get("/api/streams").json()["streams"]
         assert any("binance" in s["id"] and "trades" in s["id"] for s in streams)
 
+    def test_delete_stream_unregisters_worker(self, client):
+        # Deleting a stream job must also drop its worker from /api/streams,
+        # otherwise a deleted stream keeps running and stays controllable.
+        jid = client.post("/api/jobs/create", json={
+            "operation": "stream", "exchange": "binance",
+            "symbol": "BTC/USDT", "data_type": "trades",
+            "trigger_kind": "supervised",
+        }).json()["job_id"]
+        assert any(s["id"] == jid for s in client.get("/api/streams").json()["streams"])
+        client.post("/api/jobs/delete", json={"job_id": jid})
+        assert not any(s["id"] == jid for s in client.get("/api/streams").json()["streams"])
+
 
 class TestStreamsEndpoint:
     def test_list_streams(self, client):
