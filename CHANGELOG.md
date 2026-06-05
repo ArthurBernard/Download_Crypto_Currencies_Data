@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (v3 remediation, pre-3.0.0)
 
+- Reworked web UI split by concern: a read-only enriched **Inventory** (data
+  freshness, OHLC gap detection, on-disk size, per-exchange totals) and two
+  collection pages — **Historical** and **Live** — each with data-type tabs and
+  per-exchange accordions. Jobs are created, edited (first date) and deleted
+  inline on the page; the Live page shows a real-time liveness indicator (last
+  trade/quote + age) fed by a throttled stream heartbeat over SSE. (#XX)
+- Job CRUD over the API: `POST /api/jobs/create|delete|update`, backed by
+  `AppConfig.add_job`/`remove_job`/`update_job_start` (persisted to `config.yml`).
+- `ParquetStore.inventory()` now reports on-disk `bytes` and, for OHLC,
+  `expected_rows`/`missing_rows` (gap detection) at no extra read cost.
+- `EventBus` fan-out to multiple SSE consumers and a `StreamSampleEvent`
+  liveness sample emitted (throttled) by `operations.stream`.
 - Cursor-based trades pagination: the engine now follows each adapter's opaque
   cursor until a window is drained, instead of advancing by a fixed time window.
   Fixes silent loss of >95% of trades on every liquid pair (all exchanges).
