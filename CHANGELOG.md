@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   snapshot channels (`@depth<N>`, `books5`, `orderBook10`) and bybit
   reconstructs full state from snapshot+deltas (like kraken); best bid/ask is
   computed defensively (`max` bid / `min` ask). (#76)
+- Order-book Live liveness was incoherent with its cadence: it sampled the WS
+  every second while only one snapshot per ``snapshot_interval`` is captured. The
+  liveness sample is now emitted when a snapshot is actually saved, so its age
+  counts up to the interval and resets (matching the "Δ Ns" cadence). (#76)
 - `dccd inventory` no longer crashes on OHLC datasets.
 - Streams with no real implementation (Coinbase OHLC/order book, Bitfinex order
   book) are rejected with `NoCapability` instead of "running" with zero output.
