@@ -32,19 +32,43 @@
 const EXCHANGES = ['binance','coinbase','kraken','bybit','okx','bitfinex','bitmex'];
 const SPANS = [[60,'1m'],[300,'5m'],[900,'15m'],[1800,'30m'],[3600,'1h'],
                [14400,'4h'],[86400,'1d']];
-let JOBS = [], RUNNING = {}, openExchanges = {};
-const samples = {};  // spec_id -> { label, atMs }
+let JOBS = [], RUNNING = {}, INV = [], openExchanges = {};
+// spec_id -> { value|bid|ask, ts(ns), live }. `live` marks a real-time SSE
+// sample; entries without it are seeded from on-disk data (last stored point).
+const samples = {};
+let lastSig = '';
 
 function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
 function spanLabel(s){ const m = SPANS.find(x=>x[0]===s); return m?m[1]:(s?s+'s':'—'); }
+function invFor(j) {
+  const pair = j.symbol.replace(/\//g,'-');
+  return INV.find(d => d.exchange===j.exchange && d.pair===pair && d.data_type===j.data_type
+    && (j.data_type!=='ohlc' || d.span===j.span));
+}
 
 async function loadAll() {
   try {
-    const [jr, sr] = await Promise.all([
-      api('GET','/api/jobs'), api('GET','/api/streams')]);
+    const [jr, sr, ir] = await Promise.all([
+      api('GET','/api/jobs'), api('GET','/api/streams'), api('GET','/api/inventory')]);
     JOBS = (jr.jobs||[]).filter(j => j.operation === 'stream');
     RUNNING = {};
     for (const s of (sr.streams||[])) RUNNING[s.id] = s.running;
+    // Seed liveness from what's on disk so a page refresh immediately reflects
+    // the last stored data point (and its freshness) instead of "waiting…".
+    // Real-time SSE samples (`live`) always win and are never overwritten here.
+    INV = ir.datasets || [];
+    for (const j of JOBS) {
+      if (samples[j.id] && samples[j.id].live) continue;
+      const inv = invFor(j);
+      if (inv && inv.max_ts != null) samples[j.id] = { ts: inv.max_ts };
+      else delete samples[j.id];
+    }
+    // Only rebuild the tables when the structure actually changed (jobs added/
+    // removed, running-state flipped). Otherwise leave the DOM alone so the
+    // span-cadenced liveness ticker isn't forced to repaint on every 8s poll.
+    const sig = JOBS.map(j => `${j.id}:${RUNNING[j.id]?1:0}:${j.span||''}:${j.snapshot_interval||''}`).join('|');
+    if (sig === lastSig) { refreshLiveness(); return; }
+    lastSig = sig;
     for (const dt of ['trades','ohlc','orderbook']) renderPane(dt);
   } catch (e) {
     document.querySelectorAll('[data-pane]').forEach(p =>
@@ -71,7 +95,7 @@ function renderPane(dt) {
         <span class="ex-meta">${liveN}/${exJobs.length} live</span></summary>
       <div class="ex-body">
         <table><thead><tr>
-          <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>State</th>
+          <th>Pair</th><th>Cadence</th><th>State</th>
           <th>Liveness</th><th></th>
         </tr></thead><tbody>`;
     for (const j of exJobs) html += rowHtml(j, dt);
@@ -85,15 +109,20 @@ function renderPane(dt) {
   pane.querySelectorAll('details.ex').forEach(d =>
     d.addEventListener('toggle', () =>
       openExchanges[d.dataset.dt+'|'+d.dataset.ex] = d.open));
+  // The table was just rebuilt, so repaint every liveness cell now.
+  refreshLiveness();
 }
 
 function rowHtml(j, dt) {
   const running = !!RUNNING[j.id];
   const state = running
     ? '<span class="ok">● live</span>' : '<span class="muted">○ stopped</span>';
+  const cadence = dt==='ohlc' ? spanLabel(j.span)
+    : dt==='orderbook' ? `<span title="snapshot interval">Δ ${j.snapshot_interval||60}s</span>`
+    : '<span class="muted">tick</span>';
   return `<tr id="row-${sid(j.id)}">
     <td><strong>${escapeHtml(j.symbol)}</strong></td>
-    ${dt==='ohlc'?`<td>${spanLabel(j.span)}</td>`:''}
+    <td style="font-size:.82rem">${cadence}</td>
     <td id="state-${sid(j.id)}">${state}</td>
     <td id="live-${sid(j.id)}" style="font-size:.82rem;min-width:200px">
       <span class="live-dot dead"></span><span class="muted">—</span></td>
@@ -106,21 +135,54 @@ function rowHtml(j, dt) {
 }
 
 // --- liveness rendering ----------------------------------------------------
-function refreshLiveness() {
-  for (const j of JOBS) {
-    const cell = document.getElementById('live-'+sid(j.id));
-    if (!cell) continue;
-    const s = samples[j.id];
-    if (!s) {
-      cell.innerHTML = `<span class="live-dot ${RUNNING[j.id]?'stale':'dead'}"></span>` +
-        `<span class="muted">${RUNNING[j.id]?'waiting…':'—'}</span>`;
-      continue;
-    }
-    const cls = freshnessClass(s.atMs*1e6);
-    cell.innerHTML = `<span class="live-dot ${cls}"></span>` +
-      `<strong>${escapeHtml(s.label)}</strong> ` +
-      `<span class="muted">· ${fmtAge(s.atMs, true)}</span>`;
+// Expected gap between samples per data type — the dot stays green while the
+// last sample is younger than this: a 1h OHLC bar / a 60s order-book snapshot
+// shouldn't read "dead" just because nothing arrived in the last 10s.
+function spanFor(j) {
+  if (j.data_type === 'ohlc') return j.span || 3600;
+  if (j.data_type === 'orderbook') return j.snapshot_interval || 60;
+  return 10;  // trades: a real-time feed, expect sub-10s ticks
+}
+function sampleText(s) {
+  if (s.bid != null || s.ask != null) return `bid ${fmtNum(s.bid)} / ask ${fmtNum(s.ask)}`;
+  return fmtNum(s.value);
+}
+function renderLivenessCell(j) {
+  const cell = document.getElementById('live-'+sid(j.id));
+  if (!cell) return;
+  const running = !!RUNNING[j.id];
+  const s = samples[j.id];
+  if (!s || s.ts == null) {
+    cell.innerHTML = `<span class="live-dot ${running?'stale':'dead'}"></span>` +
+      `<span class="muted">${running?'waiting…':'—'}</span>`;
+    return;
   }
+  // Freshness is the age of the latest data point itself (works for both live
+  // samples and disk-seeded entries).
+  const cls = freshnessClass(s.ts, spanFor(j));
+  const dot = `<span class="live-dot ${cls}"></span>`;
+  const val = (s.value != null || s.bid != null || s.ask != null)
+    ? `<strong>${escapeHtml(sampleText(s))}</strong>` : '';
+  let infoTxt;
+  if (!running) {
+    // Not running: when it last produced data — relative if recent, else date.
+    infoTxt = fmtFreshness(s.ts);
+  } else if (j.data_type === 'trades') {
+    // Real-time feed: dot + price say it all; only surface an age once it stalls.
+    infoTxt = cls === 'fresh' ? '' : fmtFreshness(s.ts);
+  } else {
+    // Span data: how long since the last bar/snapshot — relative if recent, else date.
+    infoTxt = fmtFreshness(s.ts);
+  }
+  const info = infoTxt ? `<span class="muted">${escapeHtml(infoTxt)}</span>` : '';
+  const tail = [val, info].filter(Boolean).join(' <span class="muted">·</span> ');
+  cell.innerHTML = dot + (tail ? ' ' + tail : '');
+}
+// Repaint every cell once a second — a tiny text update that keeps the relative
+// "N min ago" counters live (the heavy table rebuild is gated separately in
+// loadAll, so this never causes the flicker the per-pane rebuild used to).
+function refreshLiveness() {
+  for (const j of JOBS) renderLivenessCell(j);
 }
 
 // --- actions ---------------------------------------------------------------
@@ -158,11 +220,14 @@ async function doDelete(jobId) {
 
 // --- add-stream forms ------------------------------------------------------
 function addFormHtml(ex, dt) {
-  const spanSel = dt==='ohlc'
-    ? `<div><label>Span</label><select id="span-${sid(ex+dt)}">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>` : '';
-  return `<div class="inline-form" id="addf-${sid(ex+dt)}" style="display:none">
-    <div><label>Pair</label><input id="pair-${sid(ex+dt)}" placeholder="BTC/USDT" style="width:9rem"></div>
-    ${spanSel}
+  const k = sid(ex+dt);
+  const extra = dt==='ohlc'
+    ? `<div><label>Span</label><select id="span-${k}">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>`
+    : dt==='orderbook'
+    ? `<div><label>Snapshot every (s)</label><input id="snap-${k}" type="number" value="60" min="1" style="width:6rem"></div>` : '';
+  return `<div class="inline-form" id="addf-${k}" style="display:none">
+    <div><label>Pair</label><input id="pair-${k}" placeholder="BTC/USDT" style="width:9rem"></div>
+    ${extra}
     <button style="font-size:.8rem" onclick='createStream(${attrJson(ex)}, ${attrJson(dt)})'>Create</button>
   </div>`;
 }
@@ -177,6 +242,7 @@ async function createStream(ex, dt) {
   const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
                     trigger_kind:'supervised' };
   if (dt==='ohlc') payload.span = parseInt(document.getElementById('span-'+k).value,10);
+  if (dt==='orderbook') payload.snapshot_interval = parseInt(document.getElementById('snap-'+k).value,10)||60;
   try { await api('POST','/api/jobs/create', payload);
     toast('Stream created','ok'); await loadAll();
   } catch (e) { toast(e.message,'err'); }
@@ -193,6 +259,7 @@ function toggleNewStream() {
       <option value="ohlc"${dt==='ohlc'?' selected':''}>OHLC</option>
       <option value="orderbook"${dt==='orderbook'?' selected':''}>Order Book</option></select></div>
     <div id="ns-span-wrap"><label>Span</label><select id="ns-span">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>
+    <div id="ns-snap-wrap" style="display:none"><label>Snapshot every (s)</label><input id="ns-snap" type="number" value="60" min="1" style="width:6rem"></div>
     <div><label>Pair</label><input id="ns-pair" placeholder="BTC/USDT" style="width:9rem"></div>
     <button style="font-size:.8rem" onclick="createNew()">Create</button>
     <button class="ghost" style="font-size:.8rem" onclick="toggleNewStream()">Cancel</button>
@@ -203,6 +270,7 @@ function toggleNewStream() {
 function nsToggleSpan() {
   const dt = document.getElementById('ns-dt').value;
   document.getElementById('ns-span-wrap').style.display = dt==='ohlc' ? '' : 'none';
+  document.getElementById('ns-snap-wrap').style.display = dt==='orderbook' ? '' : 'none';
 }
 async function createNew() {
   const ex = document.getElementById('ns-ex').value;
@@ -212,6 +280,7 @@ async function createNew() {
   const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
                     trigger_kind:'supervised' };
   if (dt==='ohlc') payload.span = parseInt(document.getElementById('ns-span').value,10);
+  if (dt==='orderbook') payload.snapshot_interval = parseInt(document.getElementById('ns-snap').value,10)||60;
   try { await api('POST','/api/jobs/create', payload);
     toast('Stream created','ok'); toggleNewStream();
     if (location.hash.slice(1)!==dt) location.hash = dt;
@@ -232,7 +301,7 @@ function connectSSE() {
     if (ev.kind === 'sample') {
       // stream run_id is "<spec.id>@stream" → strip the trailing @segment.
       const specId = ev.run_id.slice(0, ev.run_id.lastIndexOf('@'));
-      samples[specId] = { label: ev.label, atMs: Date.now() };
+      samples[specId] = { value: ev.value, bid: ev.bid, ask: ev.ask, ts: ev.ts, live: true };
     } else if (ev.kind === 'status') {
       // a stream stopping/failing → refresh state soon
       setTimeout(loadAll, 300);

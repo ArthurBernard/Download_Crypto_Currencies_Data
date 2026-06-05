@@ -29,7 +29,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -449,6 +449,10 @@ def create_app(
                 "data_type": s.target.data_type.value,
                 "span": s.target.span,
                 "trigger": s.trigger.kind,
+                "every": s.trigger.every,
+                "start": s.params.start,
+                "snapshot_interval": s.params.snapshot_interval,
+                "depth": s.params.depth,
                 "enabled": s.enabled,
                 "running": stream_status.get(s.id, False) if s.operation == "stream" else None,
             }
@@ -651,9 +655,14 @@ def create_app(
         async def ui_dashboard(request: Request):
             return templates.TemplateResponse(request, "dashboard.html", _tpl_ctx(request, "dashboard"))
 
+        @app.get("/data")
+        async def ui_data(request: Request):
+            return templates.TemplateResponse(request, "data.html", _tpl_ctx(request, "data"))
+
         @app.get("/inventory")
-        async def ui_inventory(request: Request):
-            return templates.TemplateResponse(request, "inventory.html", _tpl_ctx(request, "inventory"))
+        async def ui_inventory() -> RedirectResponse:
+            # Page renamed Inventory → Data; keep the old path working.
+            return RedirectResponse("/data", status_code=307)
 
         @app.get("/historical")
         async def ui_historical(request: Request):

@@ -369,13 +369,19 @@ async def stream(
     _last_sample: list[float] = [0.0]
     _SAMPLE_MIN_INTERVAL = 1.0
 
-    def _emit_sample(ts: int, label: str) -> None:
+    def _emit_sample(
+        ts: int,
+        *,
+        value: float | None = None,
+        bid: float | None = None,
+        ask: float | None = None,
+    ) -> None:
         if events is None:
             return
         now_mono = time.monotonic()
         if now_mono - _last_sample[0] >= _SAMPLE_MIN_INTERVAL:
             _last_sample[0] = now_mono
-            events.sample(ts, label)
+            events.sample(ts, value=value, bid=bid, ask=ask)
 
     # Reject early if the adapter does not declare a live WS capability for this
     # data type — otherwise a missing/stub implementation would "run" forever
@@ -391,7 +397,7 @@ async def stream(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(record)
-                _emit_sample(record.ts, f"{record.price:g}")
+                _emit_sample(record.ts, value=record.price)
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
@@ -403,7 +409,7 @@ async def stream(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(bar)
-                _emit_sample(bar.ts, f"{bar.close:g}")
+                _emit_sample(bar.ts, value=bar.close)
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
@@ -417,7 +423,7 @@ async def stream(
                     break
                 bid = snap.bids[0].price if snap.bids else None
                 ask = snap.asks[0].price if snap.asks else None
-                _emit_sample(snap.ts, f"bid {bid:g} / ask {ask:g}" if bid and ask else "snapshot")
+                _emit_sample(snap.ts, bid=bid, ask=ask)
                 if time.time() - last_save >= snapshot_interval:
                     await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
                     last_save = time.time()

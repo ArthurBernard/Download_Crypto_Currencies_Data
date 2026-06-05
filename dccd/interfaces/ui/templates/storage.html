@@ -33,16 +33,18 @@ async function loadInventory() {
     }
     // Summary by exchange + type
     const summary = {};
-    let totalFiles = 0;
+    let totalFiles = 0, totalBytes = 0;
     for (const d of datasets) {
       const key = d.exchange;
-      if (!summary[key]) summary[key] = { ohlc: 0, trades: 0, orderbook: 0, total: 0 };
+      if (!summary[key]) summary[key] = { ohlc: 0, trades: 0, orderbook: 0, total: 0, bytes: 0 };
       summary[key][d.data_type] = (summary[key][d.data_type] || 0) + 1;
       summary[key].total += d.files;
+      summary[key].bytes += d.bytes || 0;
       totalFiles += d.files;
+      totalBytes += d.bytes || 0;
     }
-    let html = `<p class="muted">${datasets.length} dataset(s) · ${totalFiles} total file(s)</p>`;
-    html += '<table><thead><tr><th>Exchange</th><th>OHLC</th><th>Trades</th><th>Order Book</th><th>Files</th></tr></thead><tbody>';
+    let html = `<p class="muted">${datasets.length} dataset(s) · ${totalFiles} total file(s) · ${fmtBytes(totalBytes)} on disk</p>`;
+    html += '<table><thead><tr><th>Exchange</th><th>OHLC</th><th>Trades</th><th>Order Book</th><th>Files</th><th>Size</th></tr></thead><tbody>';
     for (const [ex, s] of Object.entries(summary)) {
       html += `<tr>
         <td>${escapeHtml(ex)}</td>
@@ -50,6 +52,7 @@ async function loadInventory() {
         <td>${s.trades || 0}</td>
         <td>${s.orderbook || 0}</td>
         <td>${s.total}</td>
+        <td>${fmtBytes(s.bytes)}</td>
       </tr>`;
     }
     html += '</tbody></table>';

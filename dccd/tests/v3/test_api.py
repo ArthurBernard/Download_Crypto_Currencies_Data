@@ -151,7 +151,12 @@ class TestJobCrudEndpoints:
         job_id = r.json()["job_id"]
 
         jobs = client.get("/api/jobs").json()["jobs"]
-        assert any(j["id"] == job_id for j in jobs)
+        created = next((j for j in jobs if j["id"] == job_id), None)
+        assert created is not None
+        # the listing must expose start/snapshot_interval/depth so the UI can
+        # render and preserve them (a missing start blanked the date field).
+        assert created["start"] == "2024-01-01"
+        assert "snapshot_interval" in created and "depth" in created
 
         # duplicate is rejected
         dup = client.post("/api/jobs/create", json={

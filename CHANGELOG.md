@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `expected_rows`/`missing_rows` (gap detection) at no extra read cost.
 - `EventBus` fan-out to multiple SSE consumers and a `StreamSampleEvent`
   liveness sample emitted (throttled) by `operations.stream`.
+- UI polish: nav reorganised into `Collect ▾`/`System ▾` dropdowns; **Inventory**
+  renamed **Data** (`/inventory`→`/data`) with data-type tabs; reworked Live
+  liveness — seeded from the last on-disk data point so a page refresh shows
+  freshness immediately (no "waiting…"), span-aware dot, a freshness label that
+  is a live relative "N min ago" counter under 24h and an absolute date beyond,
+  and no noise age for fresh trades, with client-side number formatting;
+  order-book cadence (`snapshot_interval`) shown and settable;
+  Storage shows on-disk sizes; Dashboard adds a KPI bar and clearer sections;
+  Logs reoriented around recent runs with human run labels. The Config page no
+  longer duplicates job management (jobs live on Historical/Live; raw edit via
+  its JSON tab). `GET /api/jobs` now returns `start`/`every`/`snapshot_interval`/
+  `depth`. (#76)
 - Cursor-based trades pagination: the engine now follows each adapter's opaque
   cursor until a window is drained, instead of advancing by a fixed time window.
   Fixes silent loss of >95% of trades on every liquid pair (all exchanges).
@@ -40,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provenance is now actually written into the Parquet footer (was computed but
   dropped).
 - Custom ISO start date for backfill no longer raises (`JobParams.start`).
+- Historical *first date* edit no longer reverts on reload: `GET /api/jobs` was
+  not returning `start`, so the UI reset the field after every refresh. (#76)
 - `dccd inventory` no longer crashes on OHLC datasets.
 - Streams with no real implementation (Coinbase OHLC/order book, Bitfinex order
   book) are rejected with `NoCapability` instead of "running" with zero output.

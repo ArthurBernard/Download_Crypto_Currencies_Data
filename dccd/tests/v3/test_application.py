@@ -141,10 +141,16 @@ class TestEventBus:
         bus = EventBus()
         received = []
         bus.subscribe(received.append)
-        bus.for_run("stream:binance:BTC/USDT:trades@stream").sample(123, "42153.7")
+        run = bus.for_run("stream:binance:BTC/USDT:trades@stream")
+        run.sample(123, value=42153.7)
         assert isinstance(received[0], StreamSampleEvent)
-        assert received[0].label == "42153.7"
+        assert received[0].value == 42153.7
+        assert received[0].bid is None and received[0].ask is None
         assert received[0].kind == "sample"
+        # order-book sample carries bid/ask instead of value
+        run.sample(456, bid=42150.0, ask=42151.0)
+        assert received[1].value is None
+        assert received[1].bid == 42150.0 and received[1].ask == 42151.0
 
 
 # ---------------------------------------------------------------------------

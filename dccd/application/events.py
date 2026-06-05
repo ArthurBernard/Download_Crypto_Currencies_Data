@@ -50,13 +50,17 @@ class StreamSampleEvent(BaseModel):
 
     Emitted (throttled) by :func:`dccd.application.operations.stream` so the
     Live UI can prove a stream is actually receiving data, without persisting
-    the sample. ``ts`` is the record timestamp (nanoseconds UTC); ``label`` is
-    a short human string (e.g. ``"42153.7"`` or ``"bid 42150 / ask 42151"``).
+    the sample. ``ts`` is the record timestamp (nanoseconds UTC). The values are
+    raw numbers — the client formats them (thousands separators, etc.):
+    ``value`` for trades (last price) and OHLC (close); ``bid``/``ask`` for the
+    order book top of book.
     """
     kind: Literal["sample"] = "sample"
     run_id: str
     ts: int
-    label: str
+    value: float | None = None
+    bid: float | None = None
+    ask: float | None = None
 
 
 Event = ProgressEvent | LogEvent | StatusEvent | StreamSampleEvent
@@ -149,6 +153,15 @@ class RunEvents:
         """Emit a :class:`StatusEvent` for this run."""
         self._bus.emit(StatusEvent(run_id=self._run_id, state=state))
 
-    def sample(self, ts: int, label: str) -> None:
+    def sample(
+        self,
+        ts: int,
+        *,
+        value: float | None = None,
+        bid: float | None = None,
+        ask: float | None = None,
+    ) -> None:
         """Emit a :class:`StreamSampleEvent` (stream liveness) for this run."""
-        self._bus.emit(StreamSampleEvent(run_id=self._run_id, ts=ts, label=label))
+        self._bus.emit(
+            StreamSampleEvent(run_id=self._run_id, ts=ts, value=value, bid=bid, ask=ask)
+        )

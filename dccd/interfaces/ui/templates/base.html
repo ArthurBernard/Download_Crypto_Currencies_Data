@@ -24,11 +24,18 @@
     nav a:hover { background:var(--border); color:var(--fg); }
     nav a.active { color:var(--accent); background:rgba(74,158,255,.12);
             font-weight:600; }
-    nav .nav-group { color:var(--muted); font-size:.65rem; font-weight:700;
-            letter-spacing:.08em; align-self:center; padding:0 .1rem 0 .3rem;
-            text-transform:uppercase; opacity:.7; }
-    nav .nav-sep { width:1px; align-self:stretch; margin:.1rem .3rem;
-            background:var(--border); }
+    nav .nav-menu { position:relative; }
+    nav .nav-menu-btn { color:var(--muted); background:transparent; border:0;
+            padding:.4rem .8rem; border-radius:6px; cursor:pointer; font:inherit; }
+    nav .nav-menu-btn:hover { background:var(--border); color:var(--fg); }
+    nav .nav-menu-btn.active { color:var(--accent); background:rgba(74,158,255,.12);
+            font-weight:600; }
+    nav .nav-menu-items { display:none; position:absolute; top:100%; left:0;
+            margin-top:.25rem; background:var(--card); border:1px solid var(--border);
+            border-radius:8px; padding:.25rem; min-width:9rem; z-index:10;
+            box-shadow:0 6px 18px rgba(0,0,0,.4); }
+    nav .nav-menu.open .nav-menu-items { display:block; }
+    nav .nav-menu-items a { display:block; }
     /* Pills (data-type tabs) */
     .tabs { display:flex; gap:.4rem; margin:.5rem 0 1rem; flex-wrap:wrap; }
     .tab { background:transparent; color:var(--muted); border:1px solid var(--border);
@@ -127,19 +134,28 @@
     <span class="ver">v{{ version }}</span>
   </header>
   <nav>
-    {% set groups = [
-      (None, [('/', 'Dashboard')]),
-      ('DATA', [('/inventory', 'Inventory')]),
-      ('COLLECT', [('/historical', 'Historical'), ('/live', 'Live')]),
-      ('SYSTEM', [('/logs', 'Logs'), ('/config', 'Config'), ('/storage', 'Storage')]),
-    ] %}
-    {% for label, links in groups %}
-      {% if not loop.first %}<span class="nav-sep"></span>{% endif %}
-      {% if label %}<span class="nav-group">{{ label }}</span>{% endif %}
-      {% for href, text in links %}
-      <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ text }}</a>
-      {% endfor %}
-    {% endfor %}
+    <a href="/"{% if active == '/' %} class="active"{% endif %}>Dashboard</a>
+    <a href="/data"{% if active in ['/data', '/inventory'] %} class="active"{% endif %}>Data</a>
+    {% set collect = [('/historical', 'Historical'), ('/live', 'Live')] %}
+    {% set system = [('/logs', 'Logs'), ('/config', 'Config'), ('/storage', 'Storage')] %}
+    <div class="nav-menu">
+      <button type="button" class="nav-menu-btn{% if active in ['/historical', '/live'] %} active{% endif %}"
+              onclick="toggleNavMenu(this)">Collect ▾</button>
+      <div class="nav-menu-items">
+        {% for href, text in collect %}
+        <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ text }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="nav-menu">
+      <button type="button" class="nav-menu-btn{% if active in ['/logs', '/config', '/storage'] %} active{% endif %}"
+              onclick="toggleNavMenu(this)">System ▾</button>
+      <div class="nav-menu-items">
+        {% for href, text in system %}
+        <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ text }}</a>
+        {% endfor %}
+      </div>
+    </div>
   </nav>
   <main>
     {% block content %}{% endblock %}
@@ -171,12 +187,24 @@
       if (s < 86400) return `il y a ${Math.round(s/3600)} h`;
       return `il y a ${Math.round(s/86400)} j`;
     }
-    // Freshness class from a ns timestamp: fresh < 10s, stale < 30s else dead.
-    function freshnessClass(ns) {
+    // Freshness label from a ns timestamp: a live relative age ("il y a N min")
+    // when recent (< 24h), the absolute date once it's older — relative time is
+    // meaningless past a day, an absolute date is clearer.
+    function fmtFreshness(ns) {
+      if (ns == null) return '';
+      const ageS = (Date.now() - ns / 1e6) / 1000;
+      return ageS < 86400 ? fmtAge(ns) : fmtNs(ns);
+    }
+    // Freshness class from a ns timestamp. The "fresh" window defaults to 10s
+    // but can be widened (spanS) so span-based feeds (a 1h OHLC bar, a 60s
+    // order-book snapshot) stay green between updates instead of always reading
+    // "dead": fresh < spanS, stale < 2×spanS, else dead.
+    function freshnessClass(ns, spanS) {
       if (ns == null) return 'dead';
       const s = (Date.now() - ns/1e6) / 1000;
-      if (s < 10) return 'fresh';
-      if (s < 30) return 'stale';
+      const fresh = spanS || 10;
+      if (s < fresh) return 'fresh';
+      if (s < 2*fresh) return 'stale';
       return 'dead';
     }
     // Coarser staleness class for stored data (Inventory): fresh<1h, stale<1d.
@@ -193,6 +221,23 @@
       while (v >= 1024 && i < u.length-1) { v /= 1024; i++; }
       return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
     }
+    // Format a number with thousands separators (no scientific notation),
+    // trimming needless decimals — e.g. 1000 → "1,000", 42153.7 → "42,153.7".
+    function fmtNum(n) {
+      if (n == null || isNaN(n)) return '—';
+      return Number(n).toLocaleString('en-US', { maximumFractionDigits: 8 });
+    }
+    // Nav dropdown menus (Collect ▾ / System ▾): toggle one open at a time.
+    function toggleNavMenu(btn) {
+      const menu = btn.parentElement;
+      const wasOpen = menu.classList.contains('open');
+      document.querySelectorAll('nav .nav-menu.open').forEach(m => m.classList.remove('open'));
+      if (!wasOpen) menu.classList.add('open');
+    }
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.nav-menu'))
+        document.querySelectorAll('nav .nav-menu.open').forEach(m => m.classList.remove('open'));
+    });
     // Wire up a .tabs container: clicking a .tab[data-tab] shows the matching
     // [data-pane] and syncs location.hash. Returns the activated tab key.
     function initTabs(rootSel, onChange) {

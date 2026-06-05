@@ -70,7 +70,12 @@ function renderPane(dt) {
       No ${dt} jobs yet. Use <strong>＋ Add</strong> above to create one.</div>`;
     return;
   }
-  let html = '';
+  let html = dt==='orderbook'
+    ? `<p class="muted" style="font-size:.82rem;margin:.2rem 0 .6rem">
+        Order books have no REST history — <strong>📷 Snapshot</strong> captures the
+        current book once. For a rolling capture, run an order-book stream on the
+        <a href="/live">Live</a> page (it snapshots every N seconds).</p>`
+    : '';
   for (const ex of exchanges) {
     const exJobs = jobs.filter(j => j.exchange === ex);
     const exOrphans = orphans.filter(o => o.exchange === ex);
@@ -80,8 +85,9 @@ function renderPane(dt) {
         <span class="ex-meta">${exJobs.length} job${exJobs.length!==1?'s':''}</span></summary>
       <div class="ex-body">
         <table><thead><tr>
-          <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>First date</th>
-          <th>Last date</th><th>Coverage (first date → today)</th><th>Rows</th><th></th>
+          <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>${dt==='orderbook'?'':'First date'}</th>
+          <th>Last ${dt==='orderbook'?'snapshot':'date'}</th>
+          <th>${dt==='orderbook'?'Snapshot':'Coverage (first date → today)'}</th><th>Rows</th><th></th>
         </tr></thead><tbody>`;
     for (const j of exJobs) html += rowHtml(j, dt);
     if (exOrphans.length) {
@@ -135,20 +141,31 @@ function rowHtml(j, dt) {
   const pair = j.symbol.replace(/\//g,'-');
   const inv = invFor(j.exchange, pair, dt, j.span);
   const last = inv && inv.max_ts != null ? fmtNs(inv.max_ts) : '<span class="muted">empty</span>';
-  const rows = inv ? (inv.rows||0).toLocaleString() : '0';
-  const dateVal = startToDate(j.start);
+  const rows = inv ? fmtNum(inv.rows||0) : '0';
+  // Default the date input to the dataset's earliest stored bar when the job
+  // has no explicit start (start=last/origin), so the field isn't blank.
+  const dateVal = startToDate(j.start)
+    || (inv && inv.min_ts != null ? new Date(inv.min_ts/1e6).toISOString().slice(0,10) : '');
+  // Order book has no history: "Run" takes a single current snapshot, so the
+  // first-date / coverage columns don't apply.
+  const firstCell = dt==='orderbook'
+    ? '<td class="muted">—</td>'
+    : `<td><input type="date" value="${dateVal}" style="font-size:.78rem;padding:.2rem .3rem"
+        title="Target first date (job start)"
+        onchange='updateStart(${attrJson(j.id)}, this.value)'></td>`;
+  const covCell = dt==='orderbook'
+    ? '<td><span class="muted" style="font-size:.8rem">snapshot only</span></td>'
+    : `<td style="min-width:200px">${coverageHtml(j, dt)}</td>`;
   return `<tr id="row-${sid(j.id)}">
     <td><strong>${escapeHtml(j.symbol)}</strong></td>
     ${dt==='ohlc'?`<td>${spanLabel(j.span)}</td>`:''}
-    <td><input type="date" value="${dateVal}" style="font-size:.78rem;padding:.2rem .3rem"
-        title="Target first date (job start)"
-        onchange='updateStart(${attrJson(j.id)}, this.value)'></td>
+    ${firstCell}
     <td class="muted" style="font-size:.8rem">${last}</td>
-    <td style="min-width:200px">${coverageHtml(j, dt)}</td>
+    ${covCell}
     <td class="muted">${rows}</td>
     <td style="white-space:nowrap">
       <button id="run-${sid(j.id)}" style="font-size:.75rem;padding:.2rem .5rem"
-        onclick='runJob(${attrJson(j.id)}, ${attrJson(j.exchange)}, ${attrJson(j.symbol)}, ${attrJson(dt)}, ${JSON.stringify(j.span)})'>${dt==='orderbook'?'Snapshot':'▶ Run'}</button>
+        onclick='runJob(${attrJson(j.id)}, ${attrJson(j.exchange)}, ${attrJson(j.symbol)}, ${attrJson(dt)}, ${JSON.stringify(j.span)})'>${dt==='orderbook'?'📷 Snapshot':'▶ Run'}</button>
       <button class="ghost" id="del-${sid(j.id)}" style="font-size:.75rem;padding:.2rem .4rem"
         onclick='confirmDelete(${attrJson(j.id)})'>🗑</button>
     </td></tr>`;
