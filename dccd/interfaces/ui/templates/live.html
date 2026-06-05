@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Live{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+  <h1 style="margin:0">Live</h1>
+  <div class="row" style="gap:.5rem">
+    <span id="sse-status" class="muted" style="font-size:.8rem">Connecting…</span>
+    <button onclick="toggleNewStream()">＋ Add</button>
+  </div>
+</div>
+<p class="muted" style="margin:.2rem 0 .6rem">
+  Live WebSocket streams. The <strong>liveness</strong> column shows the last
+  sample received (price / quote) and how long ago — a green dot means data is
+  flowing right now.
+</p>
+
+<div id="new-stream-form" class="card" style="display:none"></div>
+
+<div class="tabs" id="live-tabs">
+  <button class="tab" data-tab="trades">Trades</button>
+  <button class="tab" data-tab="ohlc">OHLC</button>
+  <button class="tab" data-tab="orderbook">Order Book</button>
+</div>
+
+<div data-pane="trades"><span class="muted">Loading…</span></div>
+<div data-pane="ohlc"><span class="muted">Loading…</span></div>
+<div data-pane="orderbook"><span class="muted">Loading…</span></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EXCHANGES = ['binance','coinbase','kraken','bybit','okx','bitfinex','bitmex'];
+const SPANS = [[60,'1m'],[300,'5m'],[900,'15m'],[1800,'30m'],[3600,'1h'],
+               [14400,'4h'],[86400,'1d']];
+let JOBS = [], RUNNING = {}, openExchanges = {};
+const samples = {};  // spec_id -> { label, atMs }
+
+function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
+function spanLabel(s){ const m = SPANS.find(x=>x[0]===s); return m?m[1]:(s?s+'s':'—'); }
+
+async function loadAll() {
+  try {
+    const [jr, sr] = await Promise.all([
+      api('GET','/api/jobs'), api('GET','/api/streams')]);
+    JOBS = (jr.jobs||[]).filter(j => j.operation === 'stream');
+    RUNNING = {};
+    for (const s of (sr.streams||[])) RUNNING[s.id] = s.running;
+    for (const dt of ['trades','ohlc','orderbook']) renderPane(dt);
+  } catch (e) {
+    document.querySelectorAll('[data-pane]').forEach(p =>
+      p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
+  }
+}
+
+function renderPane(dt) {
+  const pane = document.querySelector(`[data-pane="${dt}"]`);
+  const jobs = JOBS.filter(j => j.data_type === dt);
+  const exchanges = [...new Set(jobs.map(j=>j.exchange))].sort();
+  if (!exchanges.length) {
+    pane.innerHTML = `<div class="card muted" style="text-align:center;padding:1.5rem">
+      No ${dt} streams yet. Use <strong>＋ Add</strong> above to create one.</div>`;
+    return;
+  }
+  let html = '';
+  for (const ex of exchanges) {
+    const exJobs = jobs.filter(j => j.exchange === ex);
+    const open = openExchanges[dt+'|'+ex] !== false;
+    const liveN = exJobs.filter(j => RUNNING[j.id]).length;
+    html += `<details class="ex" ${open?'open':''} data-ex="${escapeHtml(ex)}" data-dt="${dt}">
+      <summary><span class="ex-name">${escapeHtml(ex)}</span>
+        <span class="ex-meta">${liveN}/${exJobs.length} live</span></summary>
+      <div class="ex-body">
+        <table><thead><tr>
+          <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>State</th>
+          <th>Liveness</th><th></th>
+        </tr></thead><tbody>`;
+    for (const j of exJobs) html += rowHtml(j, dt);
+    html += `</tbody></table>
+      ${addFormHtml(ex, dt)}
+      <button class="ghost" style="font-size:.8rem;margin-top:.4rem"
+        onclick="toggleAddForm('${sid(ex+dt)}')">＋ Add stream</button>
+      </div></details>`;
+  }
+  pane.innerHTML = html;
+  pane.querySelectorAll('details.ex').forEach(d =>
+    d.addEventListener('toggle', () =>
+      openExchanges[d.dataset.dt+'|'+d.dataset.ex] = d.open));
+}
+
+function rowHtml(j, dt) {
+  const running = !!RUNNING[j.id];
+  const state = running
+    ? '<span class="ok">● live</span>' : '<span class="muted">○ stopped</span>';
+  return `<tr id="row-${sid(j.id)}">
+    <td><strong>${escapeHtml(j.symbol)}</strong></td>
+    ${dt==='ohlc'?`<td>${spanLabel(j.span)}</td>`:''}
+    <td id="state-${sid(j.id)}">${state}</td>
+    <td id="live-${sid(j.id)}" style="font-size:.82rem;min-width:200px">
+      <span class="live-dot dead"></span><span class="muted">—</span></td>
+    <td style="white-space:nowrap">
+      <button id="ss-${sid(j.id)}" style="font-size:.75rem;padding:.2rem .5rem"
+        onclick='toggleStream(${attrJson(j.id)})'>${running?'⏹ Stop':'▶ Start'}</button>
+      <button class="ghost" style="font-size:.75rem;padding:.2rem .4rem"
+        onclick='confirmDelete(${attrJson(j.id)})'>🗑</button>
+    </td></tr>`;
+}
+
+// --- liveness rendering ----------------------------------------------------
+function refreshLiveness() {
+  for (const j of JOBS) {
+    const cell = document.getElementById('live-'+sid(j.id));
+    if (!cell) continue;
+    const s = samples[j.id];
+    if (!s) {
+      cell.innerHTML = `<span class="live-dot ${RUNNING[j.id]?'stale':'dead'}"></span>` +
+        `<span class="muted">${RUNNING[j.id]?'waiting…':'—'}</span>`;
+      continue;
+    }
+    const cls = freshnessClass(s.atMs*1e6);
+    cell.innerHTML = `<span class="live-dot ${cls}"></span>` +
+      `<strong>${escapeHtml(s.label)}</strong> ` +
+      `<span class="muted">· ${fmtAge(s.atMs, true)}</span>`;
+  }
+}
+
+// --- actions ---------------------------------------------------------------
+async function toggleStream(jobId) {
+  const btn = document.getElementById('ss-'+sid(jobId));
+  const running = !!RUNNING[jobId];
+  btn.disabled = true;
+  try {
+    await api('POST', running?'/api/streams/stop':'/api/streams/start', { spec_id: jobId });
+    toast(running?'Stream stopped':'Stream started','ok');
+    if (running) delete samples[jobId];
+    setTimeout(loadAll, 400);
+  } catch (e) { toast(e.message,'err'); btn.disabled = false; }
+}
+
+function confirmDelete(jobId) {
+  const row = document.getElementById('row-'+sid(jobId));
+  const td = row.lastElementChild;
+  td.dataset.prev = td.innerHTML;
+  td.innerHTML = `<span class="muted" style="font-size:.75rem">Delete?</span>
+    <button class="danger" style="font-size:.72rem;padding:.15rem .4rem" onclick='doDelete(${attrJson(jobId)})'>Yes</button>
+    <button class="ghost" style="font-size:.72rem;padding:.15rem .4rem" onclick='cancelDelete(${attrJson(jobId)})'>No</button>`;
+}
+function cancelDelete(jobId) {
+  const td = document.getElementById('row-'+sid(jobId)).lastElementChild;
+  td.innerHTML = td.dataset.prev;
+}
+async function doDelete(jobId) {
+  try {
+    if (RUNNING[jobId]) { try { await api('POST','/api/streams/stop',{spec_id:jobId}); } catch(_){} }
+    await api('POST','/api/jobs/delete', { job_id: jobId });
+    toast('Stream deleted','ok'); await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+// --- add-stream forms ------------------------------------------------------
+function addFormHtml(ex, dt) {
+  const spanSel = dt==='ohlc'
+    ? `<div><label>Span</label><select id="span-${sid(ex+dt)}">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>` : '';
+  return `<div class="inline-form" id="addf-${sid(ex+dt)}" style="display:none">
+    <div><label>Pair</label><input id="pair-${sid(ex+dt)}" placeholder="BTC/USDT" style="width:9rem"></div>
+    ${spanSel}
+    <button style="font-size:.8rem" onclick='createStream(${attrJson(ex)}, ${attrJson(dt)})'>Create</button>
+  </div>`;
+}
+function toggleAddForm(key) {
+  const f = document.getElementById('addf-'+key);
+  if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+async function createStream(ex, dt) {
+  const k = sid(ex+dt);
+  const pair = (document.getElementById('pair-'+k).value||'').trim();
+  if (!pair) { toast('Pair required','err'); return; }
+  const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
+                    trigger_kind:'supervised' };
+  if (dt==='ohlc') payload.span = parseInt(document.getElementById('span-'+k).value,10);
+  try { await api('POST','/api/jobs/create', payload);
+    toast('Stream created','ok'); await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+function toggleNewStream() {
+  const el = document.getElementById('new-stream-form');
+  if (el.style.display !== 'none' && el.innerHTML) { el.style.display='none'; return; }
+  const dt = (location.hash||'#trades').slice(1) || 'trades';
+  el.innerHTML = `<div class="inline-form" style="padding:.2rem 0">
+    <div><label>Exchange</label><select id="ns-ex">${EXCHANGES.map(e=>`<option>${e}</option>`).join('')}</select></div>
+    <div><label>Data type</label><select id="ns-dt" onchange="nsToggleSpan()">
+      <option value="trades"${dt==='trades'?' selected':''}>Trades</option>
+      <option value="ohlc"${dt==='ohlc'?' selected':''}>OHLC</option>
+      <option value="orderbook"${dt==='orderbook'?' selected':''}>Order Book</option></select></div>
+    <div id="ns-span-wrap"><label>Span</label><select id="ns-span">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>
+    <div><label>Pair</label><input id="ns-pair" placeholder="BTC/USDT" style="width:9rem"></div>
+    <button style="font-size:.8rem" onclick="createNew()">Create</button>
+    <button class="ghost" style="font-size:.8rem" onclick="toggleNewStream()">Cancel</button>
+  </div>`;
+  el.style.display = '';
+  nsToggleSpan();
+}
+function nsToggleSpan() {
+  const dt = document.getElementById('ns-dt').value;
+  document.getElementById('ns-span-wrap').style.display = dt==='ohlc' ? '' : 'none';
+}
+async function createNew() {
+  const ex = document.getElementById('ns-ex').value;
+  const dt = document.getElementById('ns-dt').value;
+  const pair = (document.getElementById('ns-pair').value||'').trim();
+  if (!pair) { toast('Pair required','err'); return; }
+  const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
+                    trigger_kind:'supervised' };
+  if (dt==='ohlc') payload.span = parseInt(document.getElementById('ns-span').value,10);
+  try { await api('POST','/api/jobs/create', payload);
+    toast('Stream created','ok'); toggleNewStream();
+    if (location.hash.slice(1)!==dt) location.hash = dt;
+    await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+// --- SSE for liveness ------------------------------------------------------
+let es;
+function connectSSE() {
+  if (es) es.close();
+  es = new EventSource('/api/events' + (DCCD_TOKEN ? '?token='+encodeURIComponent(DCCD_TOKEN) : ''));
+  const st = document.getElementById('sse-status');
+  es.onopen = () => { st.innerHTML = '<span class="ok">● connected</span>'; };
+  es.onmessage = (e) => {
+    if (e.data.startsWith(':')) return;
+    let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
+    if (ev.kind === 'sample') {
+      // stream run_id is "<spec.id>@stream" → strip the trailing @segment.
+      const specId = ev.run_id.slice(0, ev.run_id.lastIndexOf('@'));
+      samples[specId] = { label: ev.label, atMs: Date.now() };
+    } else if (ev.kind === 'status') {
+      // a stream stopping/failing → refresh state soon
+      setTimeout(loadAll, 300);
+    }
+  };
+  es.onerror = () => {
+    st.innerHTML = '<span class="err">disconnected — retrying…</span>';
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+initTabs('#live-tabs');
+loadAll();
+connectSSE();
+setInterval(refreshLiveness, 1000);
+setInterval(loadAll, 8000);
+</script>
+{% endblock %}

@@ -120,6 +120,83 @@ class TestEventBus:
         assert len(a) == 1
         assert len(b) == 1
 
+    def test_multiple_queues_fan_out(self):
+        # Two SSE consumers (e.g. Live + Logs tabs) must each get every event.
+        bus = EventBus()
+        q1 = bus.add_queue()
+        q2 = bus.add_queue()
+        bus.emit(LogEvent(run_id="r1", message="hi"))
+        assert q1.get_nowait().message == "hi"
+        assert q2.get_nowait().message == "hi"
+
+    def test_remove_queue_stops_delivery(self):
+        bus = EventBus()
+        q = bus.add_queue()
+        bus.remove_queue(q)
+        bus.emit(LogEvent(run_id="r1", message="hi"))
+        assert q.empty()
+
+    def test_sample_event(self):
+        from dccd.application.events import StreamSampleEvent
+        bus = EventBus()
+        received = []
+        bus.subscribe(received.append)
+        bus.for_run("stream:binance:BTC/USDT:trades@stream").sample(123, "42153.7")
+        assert isinstance(received[0], StreamSampleEvent)
+        assert received[0].label == "42153.7"
+        assert received[0].kind == "sample"
+
+
+# ---------------------------------------------------------------------------
+# Config — runtime job CRUD (used by the UI)
+# ---------------------------------------------------------------------------
+
+class TestJobCrud:
+    def test_add_job_returns_id_and_appears(self):
+        cfg = AppConfig()
+        jid = cfg.add_job(operation="backfill", exchange="binance",
+                          pair="BTC/USDT", data_type="ohlc", span=3600,
+                          start="2024-01-01")
+        assert jid == "backfill:binance:BTC/USDT:ohlc:3600s"
+        assert any(s.id == jid for s in cfg.all_job_specs())
+
+    def test_add_duplicate_raises(self):
+        cfg = AppConfig()
+        cfg.add_job(operation="backfill", exchange="binance", pair="BTC/USDT",
+                    data_type="ohlc", span=3600)
+        with pytest.raises(ValueError):
+            cfg.add_job(operation="backfill", exchange="binance", pair="BTC/USDT",
+                        data_type="ohlc", span=3600)
+
+    def test_remove_job(self):
+        cfg = AppConfig()
+        jid = cfg.add_job(operation="backfill", exchange="binance", pair="BTC/USDT",
+                          data_type="ohlc", span=3600)
+        assert cfg.remove_job(jid) is True
+        assert cfg.all_job_specs() == []
+        assert cfg.remove_job(jid) is False
+
+    def test_remove_one_pair_keeps_others(self):
+        # A multi-pair JobConfig (as found in a hand-written config.yml).
+        cfg = AppConfig(jobs=[JobConfig(exchange="binance",
+                        pairs=["BTC/USDT", "ETH/USDT"], data_type="ohlc", span=3600)])
+        cfg.remove_job("backfill:binance:BTC/USDT:ohlc:3600s")
+        remaining = [s.id for s in cfg.all_job_specs()]
+        assert remaining == ["backfill:binance:ETH/USDT:ohlc:3600s"]
+
+    def test_update_job_start_splits_multipair(self):
+        cfg = AppConfig(jobs=[JobConfig(exchange="binance",
+                        pairs=["BTC/USDT", "ETH/USDT"], data_type="ohlc", span=3600,
+                        start="last")])
+        assert cfg.update_job_start("backfill:binance:BTC/USDT:ohlc:3600s", "2021-01-01")
+        starts = {jc.pairs[0]: jc.start for jc in cfg.jobs}
+        assert starts["BTC/USDT"] == "2021-01-01"
+        assert starts["ETH/USDT"] == "last"
+
+    def test_update_unknown_returns_false(self):
+        cfg = AppConfig()
+        assert cfg.update_job_start("nope", "2021-01-01") is False
+
 
 # ---------------------------------------------------------------------------
 # Jobs

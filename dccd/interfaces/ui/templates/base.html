@@ -24,6 +24,50 @@
     nav a:hover { background:var(--border); color:var(--fg); }
     nav a.active { color:var(--accent); background:rgba(74,158,255,.12);
             font-weight:600; }
+    nav .nav-group { color:var(--muted); font-size:.65rem; font-weight:700;
+            letter-spacing:.08em; align-self:center; padding:0 .1rem 0 .3rem;
+            text-transform:uppercase; opacity:.7; }
+    nav .nav-sep { width:1px; align-self:stretch; margin:.1rem .3rem;
+            background:var(--border); }
+    /* Pills (data-type tabs) */
+    .tabs { display:flex; gap:.4rem; margin:.5rem 0 1rem; flex-wrap:wrap; }
+    .tab { background:transparent; color:var(--muted); border:1px solid var(--border);
+           border-radius:999px; padding:.35rem .9rem; cursor:pointer; font-size:.85rem; }
+    .tab.active { background:rgba(74,158,255,.12); color:var(--accent);
+           border-color:var(--accent); font-weight:600; }
+    /* Accordion per exchange */
+    details.ex { border:1px solid var(--border); border-radius:8px;
+           margin:.5rem 0; background:var(--card); overflow:hidden; }
+    details.ex > summary { cursor:pointer; padding:.6rem .9rem; list-style:none;
+           display:flex; align-items:center; justify-content:space-between;
+           font-weight:600; user-select:none; }
+    details.ex > summary::-webkit-details-marker { display:none; }
+    details.ex > summary::before { content:'▶'; color:var(--muted);
+           font-size:.7rem; margin-right:.5rem; transition:transform .15s; }
+    details.ex[open] > summary::before { transform:rotate(90deg); }
+    details.ex > summary .ex-name { flex:1; }
+    details.ex > summary .ex-meta { color:var(--muted); font-weight:400;
+           font-size:.8rem; }
+    details.ex .ex-body { padding:.2rem .9rem .8rem; }
+    /* Coverage / progress bar with hatched (missing) portion */
+    .cov { position:relative; height:9px; background:var(--border);
+           border-radius:4px; overflow:hidden; min-width:120px; }
+    .cov > .cov-fill { position:absolute; top:0; left:0; height:100%;
+           background:var(--accent); border-radius:4px; transition:width .4s; }
+    .cov > .cov-gap { position:absolute; top:0; height:100%;
+           background:repeating-linear-gradient(45deg, var(--err) 0 3px,
+           transparent 3px 6px); opacity:.5; }
+    .cov.running > .cov-fill { background:var(--ok); }
+    /* Liveness dot */
+    .live-dot { display:inline-block; width:.55rem; height:.55rem;
+           border-radius:50%; margin-right:.35rem; vertical-align:middle; }
+    .live-dot.fresh { background:var(--ok); box-shadow:0 0 5px var(--ok); }
+    .live-dot.stale { background:#d29922; }
+    .live-dot.dead  { background:var(--muted); }
+    .inline-form { display:flex; gap:.4rem; align-items:flex-end; flex-wrap:wrap;
+           padding:.6rem 0; }
+    .inline-form label { font-size:.72rem; color:var(--muted); display:block; }
+    input[type=date] { color-scheme:dark; }
     main { padding:1rem; max-width:1100px; margin:0 auto; }
     footer { color:var(--muted); font-size:.8rem; text-align:center;
             padding:1.5rem 1rem; }
@@ -83,11 +127,18 @@
     <span class="ver">v{{ version }}</span>
   </header>
   <nav>
-    {% set links = [('/', 'Dashboard'), ('/inventory', 'Inventory'),
-                    ('/jobs', 'Jobs'), ('/logs', 'Logs'),
-                    ('/config', 'Config'), ('/storage', 'Storage')] %}
-    {% for href, label in links %}
-    <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ label }}</a>
+    {% set groups = [
+      (None, [('/', 'Dashboard')]),
+      ('DATA', [('/inventory', 'Inventory')]),
+      ('COLLECT', [('/historical', 'Historical'), ('/live', 'Live')]),
+      ('SYSTEM', [('/logs', 'Logs'), ('/config', 'Config'), ('/storage', 'Storage')]),
+    ] %}
+    {% for label, links in groups %}
+      {% if not loop.first %}<span class="nav-sep"></span>{% endif %}
+      {% if label %}<span class="nav-group">{{ label }}</span>{% endif %}
+      {% for href, text in links %}
+      <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ text }}</a>
+      {% endfor %}
     {% endfor %}
   </nav>
   <main>
@@ -109,6 +160,55 @@
     function fmtNs(ns) {
       if (ns == null) return '-';
       return new Date(ns / 1_000_000).toISOString().slice(0, 16).replace('T', ' ');
+    }
+    // Human "x ago" from a nanosecond timestamp (or ms via fromMs).
+    function fmtAge(ns, fromMs) {
+      if (ns == null) return '—';
+      const ms = fromMs ? ns : ns / 1e6;
+      let s = Math.max(0, (Date.now() - ms) / 1000);
+      if (s < 60) return `il y a ${Math.round(s)}s`;
+      if (s < 3600) return `il y a ${Math.round(s/60)} min`;
+      if (s < 86400) return `il y a ${Math.round(s/3600)} h`;
+      return `il y a ${Math.round(s/86400)} j`;
+    }
+    // Freshness class from a ns timestamp: fresh < 10s, stale < 30s else dead.
+    function freshnessClass(ns) {
+      if (ns == null) return 'dead';
+      const s = (Date.now() - ns/1e6) / 1000;
+      if (s < 10) return 'fresh';
+      if (s < 30) return 'stale';
+      return 'dead';
+    }
+    // Coarser staleness class for stored data (Inventory): fresh<1h, stale<1d.
+    function stalenessClass(ns) {
+      if (ns == null) return 'dead';
+      const s = (Date.now() - ns/1e6) / 1000;
+      if (s < 3600) return 'fresh';
+      if (s < 86400) return 'stale';
+      return 'dead';
+    }
+    function fmtBytes(n) {
+      if (n == null) return '—';
+      const u = ['B','KB','MB','GB','TB']; let i = 0; let v = n;
+      while (v >= 1024 && i < u.length-1) { v /= 1024; i++; }
+      return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
+    }
+    // Wire up a .tabs container: clicking a .tab[data-tab] shows the matching
+    // [data-pane] and syncs location.hash. Returns the activated tab key.
+    function initTabs(rootSel, onChange) {
+      const root = document.querySelector(rootSel);
+      if (!root) return;
+      const tabs = root.querySelectorAll('.tab');
+      function activate(key) {
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === key));
+        document.querySelectorAll('[data-pane]').forEach(p =>
+          p.style.display = p.dataset.pane === key ? '' : 'none');
+        history.replaceState(null, '', '#' + key);
+        if (onChange) onChange(key);
+      }
+      tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
+      const initial = (location.hash || '').slice(1);
+      activate([...tabs].some(t => t.dataset.tab === initial) ? initial : tabs[0].dataset.tab);
     }
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, function (c) {

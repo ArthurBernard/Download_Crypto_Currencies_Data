@@ -363,6 +363,20 @@ async def stream(
     batch: list[Any] = []
     snapshot_interval = params.snapshot_interval or 60
 
+    # Liveness heartbeat: emit a throttled sample (last price/quote) so the Live
+    # UI can prove the stream is actually receiving data. Throttled to ~1/s so a
+    # high-rate trade feed doesn't flood the SSE bus. Samples are NOT persisted.
+    _last_sample: list[float] = [0.0]
+    _SAMPLE_MIN_INTERVAL = 1.0
+
+    def _emit_sample(ts: int, label: str) -> None:
+        if events is None:
+            return
+        now_mono = time.monotonic()
+        if now_mono - _last_sample[0] >= _SAMPLE_MIN_INTERVAL:
+            _last_sample[0] = now_mono
+            events.sample(ts, label)
+
     # Reject early if the adapter does not declare a live WS capability for this
     # data type — otherwise a missing/stub implementation would "run" forever
     # producing zero rows (the silent-empty-stream bug, D8).
@@ -377,6 +391,7 @@ async def stream(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(record)
+                _emit_sample(record.ts, f"{record.price:g}")
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
@@ -388,6 +403,7 @@ async def stream(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(bar)
+                _emit_sample(bar.ts, f"{bar.close:g}")
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
@@ -399,6 +415,9 @@ async def stream(
             async for snap in adapter.stream_orderbook(target.symbol, params.depth or 50):
                 if stop_event and stop_event.is_set():
                     break
+                bid = snap.bids[0].price if snap.bids else None
+                ask = snap.asks[0].price if snap.asks else None
+                _emit_sample(snap.ts, f"bid {bid:g} / ask {ask:g}" if bid and ask else "snapshot")
                 if time.time() - last_save >= snapshot_interval:
                     await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
                     last_save = time.time()

@@ -93,6 +93,26 @@ class TestParquetStore:
         inv = tmp_store.inventory()
         assert any(d["exchange"] == "binance" for d in inv)
 
+    def test_inventory_bytes_and_gaps(self, tmp_store, ohlc_ds):
+        # 10 hourly bars but with one hole (skip index 5) → 9 stored, 10 expected.
+        bars = [
+            OHLCBar(ts=i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)
+            for i in range(10) if i != 5
+        ]
+        tmp_store.save(ohlc_ds, bars)
+        entry = next(d for d in tmp_store.inventory() if d["data_type"] == "ohlc")
+        assert entry["bytes"] > 0
+        assert entry["rows"] == 9
+        assert entry["expected_rows"] == 10
+        assert entry["missing_rows"] == 1
+
+    def test_inventory_trades_no_gaps(self, tmp_store, trades_ds):
+        tmp_store.save(trades_ds, [Trade(ts=NS, price=1.0, amount=1.0)])
+        entry = next(d for d in tmp_store.inventory() if d["data_type"] == "trades")
+        assert entry["bytes"] > 0
+        assert entry["missing_rows"] is None
+        assert entry["span"] is None
+
     def test_load_with_range(self, tmp_store, ohlc_ds):
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)

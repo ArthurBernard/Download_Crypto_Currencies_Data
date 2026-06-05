@@ -11,7 +11,7 @@
   <div class="card" style="flex:2;min-width:280px">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
       <strong>Recent runs</strong>
-      <a href="/jobs" style="font-size:.8rem;color:var(--muted)">Run all jobs →</a>
+      <a href="/historical" style="font-size:.8rem;color:var(--muted)">Historical →</a>
     </div>
     <div id="runs-body"><span class="muted">Loading…</span></div>
   </div>
@@ -19,7 +19,10 @@
   <!-- Streams -->
   <div style="flex:1;min-width:180px">
     <div class="card" style="margin-bottom:.5rem">
-      <strong>Stream jobs</strong>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <strong>Stream jobs</strong>
+        <a href="/live" style="font-size:.8rem;color:var(--muted)">Live →</a>
+      </div>
       <div id="streams-body" style="margin-top:.4rem"><span class="muted">Loading…</span></div>
     </div>
     <div class="card">
@@ -91,7 +94,7 @@ async function load() {
   try {
     const { datasets } = await api('GET', '/api/inventory');
     if (!datasets.length) {
-      document.getElementById('inv-summary').innerHTML = '<span class="muted">Empty — <a href="/inventory">start a backfill</a></span>';
+      document.getElementById('inv-summary').innerHTML = '<span class="muted">Empty — <a href="/historical">start a backfill</a></span>';
     } else {
       const byEx = {};
       let totalRows = 0;

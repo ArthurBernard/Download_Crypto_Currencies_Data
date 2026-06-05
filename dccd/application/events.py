@@ -9,7 +9,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-__all__ = ["Event", "ProgressEvent", "LogEvent", "StatusEvent", "EventBus"]
+__all__ = [
+    "Event",
+    "ProgressEvent",
+    "LogEvent",
+    "StatusEvent",
+    "StreamSampleEvent",
+    "EventBus",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +45,21 @@ class StatusEvent(BaseModel):
     state: str
 
 
-Event = ProgressEvent | LogEvent | StatusEvent
+class StreamSampleEvent(BaseModel):
+    """A liveness sample from a running stream (last trade/price/quote).
+
+    Emitted (throttled) by :func:`dccd.application.operations.stream` so the
+    Live UI can prove a stream is actually receiving data, without persisting
+    the sample. ``ts`` is the record timestamp (nanoseconds UTC); ``label`` is
+    a short human string (e.g. ``"42153.7"`` or ``"bid 42150 / ask 42151"``).
+    """
+    kind: Literal["sample"] = "sample"
+    run_id: str
+    ts: int
+    label: str
+
+
+Event = ProgressEvent | LogEvent | StatusEvent | StreamSampleEvent
 
 Handler = Callable[[Event], Any]
 
@@ -64,7 +85,10 @@ class EventBus:
 
     def __init__(self) -> None:
         self._handlers: list[Handler] = []
-        self._queue: asyncio.Queue[Event] | None = None
+        # A *set* of queues so several SSE consumers (Live + Logs + Dashboard
+        # in separate tabs) each receive every event. A single shared queue
+        # would let the last connection steal events from the others.
+        self._queues: set[asyncio.Queue[Event]] = set()
 
     def subscribe(self, handler: Handler) -> None:
         """Register a handler called for every published event."""
@@ -75,22 +99,31 @@ class EventBus:
         self._handlers = [h for h in self._handlers if h != handler]
 
     def emit(self, event: Event) -> None:
-        """Publish an event to all handlers and the queue (if enabled)."""
+        """Publish an event to all handlers and every registered queue."""
         for handler in self._handlers:
             try:
                 handler(event)
             except Exception:
                 logger.exception("EventBus handler error")
-        if self._queue is not None:
+        for queue in self._queues:
             try:
-                self._queue.put_nowait(event)
+                queue.put_nowait(event)
             except asyncio.QueueFull:
                 pass
 
+    def add_queue(self, maxsize: int = 1000) -> asyncio.Queue[Event]:
+        """Register and return a new queue that receives every event (for SSE)."""
+        queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=maxsize)
+        self._queues.add(queue)
+        return queue
+
+    def remove_queue(self, queue: asyncio.Queue[Event]) -> None:
+        """Unregister a queue (call on SSE disconnect)."""
+        self._queues.discard(queue)
+
     def enable_queue(self, maxsize: int = 1000) -> asyncio.Queue[Event]:
-        """Create and return an asyncio queue that receives every event (for SSE)."""
-        self._queue = asyncio.Queue(maxsize=maxsize)
-        return self._queue
+        """Backwards-compatible alias for :meth:`add_queue`."""
+        return self.add_queue(maxsize)
 
     def for_run(self, run_id: str) -> "RunEvents":
         """Return a small emitter bound to *run_id* (``.progress/.log/.status``)."""
@@ -115,3 +148,7 @@ class RunEvents:
     def status(self, state: str) -> None:
         """Emit a :class:`StatusEvent` for this run."""
         self._bus.emit(StatusEvent(run_id=self._run_id, state=state))
+
+    def sample(self, ts: int, label: str) -> None:
+        """Emit a :class:`StreamSampleEvent` (stream liveness) for this run."""
+        self._bus.emit(StreamSampleEvent(run_id=self._run_id, ts=ts, label=label))
