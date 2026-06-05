@@ -197,14 +197,38 @@ class _BybitWS(WebSocketBase):
                 )
 
     async def stream_orderbook(self) -> AsyncIterator[OrderBookSnapshot]:
-        """Stream live order-book snapshots/deltas over WebSocket."""
+        """Stream the order book, reconstructing full state from snapshot + deltas.
+
+        Bybit sends one ``snapshot`` then ``delta`` frames (a level with size 0
+        is a removal). Yielding the raw delta levels would surface a
+        meaningless/crossed best bid-ask, so we keep the full book and emit it
+        sorted on every frame.
+        """
+        state_bids: dict[float, float] = {}
+        state_asks: dict[float, float] = {}
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
                 continue
             d = data["data"]
             is_snap = data.get("type") == "snapshot"
-            bids = [OrderBookLevel(price=float(b[0]), amount=float(b[1])) for b in d.get("b", [])]
-            asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in d.get("a", [])]
+            if is_snap:
+                state_bids = {float(b[0]): float(b[1]) for b in d.get("b", [])}
+                state_asks = {float(a[0]): float(a[1]) for a in d.get("a", [])}
+            else:
+                for b in d.get("b", []):
+                    price, qty = float(b[0]), float(b[1])
+                    if qty == 0:
+                        state_bids.pop(price, None)
+                    else:
+                        state_bids[price] = qty
+                for a in d.get("a", []):
+                    price, qty = float(a[0]), float(a[1])
+                    if qty == 0:
+                        state_asks.pop(price, None)
+                    else:
+                        state_asks[price] = qty
+            bids = [OrderBookLevel(price=p, amount=q) for p, q in sorted(state_bids.items(), reverse=True)]
+            asks = [OrderBookLevel(price=p, amount=q) for p, q in sorted(state_asks.items())]
             ts_ms = d.get("ts", int(time.time() * 1000))
             yield OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks, is_snapshot=is_snap)

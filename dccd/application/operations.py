@@ -363,6 +363,26 @@ async def stream(
     batch: list[Any] = []
     snapshot_interval = params.snapshot_interval or 60
 
+    # Liveness heartbeat: emit a throttled sample (last price/quote) so the Live
+    # UI can prove the stream is actually receiving data. Throttled to ~1/s so a
+    # high-rate trade feed doesn't flood the SSE bus. Samples are NOT persisted.
+    _last_sample: list[float] = [0.0]
+    _SAMPLE_MIN_INTERVAL = 1.0
+
+    def _emit_sample(
+        ts: int,
+        *,
+        value: float | None = None,
+        bid: float | None = None,
+        ask: float | None = None,
+    ) -> None:
+        if events is None:
+            return
+        now_mono = time.monotonic()
+        if now_mono - _last_sample[0] >= _SAMPLE_MIN_INTERVAL:
+            _last_sample[0] = now_mono
+            events.sample(ts, value=value, bid=bid, ask=ask)
+
     # Reject early if the adapter does not declare a live WS capability for this
     # data type — otherwise a missing/stub implementation would "run" forever
     # producing zero rows (the silent-empty-stream bug, D8).
@@ -377,6 +397,7 @@ async def stream(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(record)
+                _emit_sample(record.ts, value=record.price)
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
@@ -388,6 +409,7 @@ async def stream(
                 if stop_event and stop_event.is_set():
                     break
                 batch.append(bar)
+                _emit_sample(bar.ts, value=bar.close)
                 if len(batch) >= 1000:
                     await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
                     batch.clear()
@@ -395,13 +417,26 @@ async def stream(
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookLive):
                 raise NoCapability(target.exchange, "orderbook", "live")
-            last_save = time.time()
+            # The WS pushes the book continuously, but we only *capture* a
+            # snapshot every ``snapshot_interval`` seconds. Emit the liveness
+            # sample only when we actually save, so the liveness reflects the
+            # real capture cadence (matching the "Δ Ns" shown in the UI) instead
+            # of flickering every second on data we discard. ``last_save = 0``
+            # captures the first frame immediately.
+            last_save = 0.0
             async for snap in adapter.stream_orderbook(target.symbol, params.depth or 50):
                 if stop_event and stop_event.is_set():
                     break
-                if time.time() - last_save >= snapshot_interval:
-                    await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
-                    last_save = time.time()
+                if time.time() - last_save < snapshot_interval:
+                    continue
+                last_save = time.time()
+                await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
+                # Best bid = highest bid price, best ask = lowest ask price.
+                # Compute rather than trust ordering so a momentarily unsorted
+                # book can't surface a crossed bid/ask in the liveness sample.
+                bid = max((lvl.price for lvl in snap.bids if lvl.amount > 0), default=None)
+                ask = min((lvl.price for lvl in snap.asks if lvl.amount > 0), default=None)
+                _emit_sample(snap.ts, bid=bid, ask=ask)
 
     except Exception as exc:
         if events:

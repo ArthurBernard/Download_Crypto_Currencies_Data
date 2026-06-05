@@ -140,6 +140,71 @@ class TestJobsEndpoint:
         assert resp.json()["started"] == 0
 
 
+class TestJobCrudEndpoints:
+    def test_create_then_list_then_delete(self, client):
+        r = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "binance",
+            "symbol": "BTC/USDT", "data_type": "ohlc", "span": 3600,
+            "start": "2024-01-01",
+        })
+        assert r.status_code == 200, r.text
+        job_id = r.json()["job_id"]
+
+        jobs = client.get("/api/jobs").json()["jobs"]
+        created = next((j for j in jobs if j["id"] == job_id), None)
+        assert created is not None
+        # the listing must expose start/snapshot_interval/depth so the UI can
+        # render and preserve them (a missing start blanked the date field).
+        assert created["start"] == "2024-01-01"
+        assert "snapshot_interval" in created and "depth" in created
+
+        # duplicate is rejected
+        dup = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "binance",
+            "symbol": "BTC/USDT", "data_type": "ohlc", "span": 3600,
+        })
+        assert dup.status_code == 400
+
+        d = client.post("/api/jobs/delete", json={"job_id": job_id})
+        assert d.status_code == 200
+        jobs = client.get("/api/jobs").json()["jobs"]
+        assert not any(j["id"] == job_id for j in jobs)
+
+    def test_delete_unknown_404(self, client):
+        assert client.post("/api/jobs/delete", json={"job_id": "nope"}).status_code == 404
+
+    def test_update_start(self, client):
+        job_id = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "kraken",
+            "symbol": "ETH/USD", "data_type": "ohlc", "span": 86400,
+        }).json()["job_id"]
+        u = client.post("/api/jobs/update", json={"job_id": job_id, "start": "2020-06-01"})
+        assert u.status_code == 200
+        assert client.post("/api/jobs/update",
+                           json={"job_id": "nope", "start": "2020-01-01"}).status_code == 404
+
+    def test_create_stream_appears_in_streams(self, client):
+        client.post("/api/jobs/create", json={
+            "operation": "stream", "exchange": "binance",
+            "symbol": "BTC/USDT", "data_type": "trades",
+            "trigger_kind": "supervised",
+        })
+        streams = client.get("/api/streams").json()["streams"]
+        assert any("binance" in s["id"] and "trades" in s["id"] for s in streams)
+
+    def test_delete_stream_unregisters_worker(self, client):
+        # Deleting a stream job must also drop its worker from /api/streams,
+        # otherwise a deleted stream keeps running and stays controllable.
+        jid = client.post("/api/jobs/create", json={
+            "operation": "stream", "exchange": "binance",
+            "symbol": "BTC/USDT", "data_type": "trades",
+            "trigger_kind": "supervised",
+        }).json()["job_id"]
+        assert any(s["id"] == jid for s in client.get("/api/streams").json()["streams"])
+        client.post("/api/jobs/delete", json={"job_id": jid})
+        assert not any(s["id"] == jid for s in client.get("/api/streams").json()["streams"])
+
+
 class TestStreamsEndpoint:
     def test_list_streams(self, client):
         resp = client.get("/api/streams")

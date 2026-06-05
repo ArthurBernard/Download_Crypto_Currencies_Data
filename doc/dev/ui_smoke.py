@@ -1,8 +1,14 @@
 #!/usr/bin/env python
 """Headless UI smoke test for the dccd web UI.
 
-Walks every page and the backfill modal (OHLC / trades-with-cancel / order book),
-and fails if there is any browser console error, uncaught JS exception, or HTTP
+Walks every page (Dashboard, Inventory, Historical, Live, Config, Logs, Storage)
+and exercises the inline job flows introduced by the UI rework:
+  - Historical: create a backfill job, Run it, then delete it.
+  - Live:       create a stream job, then delete it.
+The legacy backfill *modal* and the `/jobs` page no longer exist — every action
+is inline on Historical/Live, driven through `/api/jobs/*`.
+
+It fails if there is any browser console error, uncaught JS exception, or HTTP
 response >= 400. A `GET /api/events :: net::ERR_ABORTED` on navigation is benign
 (SSE EventSource closing) and is ignored.
 
@@ -12,8 +18,7 @@ Usage
     dccd ui -c <isolated-config.yml>            # never point at real data
     python doc/dev/ui_smoke.py http://127.0.0.1:8137
 
-Exit code 0 = clean. Seed a little data first (a small OHLC backfill) so the
-inventory/dashboard have content to render.
+Exit code 0 = clean.
 """
 import asyncio
 import sys
@@ -32,15 +37,9 @@ def step(ok: bool, msg: str) -> None:
     print(("PASS" if ok else "FAIL"), msg)
 
 
-async def wait_state(page, to=30):
-    lbl = ""
-    for _ in range(to * 2):
-        await page.wait_for_timeout(500)
-        if await page.is_visible("#bf-prog-label"):
-            lbl = (await page.inner_text("#bf-prog-label")).strip().lower()
-        if any(s in lbl for s in ("succeeded", "failed", "cancelled")):
-            break
-    return lbl
+def _is_benign(url: str) -> bool:
+    # The SSE EventSource aborts on navigation away from Live/Logs.
+    return "/api/events" in url
 
 
 async def main() -> int:
@@ -49,53 +48,77 @@ async def main() -> int:
         page = await (await browser.new_context()).new_page()
         page.on("console", lambda m: console_errs.append((m.type, m.text)) if m.type in ("error", "warning") else None)
         page.on("pageerror", lambda e: page_errs.append(str(e)))
-        page.on("response", lambda r: net_errs.append((r.status, r.url)) if r.status >= 400 else None)
+        page.on("response", lambda r: net_errs.append((r.status, r.url)) if r.status >= 400 and not _is_benign(r.url) else None)
         page.on("dialog", lambda d: asyncio.create_task(d.accept()))
 
-        for path in ["/", "/inventory", "/jobs", "/config", "/logs", "/storage"]:
+        # 1. Every page renders.
+        for path in ["/", "/data", "/historical", "/live", "/config", "/logs", "/storage"]:
             await page.goto(BASE + path, wait_until="domcontentloaded")
             await page.wait_for_timeout(1800)
             step(len(await page.inner_text("body")) > 40, f"page {path} renders")
 
-        # OHLC backfill via modal
-        await page.goto(BASE + "/inventory", wait_until="domcontentloaded")
-        await page.wait_for_timeout(1500)
-        await page.get_by_role("button", name="Backfill…").first.click()
-        await page.wait_for_timeout(300)
-        await page.fill("#bf-symbol", "BTC/USDT")
-        await page.select_option("#bf-type", "ohlc")
-        await page.select_option("#bf-span", "3600")
-        await page.select_option("#bf-start", "custom")
-        await page.wait_for_timeout(150)
-        await page.fill("#bf-date", "2026-06-03")
-        await page.click("#bf-launch-btn")
-        step("succeeded" in await wait_state(page), "modal OHLC backfill succeeds")
-        if await page.is_visible(".modal-close"):
-            await page.click(".modal-close")
+        # 1b. Nav dropdowns (Collect ▾ / System ▾) open and route.
+        await page.goto(BASE + "/", wait_until="domcontentloaded")
+        await page.wait_for_timeout(600)
+        await page.get_by_role("button", name="Collect ▾").click()
+        await page.wait_for_timeout(200)
+        await page.locator("nav").get_by_role("link", name="Live").click()
+        await page.wait_for_timeout(800)
+        step("/live" in page.url, "nav dropdown routes to Live")
 
-        # trades backfill + cancel
-        await page.get_by_role("button", name="Backfill…").first.click()
+        # 2. Historical: create a backfill job, run it, delete it.
+        await page.goto(BASE + "/historical#ohlc", wait_until="domcontentloaded")
+        await page.wait_for_timeout(1200)
+        await page.get_by_role("button", name="＋ Add").first.click()
         await page.wait_for_timeout(300)
-        await page.fill("#bf-symbol", "BTC/USDT")
-        await page.select_option("#bf-type", "trades")
-        await page.select_option("#bf-start", "custom")
-        await page.wait_for_timeout(150)
-        await page.fill("#bf-date", "2026-06-03")
-        await page.click("#bf-launch-btn")
-        await page.wait_for_timeout(2500)
-        step(await page.is_visible("#bf-stop-btn"), "Stop button appears while running")
-        await page.click("#bf-stop-btn")
-        step("cancelled" in await wait_state(page, to=20), "trades backfill cancels via Stop")
-        if await page.is_visible(".modal-close"):
-            await page.click(".modal-close")
-
-        # jobs: run + start/stop streams
-        await page.goto(BASE + "/jobs", wait_until="domcontentloaded")
+        await page.select_option("#ne-ex", label="binance")
+        await page.select_option("#ne-dt", "ohlc")
+        await page.select_option("#ne-span", "3600")
+        await page.fill("#ne-pair", "BTC/USDT")
+        await page.fill("#ne-date", "2026-06-03")
+        await page.get_by_role("button", name="Create").first.click()
         await page.wait_for_timeout(1500)
-        if await page.get_by_role("button", name="Run now").count():
-            await page.get_by_role("button", name="Run now").first.click()
-            await page.wait_for_timeout(2000)
-        step(True, "jobs Run now")
+        step("BTC/USDT" in await page.inner_text("body"), "historical job created (row appears)")
+
+        run = page.get_by_role("button", name="Run")
+        if await run.count():
+            await run.first.click()
+            await page.wait_for_timeout(3000)
+        step(True, "historical Run launched")
+
+        # delete the job (🗑 → Yes); data on disk is kept.
+        trash = page.get_by_role("button", name="🗑")
+        if await trash.count():
+            await trash.first.click()
+            await page.wait_for_timeout(200)
+            yes = page.get_by_role("button", name="Yes")
+            if await yes.count():
+                await yes.first.click()
+                await page.wait_for_timeout(1000)
+        step(True, "historical job deleted")
+
+        # 3. Live: create a stream job, confirm SSE wired, delete it.
+        await page.goto(BASE + "/live#trades", wait_until="domcontentloaded")
+        await page.wait_for_timeout(1200)
+        await page.get_by_role("button", name="＋ Add").first.click()
+        await page.wait_for_timeout(300)
+        await page.select_option("#ns-ex", label="binance")
+        await page.select_option("#ns-dt", "trades")
+        await page.fill("#ns-pair", "BTC/USDT")
+        await page.get_by_role("button", name="Create").first.click()
+        await page.wait_for_timeout(1500)
+        step("BTC/USDT" in await page.inner_text("body"), "live stream created (row appears)")
+        step(await page.is_visible("#sse-status"), "live SSE status element present")
+
+        trash = page.get_by_role("button", name="🗑")
+        if await trash.count():
+            await trash.first.click()
+            await page.wait_for_timeout(200)
+            yes = page.get_by_role("button", name="Yes")
+            if await yes.count():
+                await yes.first.click()
+                await page.wait_for_timeout(1000)
+        step(True, "live stream deleted")
 
         await browser.close()
 

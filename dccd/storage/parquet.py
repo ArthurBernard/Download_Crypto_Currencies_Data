@@ -320,6 +320,14 @@ class ParquetStore:
                                     except ValueError:
                                         span_s = None
                                 min_ts, max_ts, rows = self._ts_range(files)
+                                # Gap detection (OHLC only) is free: we already
+                                # have rows + min/max + span, so the number of
+                                # missing bars is pure arithmetic, no extra read.
+                                expected = missing = None
+                                if span_s and min_ts is not None and max_ts is not None:
+                                    from dccd.domain.timeutils import NS
+                                    expected = (max_ts - min_ts) // (span_s * NS) + 1
+                                    missing = max(0, expected - rows)
                                 result.append({
                                     "exchange": exchange,
                                     "pair": pair,
@@ -329,6 +337,9 @@ class ParquetStore:
                                     "rows": rows,
                                     "min_ts": min_ts,
                                     "max_ts": max_ts,
+                                    "bytes": self._dir_bytes(files),
+                                    "expected_rows": expected,
+                                    "missing_rows": missing,
                                 })
                     else:
                         files = sorted(pair_dir.glob("*.parquet"))
@@ -338,12 +349,27 @@ class ParquetStore:
                                 "exchange": exchange,
                                 "pair": pair,
                                 "data_type": dtype,
+                                "span": None,
                                 "files": len(files),
                                 "rows": rows,
                                 "min_ts": min_ts,
                                 "max_ts": max_ts,
+                                "bytes": self._dir_bytes(files),
+                                "expected_rows": None,
+                                "missing_rows": None,
                             })
         return result
+
+    @staticmethod
+    def _dir_bytes(files: list[pathlib.Path]) -> int:
+        """Total size on disk (bytes) of a list of parquet files."""
+        total = 0
+        for f in files:
+            try:
+                total += f.stat().st_size
+            except OSError:
+                pass
+        return total
 
     def _ts_range(
         self, files: list[pathlib.Path]

@@ -29,7 +29,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -99,6 +99,34 @@ class MigrateRequest(BaseModel):
     """Request body for ``POST /api/migrate``."""
 
     dry_run: bool = True
+
+
+class JobCreateRequest(BaseModel):
+    """Request body for ``POST /api/jobs/create``."""
+
+    operation: str = "backfill"
+    exchange: str
+    symbol: str
+    data_type: str = "ohlc"
+    span: int | None = None
+    start: str = "last"
+    trigger_kind: str = "interval"
+    every: int | None = None
+    depth: int | None = None
+    snapshot_interval: int | None = None
+
+
+class JobIdRequest(BaseModel):
+    """Request body for ``POST /api/jobs/delete``."""
+
+    job_id: str
+
+
+class JobUpdateRequest(BaseModel):
+    """Request body for ``POST /api/jobs/update`` (edit first date)."""
+
+    job_id: str
+    start: str
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +278,23 @@ def create_app(
 
     def _bus(request: Request) -> EventBus:
         return cast(EventBus, request.app.state.event_bus)
+
+    async def _persist_and_refresh(request: Request, new_cfg: AppConfig) -> None:
+        """Persist *new_cfg* to disk (if a path is set) and refresh runtime state.
+
+        Single source of truth for config mutations (PUT /config and the job
+        CRUD endpoints): writes YAML, swaps ``app.state.config``, recomputes
+        ``all_specs`` and reconciles stream workers (adds new ones, stops+drops
+        deleted ones) so the daemon reflects the change without a restart.
+        """
+        cfg_path = request.app.state.config_path
+        if cfg_path:
+            import yaml
+            with open(cfg_path, "w") as f:
+                yaml.safe_dump(new_cfg.model_dump(), f)
+        request.app.state.config = new_cfg
+        request.app.state.all_specs = new_cfg.all_job_specs()
+        await request.app.state.scheduler.sync_streams(request.app.state.all_specs)
 
     def _run_backfill_tracked(request: Request, spec: JobSpec, run_id: str) -> None:
         """Spawn a backfill with a cancellable stop event registered by run_id."""
@@ -404,6 +449,10 @@ def create_app(
                 "data_type": s.target.data_type.value,
                 "span": s.target.span,
                 "trigger": s.trigger.kind,
+                "every": s.trigger.every,
+                "start": s.params.start,
+                "snapshot_interval": s.params.snapshot_interval,
+                "depth": s.params.depth,
                 "enabled": s.enabled,
                 "running": stream_status.get(s.id, False) if s.operation == "stream" else None,
             }
@@ -464,19 +513,52 @@ def create_app(
         except Exception as e:
             raise HTTPException(422, str(e))
 
-        cfg_path = request.app.state.config_path
-        if cfg_path:
-            import yaml
-            with open(cfg_path, "w") as f:
-                yaml.safe_dump(new_cfg.model_dump(), f)
-
-        request.app.state.config = new_cfg
-        # Refresh runtime state so /api/jobs and stream control reflect the new
-        # config without a restart (D11): rebuild specs and register new streams.
-        request.app.state.all_specs = new_cfg.all_job_specs()
-        new_streams = [s for s in request.app.state.all_specs if s.operation == "stream"]
-        request.app.state.scheduler.register_streams(new_streams)
+        await _persist_and_refresh(request, new_cfg)
         return {"status": "ok"}
+
+    @app.post("/api/jobs/create")
+    async def create_job(body: JobCreateRequest, request: Request) -> dict[str, Any]:
+        """Create a new job (backfill or stream) and persist it to config."""
+        try:
+            sym = Symbol.parse(body.symbol)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        new_cfg = _cfg(request).model_copy(deep=True)
+        try:
+            job_id = new_cfg.add_job(
+                operation=body.operation,
+                exchange=body.exchange,
+                pair=str(sym),
+                data_type=body.data_type,
+                span=body.span,
+                start=body.start,
+                trigger_kind=body.trigger_kind,
+                every=body.every,
+                depth=body.depth,
+                snapshot_interval=body.snapshot_interval,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        await _persist_and_refresh(request, new_cfg)
+        return {"status": "created", "job_id": job_id}
+
+    @app.post("/api/jobs/delete")
+    async def delete_job(body: JobIdRequest, request: Request) -> dict[str, Any]:
+        """Delete a configured job (does NOT delete stored data)."""
+        new_cfg = _cfg(request).model_copy(deep=True)
+        if not new_cfg.remove_job(body.job_id):
+            raise HTTPException(404, f"Job {body.job_id!r} not found")
+        await _persist_and_refresh(request, new_cfg)
+        return {"status": "deleted", "job_id": body.job_id}
+
+    @app.post("/api/jobs/update")
+    async def update_job(body: JobUpdateRequest, request: Request) -> dict[str, Any]:
+        """Update a job's start (first date) and persist."""
+        new_cfg = _cfg(request).model_copy(deep=True)
+        if not new_cfg.update_job_start(body.job_id, body.start):
+            raise HTTPException(404, f"Job {body.job_id!r} not found")
+        await _persist_and_refresh(request, new_cfg)
+        return {"status": "updated", "job_id": body.job_id}
 
     # -----------------------------------------------------------------------
     # Read
@@ -505,17 +587,21 @@ def create_app(
     @app.get("/api/events")
     async def sse_events(request: Request) -> StreamingResponse:
         """Server-Sent Events stream of progress/log/status events."""
-        queue = _bus(request).enable_queue()
+        bus = _bus(request)
+        queue = bus.add_queue()
 
         async def _generator():
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    yield f"data: {event.model_dump_json()}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                        yield f"data: {event.model_dump_json()}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": heartbeat\n\n"
+            finally:
+                bus.remove_queue(queue)
 
         return StreamingResponse(_generator(), media_type="text/event-stream")
 
@@ -569,13 +655,22 @@ def create_app(
         async def ui_dashboard(request: Request):
             return templates.TemplateResponse(request, "dashboard.html", _tpl_ctx(request, "dashboard"))
 
-        @app.get("/inventory")
-        async def ui_inventory(request: Request):
-            return templates.TemplateResponse(request, "inventory.html", _tpl_ctx(request, "inventory"))
+        @app.get("/data")
+        async def ui_data(request: Request):
+            return templates.TemplateResponse(request, "data.html", _tpl_ctx(request, "data"))
 
-        @app.get("/jobs")
-        async def ui_jobs(request: Request):
-            return templates.TemplateResponse(request, "jobs.html", _tpl_ctx(request, "jobs"))
+        @app.get("/inventory")
+        async def ui_inventory() -> RedirectResponse:
+            # Page renamed Inventory → Data; keep the old path working.
+            return RedirectResponse("/data", status_code=307)
+
+        @app.get("/historical")
+        async def ui_historical(request: Request):
+            return templates.TemplateResponse(request, "historical.html", _tpl_ctx(request, "historical"))
+
+        @app.get("/live")
+        async def ui_live(request: Request):
+            return templates.TemplateResponse(request, "live.html", _tpl_ctx(request, "live"))
 
         @app.get("/config")
         async def ui_config(request: Request):

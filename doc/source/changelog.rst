@@ -24,6 +24,21 @@ Recent releases
 
 .. rubric:: [Unreleased]
 
+- **v3 — hexagonal rewrite**: pure ``domain`` / ``transport`` / ``sources`` /
+  ``storage`` / ``application`` / ``interfaces`` layers; all timestamps are
+  nanosecond UTC int64; three usage modes (Python ``Client``, ``dccd`` CLI,
+  HTTP API + web UI).
+- **Web UI split by concern**: read-only **Data** (data-type tabs, freshness,
+  OHLC gap detection, on-disk size), and two collection pages **Historical**
+  (editable first date, real coverage bar, inline Run/Delete) and **Live**
+  (real-time liveness over SSE, inline Start/Stop/Delete), with inline job
+  create/edit/delete; grouped ``Collect`` / ``System`` nav.
+- **Job CRUD over the API** (``/api/jobs/create|update|delete``); ``inventory``
+  reports on-disk bytes + OHLC gaps; ``EventBus`` fans out to multiple SSE
+  consumers with a stream liveness sample.
+- Complete v2→v3 Parquet migration (``dccd migrate``); Bearer auth on
+  ``/api/*``; cursor-based trades pagination (fixes silent loss of >95 % of
+  trades).
 - Sphinx documentation refonte: structured sidebar, exchange-specific pages,
   hero banner, installation guide, CLI reference, configuration reference,
   candlestick logo (#59)

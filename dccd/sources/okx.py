@@ -80,7 +80,7 @@ class OKXSource(
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=400),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=5),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -191,8 +191,13 @@ class OKXSource(
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
-        """Stream live order-book snapshots/deltas over WebSocket."""
-        ws = _OKXWS(self.render_symbol(symbol), "books", "books")
+        """Stream live order-book snapshots over WebSocket.
+
+        Uses the ``books5`` channel — a full sorted top-5 snapshot pushed every
+        100ms — rather than ``books``, whose unmerged deltas yield a
+        meaningless/crossed best bid-ask.
+        """
+        ws = _OKXWS(self.render_symbol(symbol), "books5", "books")
         return ws.stream()
 
 

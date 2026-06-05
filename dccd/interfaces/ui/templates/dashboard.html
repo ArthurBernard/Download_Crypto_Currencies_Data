@@ -2,108 +2,119 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
+<p class="muted" style="margin:.2rem 0 .8rem">
+  An at-a-glance view: key totals, what's running right now, the latest runs, and
+  what's stored. Use <a href="/historical">Historical</a> / <a href="/live">Live</a>
+  to collect, <a href="/data">Data</a> to inspect.
+</p>
 
-<!-- Active runs (top, most important) -->
-<div id="active-runs" style="margin-bottom:.5rem"></div>
+<!-- KPIs -->
+<div id="kpis" class="row" style="gap:.6rem;margin-bottom:1rem"></div>
 
-<div class="row" style="gap:1rem;align-items:flex-start">
+<!-- Active now -->
+<h2 style="font-size:1.05rem;margin:.6rem 0 .3rem">Active now</h2>
+<div class="muted" style="font-size:.82rem;margin-bottom:.4rem">Runs in progress and live streams.</div>
+<div id="active-now"><span class="muted">Loading…</span></div>
+
+<div class="row" style="gap:1rem;align-items:flex-start;margin-top:1rem">
   <!-- Recent runs -->
-  <div class="card" style="flex:2;min-width:280px">
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
-      <strong>Recent runs</strong>
-      <a href="/jobs" style="font-size:.8rem;color:var(--muted)">Run all jobs →</a>
+  <div style="flex:2;min-width:280px">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+      <h2 style="font-size:1.05rem;margin:0">Recent runs</h2>
+      <a href="/logs" style="font-size:.8rem;color:var(--muted)">All logs →</a>
     </div>
     <div id="runs-body"><span class="muted">Loading…</span></div>
   </div>
 
-  <!-- Streams -->
-  <div style="flex:1;min-width:180px">
-    <div class="card" style="margin-bottom:.5rem">
-      <strong>Stream jobs</strong>
-      <div id="streams-body" style="margin-top:.4rem"><span class="muted">Loading…</span></div>
+  <!-- Data -->
+  <div style="flex:1;min-width:200px">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+      <h2 style="font-size:1.05rem;margin:0">Data</h2>
+      <a href="/data" style="font-size:.8rem;color:var(--muted)">Browse →</a>
     </div>
-    <div class="card">
-      <strong>Datasets</strong>
-      <div id="inv-summary" style="margin-top:.4rem"><span class="muted">Loading…</span></div>
-    </div>
+    <div class="card"><div id="data-summary"><span class="muted">Loading…</span></div></div>
   </div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
+function kpi(label, value) {
+  return `<div class="card" style="flex:1;min-width:8rem;padding:.7rem .9rem;margin:0">
+    <div style="font-size:1.4rem;font-weight:700">${value}</div>
+    <div class="muted" style="font-size:.78rem">${label}</div></div>`;
+}
+
 async function load() {
-  // Active runs (running / reconnecting)
-  try {
-    const { runs } = await api('GET', '/api/runs?limit=50');
-    const active = runs.filter(r => r.state === 'running' || r.state === 'reconnecting');
-    const el = document.getElementById('active-runs');
-    if (active.length) {
-      el.innerHTML = active.map(r => {
-        const prog = r.progress;
-        const pct  = prog && prog.total > 0 ? Math.min(100, Math.round(prog.done / prog.total * 100)) : null;
-        const rows = (prog?.rows ?? r.rows_written ?? 0).toLocaleString();
-        const progTxt = (prog && prog.unit === 'time' && prog.at)
-          ? `reached ${fmtNs(prog.at)}`
-          : (prog ? `${prog.done}/${prog.total}` : 'starting…');
-        return `<div class="card" style="border-left:3px solid var(--accent);padding:.6rem 1rem;margin:.3rem 0">
-          <div class="row" style="justify-content:space-between;margin-bottom:.3rem">
-            <span><span class="ok">●</span> <strong>${escapeHtml(r.operation)}</strong> ${escapeHtml(r.exchange)} ${escapeHtml(r.symbol)} ${escapeHtml(r.data_type)}</span>
-            <span class="muted" style="font-size:.82em">${progTxt} · ${rows} rows${pct !== null ? ` · ${pct}%` : ''}</span>
-          </div>
-          ${pct !== null ? `<div style="height:4px;background:var(--border);border-radius:2px"><div style="height:100%;background:var(--accent);border-radius:2px;width:${pct}%"></div></div>` : ''}
-        </div>`;
-      }).join('');
-    } else {
-      el.innerHTML = '';
-    }
-  } catch (_) {}
+  // Fetch everything we need once.
+  let runs = [], streams = [], datasets = [];
+  try { runs = (await api('GET','/api/runs?limit=50')).runs || []; } catch (_) {}
+  try { streams = (await api('GET','/api/streams')).streams || []; } catch (_) {}
+  try { datasets = (await api('GET','/api/inventory')).datasets || []; } catch (_) {}
+
+  const liveStreams = streams.filter(s => s.running);
+  const activeRuns = runs.filter(r => r.state === 'running' || r.state === 'reconnecting');
+  const totRows = datasets.reduce((a,d)=>a+(d.rows||0),0);
+  const totBytes = datasets.reduce((a,d)=>a+(d.bytes||0),0);
+
+  // KPIs
+  document.getElementById('kpis').innerHTML =
+    kpi('datasets', datasets.length) +
+    kpi('rows stored', fmtNum(totRows)) +
+    kpi('on disk', fmtBytes(totBytes)) +
+    kpi('live streams', liveStreams.length) +
+    kpi('runs in progress', activeRuns.length);
+
+  // Active now: running runs (with progress) + live streams.
+  const el = document.getElementById('active-now');
+  const blocks = [];
+  for (const r of activeRuns) {
+    const prog = r.progress;
+    const pct  = prog && prog.total > 0 ? Math.min(100, Math.round(prog.done / prog.total * 100)) : null;
+    const rows = fmtNum(prog?.rows ?? r.rows_written ?? 0);
+    const at = (prog && prog.unit === 'time' && prog.at) ? `reached ${fmtNs(prog.at)}` : (prog ? `${prog.done}/${prog.total}` : 'starting…');
+    blocks.push(`<div class="card" style="border-left:3px solid var(--accent);padding:.6rem 1rem;margin:.3rem 0">
+      <div class="row" style="justify-content:space-between;margin-bottom:.3rem">
+        <span><span class="ok">●</span> <strong>${escapeHtml(r.operation)}</strong> ${escapeHtml(r.exchange)} ${escapeHtml(r.symbol)} ${escapeHtml(r.data_type)}</span>
+        <span class="muted" style="font-size:.82em">${at} · ${rows} rows${pct !== null ? ` · ${pct}%` : ''}</span>
+      </div>
+      ${pct !== null ? `<div style="height:4px;background:var(--border);border-radius:2px"><div style="height:100%;background:var(--accent);border-radius:2px;width:${pct}%"></div></div>` : ''}
+    </div>`);
+  }
+  for (const s of liveStreams) {
+    const parts = s.id.split(':');
+    blocks.push(`<div class="card" style="border-left:3px solid var(--ok);padding:.5rem 1rem;margin:.3rem 0">
+      <span class="live-dot fresh"></span><strong>stream</strong>
+      ${escapeHtml(parts[1]||'')} ${escapeHtml(parts[2]||'')} <span class="muted">${escapeHtml(parts[3]||'')}</span>
+    </div>`);
+  }
+  el.innerHTML = blocks.length ? blocks.join('')
+    : '<div class="card muted" style="text-align:center;padding:1.2rem">Nothing running. Start a job on <a href="/historical">Historical</a> or <a href="/live">Live</a>.</div>';
 
   // Recent runs table
-  try {
-    const { runs } = await api('GET', '/api/runs?limit=15');
-    const rows = runs.map(r => {
-      const cls = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : '';
-      const prog = r.progress ? ` (${r.progress.done}/${r.progress.total})` : '';
-      return `<tr>
-        <td><span class="muted" style="font-size:.8em">${escapeHtml(r.exchange)}</span> ${escapeHtml(r.symbol)}</td>
-        <td>${escapeHtml(r.data_type)}</td>
-        <td><span class="${cls}">${escapeHtml(r.state)}</span>${prog}</td>
-        <td class="muted" style="font-size:.8em">${(r.rows_written||0).toLocaleString()}</td>
-        <td class="muted" style="font-size:.8em">${fmtNs(r.started_at)}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="5" class="muted">No runs yet</td></tr>';
-    document.getElementById('runs-body').innerHTML =
-      `<table><thead><tr><th>Symbol</th><th>Type</th><th>State</th><th>Rows</th><th>Started</th></tr></thead><tbody>${rows}</tbody></table>`;
-  } catch (e) { document.getElementById('runs-body').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`; }
+  const recent = runs.slice(0, 12);
+  const body = recent.map(r => {
+    const cls = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : 'muted';
+    return `<tr>
+      <td><span class="muted" style="font-size:.8em">${escapeHtml(r.exchange)}</span> ${escapeHtml(r.symbol)}</td>
+      <td>${escapeHtml(r.data_type)}</td>
+      <td><span class="${cls}">${escapeHtml(r.state)}</span></td>
+      <td class="muted" style="font-size:.8em">${fmtNum(r.rows_written||0)}</td>
+      <td class="muted" style="font-size:.8em">${fmtNs(r.started_at)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No runs yet</td></tr>';
+  document.getElementById('runs-body').innerHTML =
+    `<table><thead><tr><th>Symbol</th><th>Type</th><th>State</th><th>Rows</th><th>Started</th></tr></thead><tbody>${body}</tbody></table>`;
 
-  // Streams
-  try {
-    const { streams } = await api('GET', '/api/streams');
-    document.getElementById('streams-body').innerHTML = streams.length
-      ? streams.map(s => `<div class="row" style="margin:.25rem 0">
-            <span class="${s.running ? 'ok' : 'muted'}">${s.running ? '●' : '○'}</span>
-            <span style="font-size:.82em">${escapeHtml(s.id.split(':').slice(1,3).join(' '))}</span>
-          </div>`).join('')
-      : '<span class="muted">No streams</span>';
-  } catch (_) {}
-
-  // Inventory summary
-  try {
-    const { datasets } = await api('GET', '/api/inventory');
-    if (!datasets.length) {
-      document.getElementById('inv-summary').innerHTML = '<span class="muted">Empty — <a href="/inventory">start a backfill</a></span>';
-    } else {
-      const byEx = {};
-      let totalRows = 0;
-      for (const d of datasets) {
-        byEx[d.exchange] = (byEx[d.exchange] || 0) + 1;
-        totalRows += d.rows || 0;
-      }
-      document.getElementById('inv-summary').innerHTML =
-        `<div class="muted" style="font-size:.85em">${datasets.length} dataset(s) · ${totalRows.toLocaleString()} rows total</div>` +
-        Object.entries(byEx).map(([ex, n]) => `<div style="font-size:.82em">${escapeHtml(ex)}: ${n}</div>`).join('');
-    }
-  } catch (_) {}
+  // Data summary by exchange
+  if (!datasets.length) {
+    document.getElementById('data-summary').innerHTML = '<span class="muted">Empty — <a href="/historical">start a backfill</a></span>';
+  } else {
+    const byEx = {};
+    for (const d of datasets) byEx[d.exchange] = (byEx[d.exchange] || 0) + 1;
+    document.getElementById('data-summary').innerHTML =
+      Object.entries(byEx).sort().map(([ex, n]) =>
+        `<div class="row" style="justify-content:space-between;font-size:.85em"><span>${escapeHtml(ex)}</span><span class="muted">${n} dataset(s)</span></div>`).join('');
+  }
 }
 
 load();

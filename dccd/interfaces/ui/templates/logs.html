@@ -1,74 +1,80 @@
 {% extends "base.html" %}
 {% block title %}Logs{% endblock %}
 {% block content %}
-<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
-  <h1 style="margin:0">Logs</h1>
-  <div class="row" style="gap:.5rem">
-    <button class="ghost" onclick="clearLive()">Clear live</button>
-    <span id="conn-status" class="muted">Connecting…</span>
-  </div>
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+  <h1 style="margin:0">Activity &amp; logs</h1>
+  <span id="conn-status" class="muted" style="font-size:.85rem">Connecting…</span>
 </div>
+<p class="muted" style="margin:.2rem 0 .8rem">
+  A <strong>run</strong> is one execution of a job (a backfill, a snapshot, or a
+  live stream session). Each run emits <em>log</em> lines, <em>progress</em>
+  updates and a final <em>status</em>. Below: recent runs with their logs, and a
+  live console of whatever is running right now.
+</p>
 
-<!-- Live SSE stream -->
-<div class="card" style="margin-bottom:1rem">
-  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.4rem">
-    <strong>Live events</strong>
-    <span class="muted" style="font-size:.8rem">A live console for a running job — streams its log/progress/status as it happens. Empty when nothing is running; see <em>Recent runs</em> below for past logs.</span>
-  </div>
-  <pre id="log-out" style="min-height:8rem;max-height:20rem;overflow-y:auto;background:var(--bg);border:1px solid var(--border);padding:.5rem;border-radius:4px;font-size:.8rem">Idle — start or run a job (or watch a stream) and its events appear here live.
+<!-- Recent runs (primary) -->
+<div class="row" style="justify-content:space-between;align-items:center;margin:.4rem 0">
+  <strong>Recent runs</strong>
+  <button class="ghost" style="font-size:.8rem" onclick="loadHistory()">↻ Refresh</button>
+</div>
+<div id="history-content"><span class="muted">Loading…</span></div>
+
+<!-- Live console (secondary) -->
+<div class="row" style="justify-content:space-between;align-items:center;margin:1.4rem 0 .4rem">
+  <strong>Live console</strong>
+  <button class="ghost" style="font-size:.8rem" onclick="clearLive()">Clear</button>
+</div>
+<p class="muted" style="font-size:.82rem;margin:0 0 .4rem">
+  Real-time feed of the currently running job(s). Stays idle when nothing runs.
+</p>
+<pre id="log-out" style="min-height:7rem;max-height:18rem;overflow-y:auto;background:var(--bg);border:1px solid var(--border);padding:.5rem;border-radius:4px;font-size:.8rem">Idle — start or run a job (or watch a stream) and its events appear here live.
 </pre>
-</div>
-
-<!-- Recent runs with log history -->
-<div>
-  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
-    <strong>Recent runs</strong>
-    <button class="ghost" style="font-size:.8rem" onclick="loadHistory()">Refresh</button>
-  </div>
-  <div id="history-content"><span class="muted">Loading…</span></div>
-</div>
 {% endblock %}
 {% block scripts %}
 <script>
 const logEl = document.getElementById('log-out');
 const statusEl = document.getElementById('conn-status');
-let es;
-let eventCount = 0;
+let es, eventCount = 0;
 
-function clearLive() {
-  logEl.textContent = 'Waiting for events…\n';
-  eventCount = 0;
+// Human label for a run_id: strip the trailing "@<ts>"/"@stream" suffix, then
+// turn the spec id "op:exchange:pair:type[:span]" into "op exchange pair type".
+function runLabel(runId) {
+  const base = runId.slice(0, runId.lastIndexOf('@') >= 0 ? runId.lastIndexOf('@') : runId.length);
+  const p = base.split(':');
+  if (p.length < 4) return base;
+  const span = p[4] ? ' ' + p[4] : '';
+  return `${p[0]} ${p[1]} ${p[2]} ${p[3]}${span}`;
 }
+
+function clearLive() { logEl.textContent = 'Waiting for events…\n'; eventCount = 0; }
 
 function connect() {
   if (es) es.close();
   es = new EventSource('/api/events' + (DCCD_TOKEN ? '?token=' + encodeURIComponent(DCCD_TOKEN) : ''));
-  es.onopen = () => { statusEl.innerHTML = '<span class="ok">● Connected</span>'; };
+  es.onopen = () => { statusEl.innerHTML = '<span class="ok">● connected</span>'; };
   es.onmessage = (e) => {
     if (e.data.startsWith(':')) return;
-    try {
-      const ev = JSON.parse(e.data);
-      if (eventCount === 0) logEl.textContent = '';
-      eventCount++;
-      const ts = new Date().toISOString().slice(11, 19);
-      let line = `[${ts}] `;
-      if (ev.kind === 'progress') {
-        line += `PROG   ${ev.run_id.slice(0,8)}…  ${ev.done}/${ev.total} ${ev.unit}`;
-      } else if (ev.kind === 'log') {
-        line += `${ev.level.toUpperCase().padEnd(5)} ${ev.run_id.slice(0,8)}… — ${ev.message}`;
-      } else if (ev.kind === 'status') {
-        line += `STATUS ${ev.run_id.slice(0,8)}… → ${ev.state}`;
-      } else {
-        line += e.data;
-      }
-      logEl.textContent += line + '\n';
-      logEl.scrollTop = logEl.scrollHeight;
-    } catch (_) {
-      logEl.textContent += e.data + '\n';
+    let ev; try { ev = JSON.parse(e.data); } catch (_) { logEl.textContent += e.data + '\n'; return; }
+    if (ev.kind === 'sample') return;  // liveness samples belong on the Live page
+    if (eventCount === 0) logEl.textContent = '';
+    eventCount++;
+    const ts = new Date().toISOString().slice(11, 19);
+    const who = runLabel(ev.run_id);
+    let line = `[${ts}] `;
+    if (ev.kind === 'progress') {
+      line += `PROG   ${who} — ${ev.done}/${ev.total} ${ev.unit}`;
+    } else if (ev.kind === 'log') {
+      line += `${ev.level.toUpperCase().padEnd(5)} ${who} — ${ev.message}`;
+    } else if (ev.kind === 'status') {
+      line += `STATUS ${who} → ${ev.state}`;
+    } else {
+      line += e.data;
     }
+    logEl.textContent += line + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
   };
   es.onerror = () => {
-    statusEl.innerHTML = '<span class="err">Disconnected — retrying…</span>';
+    statusEl.innerHTML = '<span class="err">disconnected — retrying…</span>';
     setTimeout(connect, 3000);
   };
 }
@@ -77,15 +83,20 @@ async function loadHistory() {
   try {
     const { runs } = await api('GET', '/api/runs?limit=30');
     if (!runs.length) {
-      document.getElementById('history-content').innerHTML = '<span class="muted">No runs yet.</span>';
+      document.getElementById('history-content').innerHTML =
+        '<div class="card muted" style="text-align:center;padding:1.5rem">No runs yet. Launch one from <a href="/historical">Historical</a> or <a href="/live">Live</a>.</div>';
       return;
     }
     let html = '';
     for (const r of runs) {
-      const stateClass = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : '';
-      const prog = (r.progress && r.progress.total > 0)
-        ? ` · ${Math.min(100, Math.round(r.progress.done / r.progress.total * 100))}%` : '';
-      const rows = r.rows_written ? ` · ${r.rows_written.toLocaleString()} rows` : '';
+      const stateClass = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : 'muted';
+      const pct = (r.progress && r.progress.total > 0)
+        ? Math.min(100, Math.round(r.progress.done / r.progress.total * 100)) : null;
+      const meta = [
+        fmtNs(r.started_at),
+        pct !== null ? `${pct}%` : null,
+        r.rows_written ? `${fmtNum(r.rows_written)} rows` : null,
+      ].filter(Boolean).join(' · ');
       const logs = Array.isArray(r.log_tail) && r.log_tail.length
         ? r.log_tail.join('\n')
         : r.error ? `[ERROR] ${r.error}` : '(no logs)';
@@ -96,10 +107,14 @@ async function loadHistory() {
             <strong>${escapeHtml(r.operation)}</strong>
             <span class="muted">${escapeHtml(r.exchange)}</span> ${escapeHtml(r.symbol)}
             <span class="muted">${escapeHtml(r.data_type)}</span>
+            <span class="${stateClass}" style="font-size:.8rem">— ${escapeHtml(r.state)}</span>
           </span>
-          <span class="muted" style="font-size:.8em">${fmtNs(r.started_at)}${prog}${rows}</span>
+          <span class="muted" style="font-size:.8em">${meta}</span>
         </div>
-        <pre style="margin:.4rem 0 0;font-size:.75rem;background:var(--bg);border:1px solid var(--border);padding:.3rem .5rem;border-radius:4px;max-height:6rem;overflow-y:auto">${escapeHtml(logs)}</pre>
+        <details style="margin-top:.3rem">
+          <summary class="muted" style="cursor:pointer;font-size:.78rem">logs</summary>
+          <pre style="margin:.3rem 0 0;font-size:.75rem;background:var(--bg);border:1px solid var(--border);padding:.3rem .5rem;border-radius:4px;max-height:8rem;overflow-y:auto">${escapeHtml(logs)}</pre>
+        </details>
       </div>`;
     }
     document.getElementById('history-content').innerHTML = html;

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Data{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+  <h1 style="margin:0">Data</h1>
+  <button class="ghost" onclick="loadData()">↻ Refresh</button>
+</div>
+<p class="muted" style="margin:.2rem 0 .8rem">
+  Read-only view of everything stored on disk under <code>data_path</code>,
+  grouped by data type then exchange. To collect more, manage jobs on the
+  <a href="/historical">Historical</a> and <a href="/live">Live</a> pages.
+</p>
+
+<div id="data-summary" style="margin-bottom:.6rem"></div>
+
+<div class="tabs" id="data-tabs">
+  <button class="tab" data-tab="ohlc">OHLC</button>
+  <button class="tab" data-tab="trades">Trades</button>
+  <button class="tab" data-tab="orderbook">Order Book</button>
+</div>
+
+<div data-pane="ohlc"><span class="muted">Loading…</span></div>
+<div data-pane="trades"><span class="muted">Loading…</span></div>
+<div data-pane="orderbook"><span class="muted">Loading…</span></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const SPANS = {60:'1m',300:'5m',900:'15m',1800:'30m',3600:'1h',14400:'4h',86400:'1d',604800:'1w'};
+function spanLabel(s){ return s ? (SPANS[s]||s+'s') : '—'; }
+let DATASETS = [];
+
+async function loadData() {
+  try {
+    const { datasets } = await api('GET','/api/inventory');
+    DATASETS = datasets || [];
+    if (!DATASETS.length) {
+      document.getElementById('data-summary').innerHTML = '';
+      document.querySelectorAll('[data-pane]').forEach(p =>
+        p.innerHTML = `<div class="card muted" style="text-align:center;padding:2rem">
+          No datasets stored yet. Start collecting on the
+          <a href="/historical">Historical</a> page.</div>`);
+      return;
+    }
+    const totRows = DATASETS.reduce((a,d)=>a+(d.rows||0),0);
+    const totBytes = DATASETS.reduce((a,d)=>a+(d.bytes||0),0);
+    document.getElementById('data-summary').innerHTML =
+      `<div class="muted" style="font-size:.85rem">
+        ${DATASETS.length} dataset(s) · ${fmtNum(totRows)} rows · ${fmtBytes(totBytes)} on disk</div>`;
+    for (const dt of ['ohlc','trades','orderbook']) renderPane(dt);
+  } catch (e) {
+    document.querySelectorAll('[data-pane]').forEach(p =>
+      p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
+  }
+}
+
+function renderPane(dt) {
+  const pane = document.querySelector(`[data-pane="${dt}"]`);
+  const ds = DATASETS.filter(d => d.data_type === dt);
+  if (!ds.length) {
+    pane.innerHTML = `<div class="card muted" style="text-align:center;padding:1.5rem">
+      No ${dt} datasets stored.</div>`;
+    return;
+  }
+  const byEx = {};
+  for (const d of ds) (byEx[d.exchange] ||= []).push(d);
+
+  let html = '';
+  for (const ex of Object.keys(byEx).sort()) {
+    const rows = byEx[ex].reduce((a,d)=>a+(d.rows||0),0);
+    const bytes = byEx[ex].reduce((a,d)=>a+(d.bytes||0),0);
+    html += `<details class="ex" open><summary>
+      <span class="ex-name">${escapeHtml(ex)}</span>
+      <span class="ex-meta">${byEx[ex].length} dataset(s) · ${fmtNum(rows)} rows · ${fmtBytes(bytes)}</span>
+    </summary><div class="ex-body">
+    <table><thead><tr>
+      <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>Rows</th><th>From</th><th>To</th>
+      <th>Freshness</th>${dt==='ohlc'?'<th>Gaps</th>':''}<th>Size</th><th>Files</th>
+    </tr></thead><tbody>`;
+    for (const d of byEx[ex]) {
+      const fcls = stalenessClass(d.max_ts);
+      const gap = d.expected_rows
+        ? (d.missing_rows>0
+            ? `<td title="${d.missing_rows} missing bars"><span class="err">${(100*d.missing_rows/d.expected_rows).toFixed(1)}%</span></td>`
+            : '<td><span class="ok">0</span></td>')
+        : '<td><span class="muted">n/a</span></td>';
+      html += `<tr>
+        <td><strong>${escapeHtml(d.pair)}</strong></td>
+        ${dt==='ohlc'?`<td>${spanLabel(d.span)}</td>`:''}
+        <td class="muted">${fmtNum(d.rows||0)}</td>
+        <td class="muted" style="font-size:.8rem">${fmtNs(d.min_ts)}</td>
+        <td class="muted" style="font-size:.8rem">${fmtNs(d.max_ts)}</td>
+        <td style="font-size:.8rem"><span class="live-dot ${fcls}"></span>${fmtAge(d.max_ts)}</td>
+        ${dt==='ohlc'?gap:''}
+        <td class="muted" style="font-size:.8rem">${fmtBytes(d.bytes)}</td>
+        <td class="muted">${d.files??'—'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div></details>';
+  }
+  pane.innerHTML = html;
+}
+
+initTabs('#data-tabs');
+loadData();
+</script>
+{% endblock %}

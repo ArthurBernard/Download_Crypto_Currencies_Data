@@ -87,7 +87,7 @@ class BinanceSource(
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=5000),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=20),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -206,9 +206,14 @@ class BinanceSource(
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
-        """Stream live order-book snapshots/deltas over WebSocket."""
+        """Stream live order-book snapshots over WebSocket.
+
+        Uses Binance's *partial book depth* stream, which pushes a fully sorted
+        top-N snapshot — N is clamped to the supported {5, 10, 20}.
+        """
         pair = self.render_symbol(symbol).lower()
-        ws = _BinanceDepthWS(pair)
+        levels = 5 if depth <= 5 else 10 if depth <= 10 else 20
+        ws = _BinanceDepthWS(pair, levels)
         return ws.stream()
 
 
@@ -253,18 +258,24 @@ class _BinanceTradeWS(WebSocketBase):
 
 
 class _BinanceDepthWS(WebSocketBase):
-    def __init__(self, pair: str) -> None:
-        super().__init__(f"wss://stream.binance.com:9443/ws/{pair}@depth@100ms")
+    # Partial Book Depth Stream: a fully sorted top-N snapshot every 100ms
+    # (``bids`` best-first, ``asks`` best-first). NOT ``@depth`` (the *diff*
+    # stream), whose unsorted partial updates make best bid/ask meaningless and
+    # often crossed.
+    def __init__(self, pair: str, levels: int = 20) -> None:
+        super().__init__(f"wss://stream.binance.com:9443/ws/{pair}@depth{levels}@100ms")
 
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[OrderBookSnapshot]:
         """Parse a raw WebSocket frame into domain records."""
         import time
         data = json.loads(raw)
-        bids = [OrderBookLevel(price=float(b[0]), amount=float(b[1])) for b in data.get("b", [])]
-        asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in data.get("a", [])]
+        if "bids" not in data or "asks" not in data:
+            return
+        bids = [OrderBookLevel(price=float(b[0]), amount=float(b[1])) for b in data["bids"]]
+        asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in data["asks"]]
         yield OrderBookSnapshot(
             ts=s_to_ns(time.time()),
             bids=bids,
             asks=asks,
-            is_snapshot=False,
+            is_snapshot=True,
         )

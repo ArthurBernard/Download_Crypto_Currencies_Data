@@ -15,7 +15,7 @@ were found, and **reusable recipes** to keep finding them. Companion to
 
 | Layer | Command | Catches |
 |-------|---------|---------|
-| **Unit** | `pytest` | logic, schema, regressions (171 tests, network excluded) |
+| **Unit** | `pytest` | logic, schema, regressions (188 tests, network excluded) |
 | **Network E2E** | `pytest -m network` | real exchange APIs: pagination drains, symbol mapping, OHLC round-trip |
 | **Type** | `mypy dccd/` | strict on `domain/`, lenient glue (Success = green) |
 | **Lint** | `ruff check dccd/` | style, dead imports |
@@ -94,9 +94,16 @@ Severity: 🔴 data loss/corruption · 🟠 broken feature · 🟡 UX/correctnes
 | 18 | 🟡 | Stream stop took ~9 s (WS close handshake) | API E2E timing | `acb7625` |
 | 19 | 🟡 | Fabricated OHLC `quote_volume`; dead `parallel`/`Page`/htmx | code review | `dfcec9b` |
 | 20 | 🟡 | mypy never ran (aborted on Sphinx); CI silently red | running `mypy` | `500b2ec` |
+| 21 | 🟠 | Deleting a stream job left its worker running + controllable (config gone, worker not) | code review of the UI-rework PR (#76) | `0586fef` |
+| 22 | 🟡 | Historical *first date* edit reverted on reload — `GET /api/jobs` didn't return `start`, so the UI reset the field | **user feedback + tracing the field round-trip** | UI-polish PR |
 
 The pattern: **3 of the worst (🔴 #1, #5, #7) were invisible to unit tests and
 only surfaced by running the real operation and comparing input to output.**
+#21 came from the cross-file tracer angle: `register_streams()` was append-only,
+so the reconciliation (`sync_streams()`) had to be added when job-delete arrived.
+#22 is the same lesson at UI scale: a write (`POST /api/jobs/update`) is only
+real if the read (`GET /api/jobs`) returns the field back — test the round-trip,
+not just the write.
 
 ---
 
@@ -114,6 +121,10 @@ only surfaced by running the real operation and comparing input to output.**
 - **A first `start=last` backfill is bounded** per type (`_DEFAULT_LOOKBACK_NS`).
 - **Backfills are cancellable** (`stop_event` → `DELETE /api/backfill/{id}`).
 - **Adapters share one HTTP client** that is reference-counted (concurrency-safe).
+- **Stream workers are reconciled, not appended** — deleting a stream job runs
+  `Scheduler.sync_streams()` to stop+drop the worker (see #21).
+- **`EventBus` fans out to every registered queue** — SSE consumers `add_queue`
+  on connect and `remove_queue` on disconnect; Live + Logs can stream at once.
 
 ---
 
@@ -125,5 +136,10 @@ isolated `dccd ui`, then:
 ```bash
 python doc/dev/ui_smoke.py http://127.0.0.1:8137
 ```
-It walks every page + the backfill modal (OHLC/trades/orderbook + cancel) and
-fails if there is any console error, uncaught JS exception, or HTTP ≥400.
+It walks every page (Dashboard, Data, Historical, Live, Config, Logs, Storage),
+checks the `Collect ▾`/`System ▾` nav dropdowns route, exercises the inline
+Historical job flow (create → Run → delete) and a Live stream create/delete, and
+fails if there is any console error, uncaught JS exception, or HTTP ≥400. (The
+old backfill *modal* and the `/jobs` page were removed in the UI rework — actions
+are inline per page; `Inventory` was renamed `Data` with a `/inventory`→`/data`
+redirect.)

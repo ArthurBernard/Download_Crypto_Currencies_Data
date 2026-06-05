@@ -77,7 +77,7 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
             Capability(data_type=DataType.ORDERBOOK, transport="rest", mode="historical"),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live"),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=10),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -212,8 +212,13 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
         return ws.stream()
 
     def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
-        """Stream live order-book snapshots/deltas over WebSocket."""
-        ws = _BitMEXWS(self.render_symbol(symbol), "orderBookL2_25", "book")
+        """Stream live order-book snapshots over WebSocket.
+
+        Uses the ``orderBook10`` topic — a full top-10 snapshot on every update —
+        rather than ``orderBookL2_25``, whose id-keyed insert/update/delete deltas
+        carry no price on updates and can't yield a correct best bid-ask.
+        """
+        ws = _BitMEXWS(self.render_symbol(symbol), "orderBook10", "book")
         return ws.stream()
 
 
@@ -269,12 +274,10 @@ class _BitMEXWS(WebSocketBase):
                 )
 
         elif self._mode == "book":
-            bids, asks = [], []
+            # orderBook10: each frame carries the full top-10 as `bids`/`asks`
+            # arrays of [price, size] (bids best-first, asks best-first).
             for e in data["data"]:
-                lvl = OrderBookLevel(price=float(e.get("price", 0)), amount=float(e.get("size", 0)))
-                if e.get("side") == "Buy":
-                    bids.append(lvl)
-                else:
-                    asks.append(lvl)
-            if bids or asks:
-                yield OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks, is_snapshot=False)
+                bids = [OrderBookLevel(price=float(b[0]), amount=float(b[1])) for b in e.get("bids", [])]
+                asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in e.get("asks", [])]
+                if bids or asks:
+                    yield OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks, is_snapshot=True)

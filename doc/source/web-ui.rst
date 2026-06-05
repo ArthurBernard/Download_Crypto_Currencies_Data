@@ -29,6 +29,13 @@ To protect it, set ``settings.ui_auth_token`` — the API then requires a bearer
 token and the UI injects it automatically. For untrusted networks, keep the
 default ``127.0.0.1`` bind and/or put it behind a reverse proxy.
 
+Navigation
+==========
+
+The nav groups pages by purpose: **Dashboard** and **Data** are top-level, while
+**Collect ▾** (Historical, Live) and **System ▾** (Logs, Config, Storage) are
+drop-down menus.
+
 Pages
 =====
 
@@ -39,30 +46,40 @@ Pages
    * - Page
      - What it shows
    * - **Dashboard**
-     - Active runs with a live progress bar, recent run history, stream status, and a datasets summary.
-   * - **Inventory**
-     - Every dataset on disk under ``data_path``, grouped by exchange, with its row count and time range. Rows covered by a configured job are tagged ``● job``. Launch a backfill from the header or top-up a row's history; order-book rows offer a one-shot **Snapshot**.
-   * - **Jobs**
-     - Configured jobs grouped by exchange. *Run now* / *Run all* trigger one-shot backfills; *Start* / *Stop* control live streams.
+     - A KPI bar (datasets, rows stored, on-disk size, live streams, runs in progress), an *Active now* panel (running backfills with a live progress bar + live streams), recent runs, and a per-exchange data summary.
+   * - **Data**
+     - Read-only view of every dataset on disk under ``data_path`` — data-type tabs (OHLC / Trades / Order Book) → per-exchange accordions. Each row shows rows, time range, freshness dot, OHLC gap %, on-disk size, and file count. (Formerly *Inventory*; ``/inventory`` still redirects here.)
+   * - **Historical**
+     - Manage backfill jobs: data-type tabs → per-exchange accordions → one row per dataset with an editable **first date**, a real **coverage bar** (first date → today, reflecting stored data and holes), and inline **Run** / **Delete**. Order books have no history, so their action is a one-shot **📷 Snapshot**.
+   * - **Live**
+     - Manage streams: same tabs/accordions, with a **liveness** indicator (last price/quote + freshness) per stream and inline **Start** / **Stop** / **Delete**. Order-book streams expose a *snapshot every N s* interval.
    * - **Config**
-     - Edit ``settings`` / ``storage`` / ``alerts`` / ``jobs`` as a form (or raw JSON) and save back to ``config.yml`` — validated server-side.
+     - Edit ``settings`` / ``storage`` / ``alerts`` as a form (or the whole config as raw JSON) and save back to ``config.yml`` — validated server-side. Jobs are managed on Historical / Live (or the raw-JSON tab for bulk edits).
    * - **Logs**
-     - A live console (SSE) that streams a running job's log/progress/status, plus the recent-runs history with each run's log tail.
+     - Recent runs first (each with a human label and an expandable log tail), plus a live SSE console of whatever is running right now.
    * - **Storage**
-     - On-disk dataset breakdown by exchange and the v2→v3 migration tool (dry-run first).
+     - On-disk dataset breakdown by exchange with sizes, and the v2→v3 migration tool (dry-run first).
 
-The backfill modal
-==================
+Running backfills & watching streams
+====================================
 
-Launching a backfill opens a modal that **polls the run and shows live
-progress** (percentage by time covered, the timestamp reached, and the row
-count). A long run — e.g. a day of trades is millions of rows — can be cancelled
-with **Stop**, which keeps everything already collected. The default ``last``
-start uses a bounded look-back (short for trades) so a first click can't trigger
-a runaway download.
+On **Historical**, set a row's *first date* and click **Run** to fill the
+missing history. The coverage bar turns live and updates by time covered (and
+the row count) as the run progresses; **Run** becomes **Stop**, which cancels
+cooperatively and keeps everything already collected. The default ``last`` start
+uses a bounded look-back (short for trades) so a first click can't trigger a
+runaway download.
+
+On **Live**, the liveness column proves a stream is actually receiving data: a
+coloured dot (green while data is arriving within the data's cadence, then amber,
+then grey), the last value, and how long ago. It is seeded from the last
+on-disk point, so a page refresh shows freshness immediately rather than
+"waiting…"; the age reads as a relative "N min ago" for the last day and an
+absolute date beyond, or the last-run date-time once a stream is stopped.
 
 .. note::
 
-   Inventory lists **all data on disk**, independent of your configured jobs
-   (e.g. imported or migrated history). That is by design; the ``● job`` tag
-   marks the datasets actually covered by a job.
+   **Data** lists **all data on disk**, independent of your configured jobs
+   (e.g. imported or migrated history). On **Historical**, datasets on disk that
+   aren't tracked by a job are listed separately with a **+ Track** button to
+   adopt them as a job.
