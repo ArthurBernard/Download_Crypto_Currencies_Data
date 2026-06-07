@@ -6,7 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (v3 remediation, pre-3.0.0)
+### Added
+
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.0.0] - 2026-06-07
+
+### Added
 
 - Reworked web UI split by concern: a read-only enriched **Inventory** (data
   freshness, OHLC gap detection, on-disk size, per-exchange totals) and two
