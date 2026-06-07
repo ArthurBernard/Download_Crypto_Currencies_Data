@@ -21,12 +21,13 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
   CORS via `ui_allow_origins`.
 - **Quality gates**: ~191 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`
   clean; Sphinx 0 warnings; CI matrix 3.11–3.13.
+- **Released**: `v3.0.0` tagged on `master` (2026-06-07), superseding `v2.4.0` —
+  GitHub Release published. `develop` and `master` are level; the next feature
+  merge into `develop` reopens the rolling release PR (`/release next-cycle`).
 
 ## Pending
 
-- **Release**: v3 is `3.0.0` in `pyproject` but lives on `develop` and is **not
-  tagged**. Last published tag is `v2.4.0`. Releasing = `develop → master` +
-  `v3.0.0` tag (use the `release-gate` skill).
+_(nothing release-blocking — see the roadmap for the next epics)_
 
 ## Known gaps / sharp edges (by design or deferred)
 

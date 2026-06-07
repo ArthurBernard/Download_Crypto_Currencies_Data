@@ -16,17 +16,6 @@ shipped; `03-decisions.md` for *why*). Keep it short and true.
 
 ---
 
-## Ship v3.0 (near-term)
-
-The hexagonal rewrite (P0–P8) is done and lives on `develop`; what remains is to
-release it and finish the v3-era docs.
-
-- [ ] **Release v3.0** — `develop → master` + `v3.0.0` tag. `pyproject` already
-  says `3.0.0`; last published tag is `v2.4.0`. Use the `release-gate` skill
-  before, the `release` skill to cut it.
-
----
-
 ## Epic A — Run the app on a remote server
 
 Goal: `dccd start` (scheduler + streams + UI) running 24/7 on a VPS/home server,
