@@ -36,6 +36,7 @@ rules live in the repo-root `CLAUDE.md`.
 ## Conventions for keeping this current
 
 - This is descriptive, not aspirational: write what the repo **is**, not what it
-  should become (put plans in `TODO.md`, history in git/CHANGELOG).
+  should become (put plans in [`07-roadmap.md`](07-roadmap.md) — the single source
+  of open work — and history in git/CHANGELOG).
 - A prior snapshot of these docs (the v3 planning/retrospective set) is archived
   under `doc/dev/_archive/` — **gitignored**, kept locally for reference only.

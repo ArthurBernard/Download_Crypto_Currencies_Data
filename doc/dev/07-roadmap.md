@@ -8,8 +8,24 @@ off-box."** Much of the scaffolding already exists (`Dockerfile`,
 UX*, not greenfield.
 
 Status legend: `[ ]` todo · `[~]` partially in place · `[x]` done.
-(Operational/local scratch backlog stays in the gitignored root `TODO.md`; this
-file is the tracked, Claude-oriented plan.)
+
+This file is the **single source of truth** for open work — it is read by
+`/pick-task` and updated by `/finish-task` / `/abandon-task`. Finished work is
+*removed* from here (git log + `CHANGELOG.md` are authoritative for *what*
+shipped; `03-decisions.md` for *why*). Keep it short and true.
+
+---
+
+## Ship v3.0 (near-term)
+
+The hexagonal rewrite (P0–P8) is done and lives on `develop`; what remains is to
+release it and finish the v3-era docs.
+
+- [ ] **Release v3.0** — `develop → master` + `v3.0.0` tag. `pyproject` already
+  says `3.0.0`; last published tag is `v2.4.0`. Use the `release-gate` skill
+  before, the `release` skill to cut it.
+- [ ] **v3 docs sweep** — confirm `CLAUDE.md`, `README`, Sphinx (`doc/source/`)
+  and `examples/` all describe the v3 hexagonal architecture (no v2 leftovers).
 
 ---
 
@@ -86,3 +102,20 @@ loss doesn't lose data.
 
 Each epic should ship with a `doc/source/` how-to and, where it touches data,
 a pass of the `data-e2e` skill.
+
+---
+
+## Deferred — M3 (post-3.0)
+
+Larger axes intentionally parked until after the 3.0 release. Not started; do not
+treat as bugs (see `06-status.md`).
+
+- [ ] **MCP interface** — `interfaces/mcp/` mapped onto the operation registry
+  (same parity contract as API/CLI).
+- [ ] **Kraken deep OHLC from trades** — a `DerivedOHLCSource` wiring
+  `domain/transforms.aggregate_ohlc` into the resolver (REST only gives 720 recent
+  bars; the transform exists but isn't wired).
+- [ ] **Derivative markets** — `DataType` for funding / open-interest /
+  liquidations, `Symbol.market=perp`.
+- [ ] **Auth/secrets for private endpoints** — credential injection into
+  `transport/` for authenticated exchange endpoints.
