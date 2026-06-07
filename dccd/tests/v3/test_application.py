@@ -203,6 +203,34 @@ class TestJobCrud:
         cfg = AppConfig()
         assert cfg.update_job_start("nope", "2021-01-01") is False
 
+    def test_update_job_schedule_sets_interval(self):
+        cfg = AppConfig()
+        jid = cfg.add_job(operation="backfill", exchange="binance",
+                          pair="BTC/USDT", data_type="ohlc", span=60,
+                          trigger_kind="manual")
+        assert cfg.update_job_schedule(jid, 3600) is True
+        spec = next(s for s in cfg.all_job_specs() if s.id == jid)
+        assert spec.trigger.kind == "interval"
+        assert spec.trigger.every == 3600
+
+    def test_update_job_schedule_clear_to_manual(self):
+        cfg = AppConfig()
+        jid = cfg.add_job(operation="backfill", exchange="binance",
+                          pair="BTC/USDT", data_type="ohlc", span=60,
+                          trigger_kind="interval", every=3600)
+        assert cfg.update_job_schedule(jid, None) is True
+        spec = next(s for s in cfg.all_job_specs() if s.id == jid)
+        assert spec.trigger.kind == "manual"
+        assert spec.trigger.every is None
+
+    def test_update_job_schedule_rejects_below_span(self):
+        cfg = AppConfig()
+        jid = cfg.add_job(operation="backfill", exchange="binance",
+                          pair="BTC/USDT", data_type="ohlc", span=3600,
+                          trigger_kind="manual")
+        with pytest.raises(ValueError):
+            cfg.update_job_schedule(jid, 60)
+
 
 # ---------------------------------------------------------------------------
 # Jobs
@@ -246,13 +274,76 @@ class TestJobs:
 # Operation Registry
 # ---------------------------------------------------------------------------
 
+class TestSchedulerSyncIntervals:
+    """Scheduler reconciles recurring backfill loops without a restart."""
+
+    def _spec(self, every):
+        target = JobTarget(exchange="binance",
+                           symbol=Symbol(base="BTC", quote="USDT"),
+                           data_type=DataType.OHLC, span=60)
+        return JobSpec(
+            id=JobSpec.make_id("backfill", target),
+            operation="backfill", target=target,
+            trigger=Trigger(kind="interval", every=every),
+        )
+
+    @pytest.mark.asyncio
+    async def test_sync_intervals_adds_and_removes(self):
+        from dccd.application.scheduler import Scheduler
+
+        sched = Scheduler(registry=None, store=None)  # type: ignore[arg-type]
+
+        async def _noop(spec):
+            return None
+        sched._run_once = _noop  # type: ignore[assignment]
+
+        spec = self._spec(3600)
+        # Not running → no-op.
+        await sched.sync_intervals([spec])
+        assert spec.id not in sched._interval_loops
+
+        sched._running = True
+        await sched.sync_intervals([spec])
+        assert spec.id in sched._interval_loops
+
+        # Schedule removed → loop cancelled and dropped.
+        await sched.sync_intervals([])
+        assert spec.id not in sched._interval_loops
+        await sched.stop()
+
+    @pytest.mark.asyncio
+    async def test_sync_intervals_restarts_on_changed_cadence(self):
+        from dccd.application.scheduler import Scheduler
+
+        sched = Scheduler(registry=None, store=None)  # type: ignore[arg-type]
+
+        async def _noop(spec):
+            return None
+        sched._run_once = _noop  # type: ignore[assignment]
+        sched._running = True
+
+        await sched.sync_intervals([self._spec(3600)])
+        first = sched._interval_loops[JobSpec.make_id(
+            "backfill",
+            JobTarget(exchange="binance", symbol=Symbol(base="BTC", quote="USDT"),
+                      data_type=DataType.OHLC, span=60))][0]
+
+        await sched.sync_intervals([self._spec(86400)])
+        sid = JobSpec.make_id(
+            "backfill",
+            JobTarget(exchange="binance", symbol=Symbol(base="BTC", quote="USDT"),
+                      data_type=DataType.OHLC, span=60))
+        assert sched._interval_loops[sid][1] == 86400
+        assert sched._interval_loops[sid][0] is not first
+        await sched.stop()
+
+
 class TestOperationRegistry:
     def test_all_operations_registered(self):
         assert "backfill" in REGISTRY.operations
         assert "stream" in REGISTRY.operations
         assert "read" in REGISTRY.operations
         assert "inventory" in REGISTRY.operations
-        assert "migrate" in REGISTRY.operations
 
     def test_get_backfill_spec(self):
         spec = REGISTRY.get("backfill")
@@ -265,5 +356,5 @@ class TestOperationRegistry:
 
     def test_parity_api_cli(self):
         """Each operation must be accessible from both CLI and API (parity test)."""
-        required_ops = {"backfill", "stream", "read", "inventory", "migrate"}
+        required_ops = {"backfill", "stream", "read", "inventory"}
         assert required_ops.issubset(set(REGISTRY.operations))

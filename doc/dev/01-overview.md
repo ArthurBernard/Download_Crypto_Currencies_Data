@@ -12,7 +12,7 @@ Three ways to drive it, all over the same core:
 | Mode | Entry point | Use |
 |------|-------------|-----|
 | **Python API** | `async with Client() as c: await c.backfill(...)` | embed in code / notebooks |
-| **CLI** | `dccd` (Typer) — `backfill`, `stream`, `start`, `ui`, `migrate`, `inventory`, … | scripting / ops |
+| **CLI** | `dccd` (Typer) — `backfill`, `stream`, `start`, `ui`, `inventory`, … | scripting / ops |
 | **HTTP API + Web UI** | `dccd ui` (UI+API) or `dccd start` (full daemon) | FastAPI + Jinja2, browser dashboard |
 
 ## Current state (snapshot)
@@ -35,7 +35,7 @@ dccd/
   domain/         pure, sync, zero-I/O — models, capabilities, transforms, time
   transport/      async I/O primitives — http, ws, ratelimit, paginate
   sources/        one adapter per exchange (+ registry)
-  storage/        ParquetStore, RunsStore (SQLite), RemoteStorage, migrate
+  storage/        ParquetStore, RunsStore (SQLite), RemoteStorage
   application/    operations (backfill/stream/read/inventory), Scheduler,
                   EventBus, Config, jobs, registry, monitor, service_factory
   interfaces/     api/ (FastAPI) · cli/ (Typer) · ui/ (Jinja2 templates)

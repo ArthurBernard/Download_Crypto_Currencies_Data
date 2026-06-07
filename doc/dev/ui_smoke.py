@@ -66,6 +66,29 @@ async def main() -> int:
         await page.wait_for_timeout(800)
         step("/live" in page.url, "nav dropdown routes to Live")
 
+        # 1c. Structural invariants of the v3.2 UI rework.
+        await page.goto(BASE + "/", wait_until="domcontentloaded")
+        await page.wait_for_timeout(400)
+        step(await page.eval_on_selector("nav", "n => !!n.querySelector('.brand-group')")
+             and not await page.query_selector("header.topbar"),
+             "single-line nav (brand inside nav, no separate topbar)")
+
+        await page.goto(BASE + "/live", wait_until="domcontentloaded")
+        await page.wait_for_timeout(600)
+        live_tabs = await page.eval_on_selector_all("#live-tabs .tab", "els => els.map(e=>e.textContent.trim())")
+        step("OHLC" not in live_tabs and "Order Book" in live_tabs, "Live has no OHLC tab")
+
+        await page.goto(BASE + "/historical", wait_until="domcontentloaded")
+        await page.wait_for_timeout(600)
+        hist_tabs = await page.eval_on_selector_all("#hist-tabs .tab", "els => els.map(e=>e.textContent.trim())")
+        step("Order Book" not in hist_tabs and "OHLC" in hist_tabs, "Historical has no Order Book tab")
+        step(await page.eval_on_selector_all("button", "els => els.some(e=>e.textContent.includes('Run all'))"),
+             "Historical has a Run all button")
+
+        await page.goto(BASE + "/storage", wait_until="domcontentloaded")
+        await page.wait_for_timeout(400)
+        step("Migrate" not in await page.inner_text("body"), "Storage has no migrate tool")
+
         # 2. Historical: create a backfill job, run it, delete it.
         await page.goto(BASE + "/historical#ohlc", wait_until="domcontentloaded")
         await page.wait_for_timeout(1200)

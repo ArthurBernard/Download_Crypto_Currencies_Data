@@ -140,9 +140,6 @@ Config, events & storage
    * - ``GET``
      - ``/api/events``
      - **SSE** stream of live ``log`` / ``progress`` / ``status`` / ``sample`` events (``sample`` carries a stream's last ``value`` or ``bid``/``ask`` for liveness). Fans out to multiple concurrent consumers.
-   * - ``POST``
-     - ``/api/migrate``
-     - Migrate legacy v2 Parquet files; body ``{dry_run}``.
    * - ``GET``
      - ``/api/operations``
      - List registered operations.

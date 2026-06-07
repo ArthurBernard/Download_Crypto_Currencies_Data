@@ -105,6 +105,10 @@ class Scheduler:
         self._events = events or EventBus()
         self._streams: dict[str, _StreamWorker] = {}
         self._interval_tasks: list[asyncio.Task[None]] = []
+        # Per-spec recurring backfill loops, keyed by spec id, with the interval
+        # they were started for — so sync_intervals can reconcile (start new,
+        # cancel removed, restart on changed cadence) without a daemon restart.
+        self._interval_loops: dict[str, tuple[asyncio.Task[None], int | None]] = {}
         self._running = False
 
     def _track(self, task: asyncio.Task[None]) -> None:
@@ -142,6 +146,39 @@ class Scheduler:
                 await self._streams[sid].stop()
                 del self._streams[sid]
 
+    def _interval_of(self, spec: JobSpec) -> int:
+        """Resolve the recurring interval (seconds) for a backfill spec."""
+        return spec.trigger.every or spec.target.span or 3600
+
+    async def sync_intervals(self, specs: list[JobSpec]) -> None:
+        """Reconcile recurring backfill loops with *specs*.
+
+        Starts a loop for each newly-scheduled ``interval``/``cron`` backfill
+        job, cancels loops whose schedule was removed (now ``manual``/deleted),
+        and restarts a loop whose cadence changed. No-op unless the scheduler is
+        running (``dccd start``); in ``dccd ui`` mode schedules just persist to
+        config and take effect on the next daemon start.
+        """
+        if not self._running:
+            return
+        wanted = {
+            s.id: s for s in specs
+            if s.operation == "backfill" and s.enabled
+            and s.trigger.kind in ("interval", "cron")
+        }
+        for sid in list(self._interval_loops):
+            task, every = self._interval_loops[sid]
+            spec = wanted.get(sid)
+            if spec is None or task.done() or self._interval_of(spec) != every:
+                task.cancel()
+                del self._interval_loops[sid]
+        for sid, spec in wanted.items():
+            if sid not in self._interval_loops:
+                self._interval_loops[sid] = (
+                    asyncio.create_task(self._interval_loop(spec)),
+                    self._interval_of(spec),
+                )
+
     async def run_now(self, spec: JobSpec) -> None:
         """Trigger a one-shot backfill for *spec* immediately."""
         self._track(asyncio.create_task(self._run_once(spec)))
@@ -158,7 +195,10 @@ class Scheduler:
                     self._streams[spec.id] = worker
                 self._streams[spec.id].start()
             elif spec.trigger.kind in ("interval", "cron"):
-                self._track(asyncio.create_task(self._interval_loop(spec)))
+                self._interval_loops[spec.id] = (
+                    asyncio.create_task(self._interval_loop(spec)),
+                    self._interval_of(spec),
+                )
             elif spec.trigger.kind == "once":
                 # Track the task so stop() can cancel it and the event loop
                 # cannot silently GC it before it finishes.
@@ -169,9 +209,12 @@ class Scheduler:
         self._running = False
         for task in self._interval_tasks:
             task.cancel()
+        for task, _ in self._interval_loops.values():
+            task.cancel()
         for worker in self._streams.values():
             await worker.stop()
         self._interval_tasks.clear()
+        self._interval_loops.clear()
 
     async def _interval_loop(self, spec: JobSpec) -> None:
         every = spec.trigger.every or spec.target.span or 3600

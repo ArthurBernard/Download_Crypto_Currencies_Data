@@ -24,9 +24,13 @@ class RunState(str, Enum):
 
 
 class Trigger(BaseModel, frozen=True):
-    """Job trigger — when/how to execute."""
+    """Job trigger — when/how to execute.
 
-    kind: Literal["once", "interval", "cron", "supervised"]
+    ``manual`` jobs are never auto-run by the scheduler; they exist only to be
+    triggered on demand (the UI Run button / ``POST /api/jobs/run``).
+    """
+
+    kind: Literal["once", "interval", "cron", "supervised", "manual"]
     at: int | None = None
     every: int | None = None
     cron: str | None = None

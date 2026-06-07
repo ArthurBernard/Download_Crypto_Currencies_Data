@@ -77,7 +77,7 @@ Do not add `Co-Authored-By` trailers to commits — this is a personal repo.
 ### Three usage modes
 
 1. **Python API** — `async with Client() as c: await c.backfill(...)`.
-2. **CLI** — `dccd` command (backfill, stream, start, ui, migrate, …).
+2. **CLI** — `dccd` command (backfill, stream, start, ui, …).
 3. **HTTP API / UI** — FastAPI server + Jinja2 templates (`dccd ui` or `dccd start`).
 
 ### Package structure
@@ -87,7 +87,7 @@ dccd/
   domain/          # Pure, sync, zero I/O — models, capabilities, transforms
   transport/       # Async HTTP (httpx), WebSocket base, RateLimiter, Paginator
   sources/         # Exchange adapters (Source protocols + registry)
-  storage/         # ParquetStore, RunsStore (SQLite), RemoteStorage, migration
+  storage/         # ParquetStore, RunsStore (SQLite), RemoteStorage
   application/     # Operations (backfill, stream), Scheduler, EventBus, Config
   interfaces/
     api/           # FastAPI app (1:1 with OperationRegistry)
@@ -161,7 +161,6 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 | `parquet.py` | `ParquetStore` — read/write Parquet (ns, provenance, dedup); `inventory()` enriched with on-disk `bytes` and (OHLC only) `expected_rows`/`missing_rows` gap detection at zero extra I/O |
 | `runs_sqlite.py` | `RunsStore` — SQLite WAL, append-only job run history |
 | `remote.py` | `RemoteStorage` — rclone sync |
-| `migrate.py` | `migrate_parquet_to_ns` — one-shot v2→v3 migration |
 
 **Layout**: `{data_path}/{exchange}/ohlc/{pair}/{span}/YYYY.parquet` (annual) and `.../trades/{pair}/YYYY-MM-DD.parquet` (daily).
 
@@ -173,7 +172,7 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 | `events.py` | `EventBus` — pub/sub with **multi-queue fan-out** (`add_queue`/`remove_queue`, `enable_queue` alias) so Live + Logs + Dashboard consume concurrently; events: `ProgressEvent`, `LogEvent`, `StatusEvent`, `StreamSampleEvent` |
 | `jobs.py` | `JobSpec`, `JobRun`, `Trigger`, `JobParams` |
 | `operations.py` | `backfill()`, `stream()` (emits throttled `StreamSampleEvent` ≤1/s for Live liveness), `read()`, `inventory()` |
-| `scheduler.py` | `Scheduler` — async interval/supervised/once job orchestration; `sync_streams()` reconciles desired vs running stream workers (stops+drops deleted ones) |
+| `scheduler.py` | `Scheduler` — async interval/supervised/once job orchestration; `sync_streams()` reconciles stream workers and `sync_intervals()` reconciles recurring backfill loops (start/cancel/restart on cadence change, keyed by spec id) — both stop+drop deleted ones |
 | `registry.py` | `REGISTRY` — maps operation names to schemas (parity enforcement) |
 | `monitor.py` | `HealthMonitor` — EventBus subscriber, webhook alerts |
 | `service_factory.py` | `build_registry()`, `build_store()`, `build_runs_store()` — **single source of truth for wiring** |
@@ -182,13 +181,14 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 
 ### Interfaces (`interfaces/`)
 
-- `api/app.py` — FastAPI `create_app()`, lifespan context manager, module-level Pydantic request models. Job CRUD lives here: `POST /api/jobs/{create,delete,update}` (body-based to allow `/`/`:` in ids), all routed through the async `_persist_and_refresh` helper (writes YAML, updates `app.state`, calls `scheduler.sync_streams`). `GET /api/jobs` exposes `start`/`every`/`snapshot_interval`/`depth` so the UI can render and preserve them. SSE at `GET /api/events` uses `add_queue`/`remove_queue` for multi-consumer fan-out.
+- `api/app.py` — FastAPI `create_app()`, lifespan context manager, module-level Pydantic request models. Job CRUD lives here: `POST /api/jobs/{create,delete,update}` (body-based to allow `/`/`:` in ids), all routed through the async `_persist_and_refresh` helper (writes YAML, updates `app.state`, calls `scheduler.sync_streams` **and** `scheduler.sync_intervals` to reconcile recurring backfills live). `POST /api/jobs/update` edits `start` and/or the recurring `every` (schedule). `GET /api/jobs` exposes `start`/`every`/`trigger`/`snapshot_interval`/`depth` so the UI can render and preserve them. `POST /api/jobs/run` + `/api/jobs/run-all` trigger configured backfills on demand. SSE at `GET /api/events` uses `add_queue`/`remove_queue` for multi-consumer fan-out.
 - `cli/main.py` — Typer commands, all import from `service_factory`
 - `ui/` — Jinja2 templates + static files. Nav: `Dashboard` · `Data` flat, plus `Collect ▾` (Historical/Live) and `System ▾` (Logs/Config/Storage) dropdowns. Pages are **split by concern**:
   - **Data** (`data.html`, route `/data`; `/inventory` 307-redirects here) — read-only view of what's on disk: DataType tabs → per-exchange accordions with totals, freshness dot, OHLC gap %, on-disk size, file count. No action buttons.
-  - **Historical** (`historical.html`) — backfill jobs: DataType tabs → exchange accordions → one row per dataset with editable `first_date` (defaults to the dataset's earliest stored bar), real coverage bar, inline Run/Delete, add/import forms. Order book has no history → "Run" is a one-shot **Snapshot** (no coverage bar).
-  - **Live** (`live.html`) — stream jobs: same tab/accordion shape, with a liveness indicator fed by `StreamSampleEvent` over SSE (numeric `value`/`bid`/`ask`, formatted client-side via `fmtNum`). Liveness is **seeded from the last on-disk point** (inventory `max_ts`) so a refresh shows freshness without waiting for a live sample. The dot's "fresh" window is span-aware (OHLC span / order-book `snapshot_interval` / short for trades); the freshness label is a relative "N ago" under 24h (`fmtFreshness`) and an absolute date beyond, or the last-run date-time when stopped. Cadence column + `snapshot_interval` field for order book. Inline Start/Stop/Delete.
-  - `dashboard.html` (KPIs + Active now / Recent runs / Data), `logs.html` (recent runs first, live console secondary, human run labels), `config.html` (Settings/Alerts/Storage + Raw JSON — **no jobs form**; jobs are managed on Historical/Live), `storage.html` (sizes via `fmtBytes`).
+  - **Historical** (`historical.html`) — backfill jobs (**OHLC + Trades only**; order books have no REST history): DataType tabs → exchange accordions → one row per dataset with editable `first_date` (defaults to the dataset's earliest stored bar), a **Schedule** select (Off/hourly/daily/custom → `every`; `manual` trigger when off), real coverage bar, inline Run/Delete. **Run all** (header) + per-exchange **Run all**. New jobs default to `manual`.
+  - **Live** (`live.html`) — stream jobs (**Trades + Order Book only**; OHLC is collected via the Historical schedule, not streamed): same tab/accordion shape, with a liveness indicator fed by `StreamSampleEvent` over SSE (numeric `value`/`bid`/`ask`, formatted client-side via `fmtNum`). Liveness is **seeded from the last on-disk point** (inventory `max_ts`) so a refresh shows freshness without waiting for a live sample. The dot's "fresh" window is span-aware (order-book `snapshot_interval` / short for trades); the freshness label is a relative "N ago" under 24h (`fmtFreshness`) and an absolute date beyond, or the last-run date-time when stopped. Cadence column + `snapshot_interval` field for order book. Inline Start/Stop/Delete.
+  - Single top bar carries the brand (logo · `dccd` · version) left and the nav right. Dates render in `settings.timezone` (`local`/`UTC`/zoneinfo) via `DCCD_TZ` in `fmtNs`/`fmtDate`; relative ages are tz-independent.
+  - `dashboard.html` (KPIs + Active now / Recent runs / Data), `logs.html` (recent runs first, live console secondary, human run labels), `config.html` (Settings incl. `timezone`/Alerts/Storage + Raw JSON — **no jobs form**; jobs are managed on Historical/Live), `storage.html` (sizes via `fmtBytes`; no migrate tool).
 
 **UI↔API contract**: UI is a pure HTTP client of the API — no direct calls to application layer. Inline job create/edit/delete on Historical/Live go through `/api/jobs/*`; the Config page no longer manages jobs (edit the `jobs` array via its Raw JSON tab if needed).
 
@@ -201,7 +201,7 @@ Coverage is measured on every run (`--cov=dccd`). CI matrix: Python 3.11–3.13.
 Key test files:
 - `test_domain.py` + `test_domain_extended.py` — domain models, transforms, config validation
 - `test_sources.py` — capability declarations, protocol compliance, symbol mapping
-- `test_storage.py` + `test_storage_extended.py` + `test_storage_migration.py` — ParquetStore, dedup keys, v2→v3 migration round-trip
+- `test_storage.py` + `test_storage_extended.py` — ParquetStore, dedup keys, gap detection
 - `test_application.py` — EventBus (multi-queue fan-out, `sample`), JobSpec, OperationRegistry parity, `AppConfig` job CRUD (incl. multi-pair split)
 - `test_api.py` — FastAPI endpoints (incl. auth, backfill cancel, `/api/jobs/{create,delete,update}`, stream-delete unregisters worker) via TestClient
 - `test_transport.py` — AsyncHTTPClient concurrency safety

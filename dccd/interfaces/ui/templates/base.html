@@ -11,14 +11,17 @@
     * { box-sizing: border-box; }
     body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg);
            color:var(--fg); }
-    header.topbar { display:flex; align-items:center; gap:.6rem; padding:.6rem 1rem;
-            background:var(--card); border-bottom:1px solid var(--border); }
-    header.topbar img { height:30px; width:auto; display:block; }
-    header.topbar .brand { font-size:1.15rem; font-weight:700; letter-spacing:.02em; }
-    header.topbar .ver { color:var(--muted); font-size:.8rem; font-family:ui-monospace,monospace; }
-    nav { display:flex; gap:.25rem; flex-wrap:wrap; padding:.4rem 1rem;
-          background:var(--card); border-bottom:1px solid var(--border);
+    nav { display:flex; gap:.25rem; align-items:center; flex-wrap:wrap;
+          padding:.4rem 1rem; background:var(--card);
+          border-bottom:1px solid var(--border);
           position:sticky; top:0; z-index:5; }
+    nav .brand-group { display:flex; align-items:center; gap:.5rem;
+            margin-right:auto; }
+    nav .brand-group img { height:28px; width:auto; display:block; }
+    nav .brand-group .brand { font-size:1.1rem; font-weight:700;
+            letter-spacing:.02em; color:var(--fg); }
+    nav .brand-group .ver { color:var(--muted); font-size:.78rem;
+            font-family:ui-monospace,monospace; }
     nav a { color:var(--muted); text-decoration:none; padding:.4rem .8rem;
             border-radius:6px; }
     nav a:hover { background:var(--border); color:var(--fg); }
@@ -128,12 +131,12 @@
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <img src="/static/logo.svg" alt="dccd logo">
-    <span class="brand">dccd</span>
-    <span class="ver">v{{ version }}</span>
-  </header>
   <nav>
+    <a href="/" class="brand-group" style="text-decoration:none">
+      <img src="/static/logo.svg" alt="dccd logo">
+      <span class="brand">dccd</span>
+      <span class="ver">v{{ version }}</span>
+    </a>
     <a href="/"{% if active == '/' %} class="active"{% endif %}>Dashboard</a>
     <a href="/data"{% if active in ['/data', '/inventory'] %} class="active"{% endif %}>Data</a>
     {% set collect = [('/historical', 'Historical'), ('/live', 'Live')] %}
@@ -167,15 +170,26 @@
   <div id="toast-root"></div>
   <script>
     // Minimal vanilla helpers shared across pages — no JS framework.
+    // Display timezone from settings.timezone: "local" (browser), "UTC", or a
+    // zoneinfo name (e.g. "Europe/Paris"). Absolute dates render in this zone.
+    const DCCD_TZ = "{{ timezone }}";
+    // Format a ms epoch as "YYYY-MM-DD HH:mm" in the configured display tz.
+    function fmtDate(ms) {
+      const opts = { year:'numeric', month:'2-digit', day:'2-digit',
+                     hour:'2-digit', minute:'2-digit', hour12:false };
+      if (DCCD_TZ && DCCD_TZ.toLowerCase() !== 'local') opts.timeZone = DCCD_TZ;
+      // en-CA yields "2024-01-02, 03:04" → drop the comma.
+      return new Date(ms).toLocaleString('en-CA', opts).replace(',', '');
+    }
     // ts in seconds → human date
     function fmtTs(ts) {
       if (ts == null) return '-';
-      return new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ');
+      return fmtDate(ts * 1000);
     }
     // ts in nanoseconds (v3 internal format) → human date
     function fmtNs(ns) {
       if (ns == null) return '-';
-      return new Date(ns / 1_000_000).toISOString().slice(0, 16).replace('T', ' ');
+      return fmtDate(ns / 1_000_000);
     }
     // Human "x ago" from a nanosecond timestamp (or ms via fromMs).
     function fmtAge(ns, fromMs) {

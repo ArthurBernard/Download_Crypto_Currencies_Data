@@ -92,6 +92,6 @@ Next steps
 
 - :doc:`stream-live` — record live trades as they happen.
 - :doc:`/how-to/schedule-daily` and the other How-to guides — scheduling, deep
-  trade history, syncing, migration.
+  trade history, syncing.
 - :doc:`/cli` — do the same from the command line: ``dccd backfill -e binance
   -s BTC/USDT -t ohlc --span 3600 --start 2026-06-01``.

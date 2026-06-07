@@ -95,12 +95,6 @@ class JobRunRequest(BaseModel):
     job_id: str
 
 
-class MigrateRequest(BaseModel):
-    """Request body for ``POST /api/migrate``."""
-
-    dry_run: bool = True
-
-
 class JobCreateRequest(BaseModel):
     """Request body for ``POST /api/jobs/create``."""
 
@@ -123,10 +117,16 @@ class JobIdRequest(BaseModel):
 
 
 class JobUpdateRequest(BaseModel):
-    """Request body for ``POST /api/jobs/update`` (edit first date)."""
+    """Request body for ``POST /api/jobs/update``.
+
+    Either field may be set: ``start`` edits the first date; ``every`` sets (or,
+    when ``None`` with ``schedule=True``, clears) the recurring backfill schedule.
+    """
 
     job_id: str
-    start: str
+    start: str | None = None
+    every: int | None = None
+    schedule: bool = False  # set True to apply ``every`` (incl. None = clear)
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +295,7 @@ def create_app(
         request.app.state.config = new_cfg
         request.app.state.all_specs = new_cfg.all_job_specs()
         await request.app.state.scheduler.sync_streams(request.app.state.all_specs)
+        await request.app.state.scheduler.sync_intervals(request.app.state.all_specs)
 
     def _run_backfill_tracked(request: Request, spec: JobSpec, run_id: str) -> None:
         """Spawn a backfill with a cancellable stop event registered by run_id."""
@@ -553,9 +554,17 @@ def create_app(
 
     @app.post("/api/jobs/update")
     async def update_job(body: JobUpdateRequest, request: Request) -> dict[str, Any]:
-        """Update a job's start (first date) and persist."""
+        """Update a job's first date and/or recurring schedule, then persist."""
         new_cfg = _cfg(request).model_copy(deep=True)
-        if not new_cfg.update_job_start(body.job_id, body.start):
+        found = False
+        try:
+            if body.start is not None:
+                found = new_cfg.update_job_start(body.job_id, body.start) or found
+            if body.schedule:
+                found = new_cfg.update_job_schedule(body.job_id, body.every) or found
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if not found:
             raise HTTPException(404, f"Job {body.job_id!r} not found")
         await _persist_and_refresh(request, new_cfg)
         return {"status": "updated", "job_id": body.job_id}
@@ -606,21 +615,6 @@ def create_app(
         return StreamingResponse(_generator(), media_type="text/event-stream")
 
     # -----------------------------------------------------------------------
-    # Migration
-    # -----------------------------------------------------------------------
-
-    @app.post("/api/migrate")
-    async def migrate_data(body: MigrateRequest, request: Request) -> dict[str, Any]:
-        """Migrate existing Parquet files from seconds to nanosecond timestamps."""
-        from dccd.storage.migrate import migrate_parquet_to_ns
-        report = await asyncio.to_thread(
-            migrate_parquet_to_ns,
-            _cfg(request).settings.data_path,
-            dry_run=body.dry_run,
-        )
-        return {"report": report}
-
-    # -----------------------------------------------------------------------
     # Health
     # -----------------------------------------------------------------------
 
@@ -644,10 +638,12 @@ def create_app(
             except Exception:
                 ver = "dev"
             cfg = getattr(request.app.state, "config", None)
-            token = getattr(getattr(cfg, "settings", None), "ui_auth_token", None)
+            settings = getattr(cfg, "settings", None)
+            token = getattr(settings, "ui_auth_token", None)
+            tz = getattr(settings, "timezone", None) or "local"
             return {
                 "active": request.url.path, "version": ver, "page": page,
-                "auth_token": token or "",
+                "auth_token": token or "", "timezone": tz,
             }
 
         # Starlette >= 0.29 / 1.x signature: TemplateResponse(request, name, context)

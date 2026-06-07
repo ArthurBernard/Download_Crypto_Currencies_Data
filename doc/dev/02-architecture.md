@@ -65,8 +65,6 @@ honest. New exchange = add the adapter + register it in
 - `runs_sqlite.py` — `RunsStore`: SQLite WAL, append-only run history (progress,
   log tail, state) for polling.
 - `remote.py` — `RemoteStorage`: rclone sync.
-- `migrate.py` — `migrate_parquet_to_ns`: one-shot v2→v3 (rename columns, drop
-  `weightedAverage`, rescale s→ns; schema-aware + idempotent).
 
 ### application/
 - `operations.py` — the verbs: `backfill()`, `stream()`, `read()`, `inventory()`.

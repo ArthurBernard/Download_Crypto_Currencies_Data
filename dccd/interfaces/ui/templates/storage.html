@@ -7,20 +7,6 @@
   <h2 style="margin-top:0">Datasets on disk</h2>
   <div id="inv-content"><span class="muted">Loading…</span></div>
 </div>
-
-<div class="card" style="margin-top:.5rem">
-  <h2 style="margin-top:0">Migrate v2 → v3</h2>
-  <p class="muted">Upgrade legacy v2 Parquet files to the v3 schema: rename
-  <code>quoteVolume</code>→<code>quote_volume</code>, drop <code>weightedAverage</code>,
-  add a <code>trades</code> column, and rescale second timestamps to nanoseconds.
-  Idempotent and never drops rows. Run dry-run first to preview.</p>
-  <div class="row" style="gap:.5rem">
-    <button onclick="migrate(true)">Dry run</button>
-    <button class="danger" onclick="confirmMigrate()">Migrate (irreversible)</button>
-    <span id="migrate-status"></span>
-  </div>
-  <pre id="migrate-report" style="min-height:4rem;margin-top:.5rem"></pre>
-</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -59,30 +45,6 @@ async function loadInventory() {
     document.getElementById('inv-content').innerHTML = html;
   } catch (e) {
     document.getElementById('inv-content').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
-  }
-}
-
-async function migrate(dryRun) {
-  const statusEl = document.getElementById('migrate-status');
-  const reportEl = document.getElementById('migrate-report');
-  statusEl.innerHTML = '<span class="muted">Running…</span>';
-  reportEl.textContent = '';
-  try {
-    const { report } = await api('POST', '/api/migrate', { dry_run: dryRun });
-    const migrated = report.filter(r => r.migrated).length;
-    const total = report.length;
-    statusEl.innerHTML = `<span class="ok">${dryRun ? '[dry-run] ' : ''}${migrated}/${total} files ${dryRun ? 'would be' : ''} migrated</span>`;
-    reportEl.textContent = report.map(r =>
-      `${r.migrated ? (dryRun ? 'WOULD MIGRATE' : 'MIGRATED') : 'SKIP      '} ${r.path} (${r.rows} rows)`
-    ).join('\n');
-  } catch (e) {
-    statusEl.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
-  }
-}
-
-function confirmMigrate() {
-  if (confirm('Migrate all legacy v2 Parquet files to the v3 schema? This is irreversible without a backup.')) {
-    migrate(false);
   }
 }
 

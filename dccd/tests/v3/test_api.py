@@ -183,6 +183,28 @@ class TestJobCrudEndpoints:
         assert client.post("/api/jobs/update",
                            json={"job_id": "nope", "start": "2020-01-01"}).status_code == 404
 
+    def test_update_schedule(self, client):
+        job_id = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "kraken",
+            "symbol": "ETH/USD", "data_type": "ohlc", "span": 3600,
+            "trigger_kind": "manual",
+        }).json()["job_id"]
+        # Set a daily cron.
+        u = client.post("/api/jobs/update",
+                        json={"job_id": job_id, "schedule": True, "every": 86400})
+        assert u.status_code == 200
+        job = next(j for j in client.get("/api/jobs").json()["jobs"] if j["id"] == job_id)
+        assert job["trigger"] == "interval" and job["every"] == 86400
+        # Interval below the span is rejected.
+        bad = client.post("/api/jobs/update",
+                          json={"job_id": job_id, "schedule": True, "every": 60})
+        assert bad.status_code == 400
+        # Clearing returns to manual.
+        client.post("/api/jobs/update",
+                    json={"job_id": job_id, "schedule": True, "every": None})
+        job = next(j for j in client.get("/api/jobs").json()["jobs"] if j["id"] == job_id)
+        assert job["trigger"] == "manual"
+
     def test_create_stream_appears_in_streams(self, client):
         client.post("/api/jobs/create", json={
             "operation": "stream", "exchange": "binance",
@@ -233,8 +255,7 @@ class TestRunsEndpoint:
 
 
 class TestMigrateEndpoint:
-    def test_migrate_dry_run(self, client):
+    def test_migrate_endpoint_removed(self, client):
+        # The v2→v3 migrate feature has been removed entirely.
         resp = client.post("/api/migrate", json={"dry_run": True})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "report" in data
+        assert resp.status_code == 404
