@@ -78,8 +78,8 @@ Key design rules
   the engine resolves against them and raises
   :class:`~dccd.domain.errors.NoCapability` early rather than failing midway or
   running an empty stream.
-- **Nanosecond UTC timestamps everywhere** (``int64``). Legacy v2 frames are
-  normalised on read/merge/migration.
+- **Nanosecond UTC timestamps everywhere** (``int64``). Legacy frames are
+  normalised on read/merge (``ParquetStore.canonicalize``).
 - **The UI is a thin client of the API** — no direct calls into the application
   layer, so the front-end can be replaced without touching business logic.
 

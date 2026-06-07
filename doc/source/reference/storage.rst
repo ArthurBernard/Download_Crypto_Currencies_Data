@@ -76,9 +76,3 @@ Run history
 
 .. autoclass:: dccd.storage.runs_sqlite.RunsStore
    :members:
-
-Migration
-=========
-
-.. automodule:: dccd.storage.migrate
-   :members:

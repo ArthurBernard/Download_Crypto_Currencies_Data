@@ -92,10 +92,3 @@ REGISTRY.register(OperationSpec(
     input_schema={},
     output_schema={"datasets": "list"},
 ))
-
-REGISTRY.register(OperationSpec(
-    name="migrate",
-    description="Migrate Parquet files from seconds to nanoseconds.",
-    input_schema={"dry_run": "bool"},
-    output_schema={"report": "list"},
-))

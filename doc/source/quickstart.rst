@@ -75,16 +75,3 @@ CLI
 
 See :doc:`cli` for the full command reference and :doc:`configuration` for the
 YAML config.
-
-Migrating existing v2 data
-==========================
-
-If you have Parquet files from dccd v2, migrate them to the v3 schema
-(``quote_volume``/``trades`` columns, nanosecond timestamps) in place:
-
-.. code-block:: bash
-
-   dccd migrate --dry-run    # preview
-   dccd migrate --no-dry-run # apply
-
-The migration is idempotent and never drops rows.

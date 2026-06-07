@@ -1,7 +1,6 @@
 """Tests for v3 storage layer."""
 
 
-import polars as pl
 import pytest
 
 from dccd.domain.dataset import DatasetId
@@ -9,7 +8,6 @@ from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trad
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
-from dccd.storage.migrate import needs_migration
 from dccd.storage.parquet import ParquetStore
 from dccd.storage.runs_sqlite import RunsStore
 
@@ -179,17 +177,3 @@ class TestRunsStore:
         import json
         prog = json.loads(run["progress"])
         assert prog["done"] == 5
-
-
-class TestMigration:
-    def test_needs_migration_seconds(self, tmp_path):
-        f = tmp_path / "test.parquet"
-        df = pl.DataFrame({"TS": [1_000_000, 1_001_000], "close": [100.0, 101.0]})
-        df.write_parquet(f)
-        assert needs_migration(f) is True
-
-    def test_no_migration_ns(self, tmp_path):
-        f = tmp_path / "test.parquet"
-        df = pl.DataFrame({"TS": [1_000_000_000_000_000_000, 1_001_000_000_000_000_000], "close": [100.0, 101.0]})
-        df.write_parquet(f)
-        assert needs_migration(f) is False

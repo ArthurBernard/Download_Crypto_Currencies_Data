@@ -36,9 +36,14 @@ Recent releases
 - **Job CRUD over the API** (``/api/jobs/create|update|delete``); ``inventory``
   reports on-disk bytes + OHLC gaps; ``EventBus`` fans out to multiple SSE
   consumers with a stream liveness sample.
-- Complete v2→v3 Parquet migration (``dccd migrate``); Bearer auth on
-  ``/api/*``; cursor-based trades pagination (fixes silent loss of >95 % of
-  trades).
+- **UI polish**: single-line top bar (brand + nav); OHLC moved out of *Live*
+  into a recurring **Schedule** (cron) on *Historical*; order books removed from
+  *Historical* (no REST history); **Run all** / per-exchange run; timezone-aware
+  dates via ``settings.timezone``.
+- Bearer auth on ``/api/*``; cursor-based trades pagination (fixes silent loss
+  of >95 % of trades).
+- **Removed** the v2→v3 Parquet migration tool (``dccd migrate`` /
+  ``/api/migrate``); fixed Kraken live OHLC timestamps (read ``interval_begin``).
 - Sphinx documentation refonte: structured sidebar, exchange-specific pages,
   hero banner, installation guide, CLI reference, configuration reference,
   candlestick logo (#59)

@@ -87,8 +87,9 @@ well, but the first cut shipped with data-correctness regressions that unit test
 missed: a GC'd backfill task writing 0 rows, trades pagination losing >95% of
 data, dedup collapsing trades, provenance never written, the engine ignoring
 declared capabilities, and a "Stop" button that did nothing. A remediation pass
-fixed these, added cursor pagination, a real v2→v3 migration (run and verified on
-the existing ~120 files, zero loss), Bearer auth, and network-marked E2E tests.
+fixed these, added cursor pagination, a one-shot v2→v3 migration (run and
+verified on the existing ~120 files, zero loss, since removed), Bearer auth, and
+network-marked E2E tests.
 
 The recurring lesson — now baked into how we test — is **challenge every result
 on real data**: a green unit suite said nothing about a backfill that wrote 0

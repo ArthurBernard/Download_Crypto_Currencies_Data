@@ -23,7 +23,6 @@ Examples
    dccd backfill -e okx -s BTC/USDT -t trades --start 2024-01-01
    dccd stream                 # run configured stream jobs
    dccd start                  # full daemon: scheduler + streams + web UI
-   dccd migrate --no-dry-run   # upgrade legacy v2 Parquet files
    dccd inventory              # list stored datasets
 
 Commands

@@ -18,20 +18,16 @@
 
 <div class="tabs" id="live-tabs">
   <button class="tab" data-tab="trades">Trades</button>
-  <button class="tab" data-tab="ohlc">OHLC</button>
   <button class="tab" data-tab="orderbook">Order Book</button>
 </div>
 
 <div data-pane="trades"><span class="muted">Loading…</span></div>
-<div data-pane="ohlc"><span class="muted">Loading…</span></div>
 <div data-pane="orderbook"><span class="muted">Loading…</span></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 const EXCHANGES = ['binance','coinbase','kraken','bybit','okx','bitfinex','bitmex'];
-const SPANS = [[60,'1m'],[300,'5m'],[900,'15m'],[1800,'30m'],[3600,'1h'],
-               [14400,'4h'],[86400,'1d']];
 let JOBS = [], RUNNING = {}, INV = [], openExchanges = {};
 // spec_id -> { value|bid|ask, ts(ns), live }. `live` marks a real-time SSE
 // sample; entries without it are seeded from on-disk data (last stored point).
@@ -39,11 +35,9 @@ const samples = {};
 let lastSig = '';
 
 function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
-function spanLabel(s){ const m = SPANS.find(x=>x[0]===s); return m?m[1]:(s?s+'s':'—'); }
 function invFor(j) {
   const pair = j.symbol.replace(/\//g,'-');
-  return INV.find(d => d.exchange===j.exchange && d.pair===pair && d.data_type===j.data_type
-    && (j.data_type!=='ohlc' || d.span===j.span));
+  return INV.find(d => d.exchange===j.exchange && d.pair===pair && d.data_type===j.data_type);
 }
 
 async function loadAll() {
@@ -66,10 +60,10 @@ async function loadAll() {
     // Only rebuild the tables when the structure actually changed (jobs added/
     // removed, running-state flipped). Otherwise leave the DOM alone so the
     // span-cadenced liveness ticker isn't forced to repaint on every 8s poll.
-    const sig = JOBS.map(j => `${j.id}:${RUNNING[j.id]?1:0}:${j.span||''}:${j.snapshot_interval||''}`).join('|');
+    const sig = JOBS.map(j => `${j.id}:${RUNNING[j.id]?1:0}:${j.snapshot_interval||''}`).join('|');
     if (sig === lastSig) { refreshLiveness(); return; }
     lastSig = sig;
-    for (const dt of ['trades','ohlc','orderbook']) renderPane(dt);
+    for (const dt of ['trades','orderbook']) renderPane(dt);
   } catch (e) {
     document.querySelectorAll('[data-pane]').forEach(p =>
       p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
@@ -117,8 +111,8 @@ function rowHtml(j, dt) {
   const running = !!RUNNING[j.id];
   const state = running
     ? '<span class="ok">● live</span>' : '<span class="muted">○ stopped</span>';
-  const cadence = dt==='ohlc' ? spanLabel(j.span)
-    : dt==='orderbook' ? `<span title="snapshot interval">Δ ${j.snapshot_interval||60}s</span>`
+  const cadence = dt==='orderbook'
+    ? `<span title="snapshot interval">Δ ${j.snapshot_interval||60}s</span>`
     : '<span class="muted">tick</span>';
   return `<tr id="row-${sid(j.id)}">
     <td><strong>${escapeHtml(j.symbol)}</strong></td>
@@ -139,7 +133,6 @@ function rowHtml(j, dt) {
 // last sample is younger than this: a 1h OHLC bar / a 60s order-book snapshot
 // shouldn't read "dead" just because nothing arrived in the last 10s.
 function spanFor(j) {
-  if (j.data_type === 'ohlc') return j.span || 3600;
   if (j.data_type === 'orderbook') return j.snapshot_interval || 60;
   return 10;  // trades: a real-time feed, expect sub-10s ticks
 }
@@ -221,9 +214,7 @@ async function doDelete(jobId) {
 // --- add-stream forms ------------------------------------------------------
 function addFormHtml(ex, dt) {
   const k = sid(ex+dt);
-  const extra = dt==='ohlc'
-    ? `<div><label>Span</label><select id="span-${k}">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>`
-    : dt==='orderbook'
+  const extra = dt==='orderbook'
     ? `<div><label>Snapshot every (s)</label><input id="snap-${k}" type="number" value="60" min="1" style="width:6rem"></div>` : '';
   return `<div class="inline-form" id="addf-${k}" style="display:none">
     <div><label>Pair</label><input id="pair-${k}" placeholder="BTC/USDT" style="width:9rem"></div>
@@ -241,7 +232,6 @@ async function createStream(ex, dt) {
   if (!pair) { toast('Pair required','err'); return; }
   const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
                     trigger_kind:'supervised' };
-  if (dt==='ohlc') payload.span = parseInt(document.getElementById('span-'+k).value,10);
   if (dt==='orderbook') payload.snapshot_interval = parseInt(document.getElementById('snap-'+k).value,10)||60;
   try { await api('POST','/api/jobs/create', payload);
     toast('Stream created','ok'); await loadAll();
@@ -256,9 +246,7 @@ function toggleNewStream() {
     <div><label>Exchange</label><select id="ns-ex">${EXCHANGES.map(e=>`<option>${e}</option>`).join('')}</select></div>
     <div><label>Data type</label><select id="ns-dt" onchange="nsToggleSpan()">
       <option value="trades"${dt==='trades'?' selected':''}>Trades</option>
-      <option value="ohlc"${dt==='ohlc'?' selected':''}>OHLC</option>
       <option value="orderbook"${dt==='orderbook'?' selected':''}>Order Book</option></select></div>
-    <div id="ns-span-wrap"><label>Span</label><select id="ns-span">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>
     <div id="ns-snap-wrap" style="display:none"><label>Snapshot every (s)</label><input id="ns-snap" type="number" value="60" min="1" style="width:6rem"></div>
     <div><label>Pair</label><input id="ns-pair" placeholder="BTC/USDT" style="width:9rem"></div>
     <button style="font-size:.8rem" onclick="createNew()">Create</button>
@@ -269,7 +257,6 @@ function toggleNewStream() {
 }
 function nsToggleSpan() {
   const dt = document.getElementById('ns-dt').value;
-  document.getElementById('ns-span-wrap').style.display = dt==='ohlc' ? '' : 'none';
   document.getElementById('ns-snap-wrap').style.display = dt==='orderbook' ? '' : 'none';
 }
 async function createNew() {
@@ -279,7 +266,6 @@ async function createNew() {
   if (!pair) { toast('Pair required','err'); return; }
   const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
                     trigger_kind:'supervised' };
-  if (dt==='ohlc') payload.span = parseInt(document.getElementById('ns-span').value,10);
   if (dt==='orderbook') payload.snapshot_interval = parseInt(document.getElementById('ns-snap').value,10)||60;
   try { await api('POST','/api/jobs/create', payload);
     toast('Stream created','ok'); toggleNewStream();

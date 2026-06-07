@@ -11,8 +11,9 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
 - **Collection correctness**: capability-driven engine; cursor-based trades
   pagination; bounded first backfill; cancellable backfills; honest capabilities.
 - **Storage**: ns Parquet with provenance + per-type dedup; defensive legacy
-  reads; v2→v3 migration **run and verified** on the real ~120-file dataset (zero
-  loss, backed up first).
+  reads (`canonicalize` on merge). The one-shot v2→v3 migration tool was run on
+  the real ~120-file dataset (zero loss, backed up first) and has since been
+  **removed** — the data is migrated; new installs start on the v3 schema.
 - **Web UI** (PR #76 + polish): Data / Historical / Live / Dashboard / Logs /
   Config / Storage; inline job CRUD; SSE liveness; order-book best bid/ask +
   cadence fixed across all WS adapters.

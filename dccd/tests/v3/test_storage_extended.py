@@ -1,8 +1,7 @@
-"""Extended storage tests — migration, missing_intervals, active_runs, queue."""
+"""Extended storage tests — missing_intervals, active_runs, queue."""
 
 import pathlib
 
-import polars as pl
 import pytest
 
 from dccd.domain.dataset import DatasetId
@@ -10,52 +9,8 @@ from dccd.domain.records import OHLCBar
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
-from dccd.storage.migrate import migrate_parquet_to_ns, needs_migration
 from dccd.storage.parquet import ParquetStore
 from dccd.storage.runs_sqlite import RunsStore
-
-# ---------------------------------------------------------------------------
-# Migration round-trip
-# ---------------------------------------------------------------------------
-
-class TestMigrationRoundTrip:
-    def test_migrate_seconds_to_ns(self, tmp_path: pathlib.Path) -> None:
-        """Write a file with seconds-scale TS, migrate, verify ns timestamps."""
-        f = tmp_path / "test.parquet"
-        original_ts = [1_600_000_000, 1_600_003_600]
-        df = pl.DataFrame({
-            "TS": original_ts,
-            "open": [50000.0, 51000.0],
-            "close": [51000.0, 52000.0],
-        })
-        df.write_parquet(f)
-
-        assert needs_migration(f)
-        report = migrate_parquet_to_ns(tmp_path, dry_run=False)
-        assert any(r["migrated"] for r in report)
-
-        migrated = pl.read_parquet(f)
-        assert not needs_migration(f)
-        assert migrated["TS"][0] == original_ts[0] * NS
-        assert migrated["TS"][1] == original_ts[1] * NS
-
-    def test_dry_run_does_not_modify(self, tmp_path: pathlib.Path) -> None:
-        f = tmp_path / "test.parquet"
-        df = pl.DataFrame({"TS": [1_600_000_000], "close": [50000.0]})
-        df.write_parquet(f)
-
-        migrate_parquet_to_ns(tmp_path, dry_run=True)
-        assert needs_migration(f), "dry_run must not modify the file"
-
-    def test_already_ns_skipped(self, tmp_path: pathlib.Path) -> None:
-        f = tmp_path / "ns.parquet"
-        df = pl.DataFrame({"TS": [1_600_000_000 * NS], "close": [50000.0]})
-        df.write_parquet(f)
-
-        report = migrate_parquet_to_ns(tmp_path, dry_run=False)
-        not_migrated = [r for r in report if not r.get("migrated")]
-        assert any(str(f) in r["path"] for r in not_migrated)
-
 
 # ---------------------------------------------------------------------------
 # missing_intervals with partial existing year

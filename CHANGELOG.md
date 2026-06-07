@@ -35,9 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cursor-based trades pagination: the engine now follows each adapter's opaque
   cursor until a window is drained, instead of advancing by a fixed time window.
   Fixes silent loss of >95% of trades on every liquid pair (all exchanges).
-- Complete v2→v3 Parquet migration (`dccd migrate`): renames `quoteVolume`→
-  `quote_volume`, drops `weightedAverage`, adds a `trades` column, rescales
-  second timestamps to nanoseconds — schema-aware and idempotent.
+- UI: single-line top bar (brand + nav on one row); per-job **Schedule** on
+  Historical (a recurring backfill cron — Off/hourly/daily/custom, independent of
+  the span but `≥` it), reconciled live via `Scheduler.sync_intervals`; **Run
+  all** (global) and per-exchange run; timezone-aware date display driven by
+  `settings.timezone` (`local`/`UTC`/zoneinfo). OHLC removed from Live (collected
+  via Historical schedule); order books removed from Historical (no REST
+  history). `POST /api/jobs/update` now also sets `every` (schedule); new
+  `manual` trigger kind for never-auto-run jobs.
 - Bearer auth on `/api/*` when `settings.ui_auth_token` is set, with a `?token=`
   fallback for Server-Sent Events; `settings.ui_allow_origins` for opt-in CORS.
 - Public async `Client.read()` and `Client.stream()`; `Client` wires adapters
@@ -68,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   book) are rejected with `NoCapability` instead of "running" with zero output.
 - `history="recent"` exchanges (Kraken OHLC) are clamped + warned instead of
   silently returning wrong deep history.
+- Kraken live OHLC timestamps were epoch 0 (1970): the WS adapter read a
+  non-existent `timestamp_open`; it now parses `interval_begin` (ISO-8601).
 - `mypy dccd/` runs and passes again (it had been aborting on the dev Sphinx).
 
 ### Changed / Removed
@@ -76,6 +83,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `close×volume`); Kraken now fills its native trade count.
 - Removed the dead `parallel` backfill flag, the unused `Page` model and the
   unused bundled `htmx.min.js`.
+- Removed the v2→v3 Parquet migration tool entirely: `dccd migrate`,
+  `POST /api/migrate`, the Storage-page migrate card, `dccd/storage/migrate.py`,
+  and the `migrate` operation in the registry.
 
 > v3 is a full hexagonal rewrite. It **removes** the v2 daemon web UI shipped in
 > 2.4.0 (`dccd/daemon/*`) and replaces it with `dccd/interfaces/` (api/cli/ui).

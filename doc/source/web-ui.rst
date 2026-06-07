@@ -32,9 +32,14 @@ default ``127.0.0.1`` bind and/or put it behind a reverse proxy.
 Navigation
 ==========
 
-The nav groups pages by purpose: **Dashboard** and **Data** are top-level, while
-**Collect ▾** (Historical, Live) and **System ▾** (Logs, Config, Storage) are
-drop-down menus.
+A single top bar carries the brand (logo · ``dccd`` · version) on the left and
+the navigation on the right. The nav groups pages by purpose: **Dashboard** and
+**Data** are top-level, while **Collect ▾** (Historical, Live) and **System ▾**
+(Logs, Config, Storage) are drop-down menus.
+
+Dates are shown in the timezone set by ``settings.timezone`` (``local`` by
+default; also ``UTC`` or any zoneinfo name such as ``Europe/Paris``). Relative
+ages (“5 min ago”) are timezone-independent.
 
 Pages
 =====
@@ -50,15 +55,15 @@ Pages
    * - **Data**
      - Read-only view of every dataset on disk under ``data_path`` — data-type tabs (OHLC / Trades / Order Book) → per-exchange accordions. Each row shows rows, time range, freshness dot, OHLC gap %, on-disk size, and file count. (Formerly *Inventory*; ``/inventory`` still redirects here.)
    * - **Historical**
-     - Manage backfill jobs: data-type tabs → per-exchange accordions → one row per dataset with an editable **first date**, a real **coverage bar** (first date → today, reflecting stored data and holes), and inline **Run** / **Delete**. Order books have no history, so their action is a one-shot **📷 Snapshot**.
+     - Manage backfill jobs (**OHLC** and **Trades**): data-type tabs → per-exchange accordions → one row per dataset with an editable **first date**, a **Schedule** (Off / hourly / daily / custom — a recurring backfill run by the daemon), a real **coverage bar** (first date → today, reflecting stored data and holes), and inline **Run** / **Delete**. **Run all** (page header) and per-exchange **Run all** trigger every job at once. Order books have no REST history, so they live only on *Live*.
    * - **Live**
-     - Manage streams: same tabs/accordions, with a **liveness** indicator (last price/quote + freshness) per stream and inline **Start** / **Stop** / **Delete**. Order-book streams expose a *snapshot every N s* interval.
+     - Manage streams (**Trades** and **Order Book**): same tabs/accordions, with a **liveness** indicator (last price/quote + freshness) per stream and inline **Start** / **Stop** / **Delete**. Order-book streams expose a *snapshot every N s* interval. (OHLC is collected on *Historical* via a Schedule, not streamed live.)
    * - **Config**
      - Edit ``settings`` / ``storage`` / ``alerts`` as a form (or the whole config as raw JSON) and save back to ``config.yml`` — validated server-side. Jobs are managed on Historical / Live (or the raw-JSON tab for bulk edits).
    * - **Logs**
      - Recent runs first (each with a human label and an expandable log tail), plus a live SSE console of whatever is running right now.
    * - **Storage**
-     - On-disk dataset breakdown by exchange with sizes, and the v2→v3 migration tool (dry-run first).
+     - On-disk dataset breakdown by exchange with sizes and file counts.
 
 Running backfills & watching streams
 ====================================

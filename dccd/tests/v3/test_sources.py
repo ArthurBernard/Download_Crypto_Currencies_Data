@@ -275,3 +275,43 @@ class TestOrderBookWSParsing:
         assert snap.is_snapshot is True
         assert snap.bids[0].price == 100.0 and snap.asks[0].price == 101.0
         assert snap.bids[0].price < snap.asks[0].price
+
+
+class TestKrakenOHLCWSParsing:
+    """Kraken live OHLC must read ``interval_begin`` (not the missing
+    ``timestamp_open``), which previously defaulted to 0 → 1970-01-01."""
+
+    @pytest.mark.asyncio
+    async def test_kraken_ohlc_timestamp_from_interval_begin(self):
+        import json
+
+        from dccd.sources.kraken import _KrakenWS
+
+        ws = _KrakenWS("BTC/USD", "ohlc", 1)
+        frame = json.dumps({
+            "channel": "ohlc",
+            "type": "update",
+            "data": [{
+                "symbol": "BTC/USD",
+                "open": 60000.0, "high": 60100.0, "low": 59900.0,
+                "close": 60050.0, "volume": 1.5,
+                "interval_begin": "2024-01-02T03:04:00.000000000Z",
+                "interval": 1,
+            }],
+        })
+
+        async def _fake_raw():
+            yield frame
+
+        ws.stream_raw = _fake_raw  # type: ignore[method-assign]
+        bars = [b async for b in ws.stream_ohlc()]
+        assert len(bars) == 1
+        bar = bars[0]
+        assert bar.ts > 0
+        # 2024-01-02T03:04:00Z in ns.
+        from datetime import datetime, timezone
+        expected = int(
+            datetime(2024, 1, 2, 3, 4, tzinfo=timezone.utc).timestamp() * 1e9
+        )
+        assert bar.ts == expected
+        assert bar.close == 60050.0

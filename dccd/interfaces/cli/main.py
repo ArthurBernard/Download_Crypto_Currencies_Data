@@ -217,22 +217,6 @@ def cmd_inventory(
         typer.echo(f"  {' / '.join(parts)}  ({d['files']} file(s))")
 
 
-@app.command("migrate")
-def cmd_migrate(
-    config: Optional[pathlib.Path] = typer.Option(None, "--config", "-c"),
-    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run",
-                                  help="Preview changes without writing."),
-) -> None:
-    """Migrate existing Parquet files from second-scale to nanosecond timestamps."""
-    from dccd.storage.migrate import migrate_parquet_to_ns
-
-    cfg, _ = _load_cfg(config)
-    report = migrate_parquet_to_ns(cfg.settings.data_path, dry_run=dry_run)
-    migrated = sum(1 for r in report if r.get("migrated"))
-    prefix = "[dry-run] " if dry_run else ""
-    typer.echo(f"{prefix}{migrated}/{len(report)} files migrated")
-
-
 @app.command("ui")
 def cmd_ui(
     config: Optional[pathlib.Path] = typer.Option(None, "--config", "-c"),

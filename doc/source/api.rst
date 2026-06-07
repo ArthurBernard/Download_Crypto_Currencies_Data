@@ -40,7 +40,7 @@ Most users only need the :doc:`reference/client`.
       :link: reference/storage
       :link-type: doc
 
-      Parquet datasets, run history and v2→v3 migration.
+      Parquet datasets and run history.
 
    .. grid-item-card:: Application
       :link: reference/application

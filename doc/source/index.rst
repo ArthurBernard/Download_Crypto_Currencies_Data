@@ -63,7 +63,7 @@ New here? Start with :doc:`tutorials/first-backfill`.
       :link-type: doc
 
       ``dccd`` command line: ``backfill``, ``stream``, ``start`` (daemon +
-      web UI), ``migrate``, ``inventory`` — driven by a YAML config.
+      web UI), ``inventory`` — driven by a YAML config.
 
    .. grid-item-card:: API Reference
       :link: api
@@ -171,7 +171,6 @@ cursor-paginated and drain the full requested window.
    how-to/deep-trades
    how-to/analyse
    how-to/sync-remote
-   how-to/migrate
    how-to/protect-ui
    how-to/add-exchange
 

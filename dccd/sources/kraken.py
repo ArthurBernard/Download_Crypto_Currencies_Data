@@ -275,8 +275,18 @@ class _KrakenWS(WebSocketBase):
             if data.get("channel") != "ohlc":
                 continue
             for ohlc in data.get("data", []):
+                # Kraken WS v2 sends the bar-open time as ``interval_begin``
+                # (ISO-8601), not ``timestamp_open`` — reading the missing key
+                # defaulted to 0 → 1970-01-01.
+                ib = ohlc.get("interval_begin", "")
+                try:
+                    ts_ns = s_to_ns(
+                        datetime.fromisoformat(ib.replace("Z", "+00:00")).timestamp()
+                    )
+                except (ValueError, AttributeError):
+                    continue
                 yield OHLCBar(
-                    ts=int(float(ohlc.get("timestamp_open", 0)) * NS),
+                    ts=ts_ns,
                     open=float(ohlc.get("open", 0)),
                     high=float(ohlc.get("high", 0)),
                     low=float(ohlc.get("low", 0)),

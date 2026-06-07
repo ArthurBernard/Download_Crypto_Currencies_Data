@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -133,9 +134,17 @@ class JobConfig(BaseModel):
         """Expand a multi-pair JobConfig into a list of JobSpecs."""
         specs = []
         data_type = DataType(self.data_type)
+        # Only recurring triggers carry an interval; for ``interval``/``cron`` it
+        # defaults to the span when unset. ``manual``/``once``/``supervised``
+        # must not report a spurious cadence (the UI reads it as "scheduled").
+        every = (
+            (self.every or self.span)
+            if self.trigger_kind in ("interval", "cron")
+            else self.every
+        )
         trigger = Trigger(
             kind=self.trigger_kind,  # type: ignore[arg-type]
-            every=self.every or self.span,
+            every=every,
             cron=self.cron,
         )
         for pair in self.pairs:
@@ -268,6 +277,36 @@ class AppConfig(BaseModel):
         Multi-pair JobConfigs are split so only the targeted pair changes.
         Returns ``True`` if a matching job was found and updated.
         """
+        return self._update_job_fields(job_id, {"start": start})
+
+    def update_job_schedule(self, job_id: str, every: int | None) -> bool:
+        """Set the recurring backfill schedule of the job matching *job_id*.
+
+        ``every`` is the interval in seconds between automatic backfills (run by
+        the daemon's :class:`~dccd.application.scheduler.Scheduler` in
+        ``dccd start``); ``None`` clears the schedule (manual runs only). The
+        frequency is independent of the OHLC span but must not be smaller than
+        it — sampling more often than the bar size just refetches the same bar.
+
+        Multi-pair JobConfigs are split so only the targeted pair changes.
+        Returns ``True`` if a matching job was found and updated.
+        """
+        if every is not None:
+            for job in self.jobs:
+                if any(self._spec_id_of(job, p) == job_id for p in job.pairs):
+                    if job.span and every < job.span:
+                        raise ValueError(
+                            f"Schedule interval ({every}s) must be ≥ the span "
+                            f"({job.span}s)."
+                        )
+                    break
+        # ``every=None`` clears the schedule → a manual (never auto-run) job.
+        kind = "interval" if every is not None else "manual"
+        return self._update_job_fields(job_id, {"every": every, "trigger_kind": kind})
+
+    def _update_job_fields(self, job_id: str, fields: dict[str, Any]) -> bool:
+        """Apply *fields* to the single pair matching *job_id*, splitting the
+        owning multi-pair JobConfig so siblings are untouched."""
         new_jobs: list[JobConfig] = []
         found = False
         for job in self.jobs:
@@ -279,7 +318,7 @@ class AppConfig(BaseModel):
             others = [p for p in job.pairs if self._spec_id_of(job, p) != job_id]
             if others:
                 new_jobs.append(job.model_copy(update={"pairs": others}))
-            new_jobs.append(job.model_copy(update={"pairs": match, "start": start}))
+            new_jobs.append(job.model_copy(update={"pairs": match, **fields}))
         if found:
             self.jobs = new_jobs
         return found
