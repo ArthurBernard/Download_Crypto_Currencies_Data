@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-07 — v3 docs sweep: drop the v2 migration story, consolidate examples (PR #82) [accepted]
+- **Choice**: removed the README "Migrating from v2" section (and every `dccd
+  migrate` mention) outright rather than keeping a slim note; consolidated
+  `examples/` to v3 by deleting the redundant `historical_downloader.ipynb` and
+  rewriting the rest onto `Client` / `dccd.application` / the v3 `jobs:` config.
+- **Why**: the `dccd migrate` tool was already deleted in v3 (see the
+  Changed/Removed CHANGELOG entry), so the section documented a command that no
+  longer exists — a slim note would still imply an upgrade path that isn't there.
+  The two `historical_downloader.{py,ipynb}` were byte-for-byte the same v2 API;
+  keeping both doubles the maintenance surface for no added coverage. The v3
+  config now uses one `jobs:` list, so `settings.data_path` (what `build_store`
+  reads) is the canonical store root, not the legacy `storage.local_path`.
+- **Rejected alternatives**: keep a "breaking changes" note without commands
+  (still implies a migration path; the CHANGELOG already records the v2→v3
+  rupture); update both example downloaders in place (redundant — the notebook
+  added nothing the script didn't).
+
 ### 2026-06-07 — Tooled dev loop + single-source roadmap (PR #79) [accepted]
 - **Choice**: `doc/dev/07-roadmap.md` is the single source of open work (root
   `TODO.md` dropped); the dev loop is tooled by `/pick-task` → `/finish-task` /

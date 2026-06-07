@@ -79,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed / Removed
 
+- Docs/examples swept to v3: README drops the removed `dccd migrate` command and
+  the "Migrating from v2" section; `examples/` rewritten to the v3 `Client` and
+  `dccd.application` daemon wiring with a v3 `jobs:` config, and the stale v2
+  `historical_downloader.ipynb` removed. (#82)
 - Honest OHLC fidelity: Coinbase `quote_volume` is null (was a fabricated
   `close×volume`); Kraken now fills its native trade count.
 - Removed the dead `parallel` backfill flag, the unused `Page` model and the
