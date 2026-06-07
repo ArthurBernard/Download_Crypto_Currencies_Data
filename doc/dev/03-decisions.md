@@ -96,3 +96,40 @@ on real data**: a green unit suite said nothing about a backfill that wrote 0
 rows or a store that lost half its trades. See `05-testing.md`. The most recent
 round (the UI rework + order-book liveness fixes) followed the same method:
 drive the real UI, read what renders, compare to the feed.
+
+## Decision journal (ADR)
+
+Append-only, dated log of choices made since the v3 brief — fed by `/finish-task`
+(accepted) and `/abandon-task` (rejected / tombstone). The prose above is the
+*settled* rationale; this journal is the *running* one. **Newest first.**
+
+Conventions:
+- One entry per significant choice; skip the trivial (those live in
+  git/`CHANGELOG.md`).
+- `[tombstone]` = a feature was removed. Keep one line on *why it's gone* here and
+  **purge its implementation rationale from the prose above** — negative knowledge
+  so it isn't silently re-added later.
+
+Template:
+```
+### YYYY-MM-DD — <short title> (PR #NN)  [accepted|rejected|tombstone]
+- **Choice**: …
+- **Why**: …
+- **Rejected alternatives**: …
+```
+
+<!-- new entries below, newest first -->
+
+### 2026-06-07 — Tooled dev loop + single-source roadmap (PR #79) [accepted]
+- **Choice**: `doc/dev/07-roadmap.md` is the single source of open work (root
+  `TODO.md` dropped); the dev loop is tooled by `/pick-task` → `/finish-task` /
+  `/abandon-task`, with this journal capturing the *why* of each PR and
+  `/groom-docs` keeping `doc/dev/` lean.
+- **Why**: the roadmap was duplicated (gitignored `TODO.md` vs tracked roadmap)
+  and decisions/negative knowledge weren't captured — the exact drift the v3
+  retrospective flagged ("doc périmée"). One tracked source + capture-at-PR-time
+  kills it.
+- **Rejected alternatives**: a git hook that writes decisions from the diff
+  (can't reconstruct the *why* post-hoc — capture must happen while the context
+  is live, i.e. in the skills); keeping the `TODO.md` / roadmap split (leaves a
+  clean checkout blind to the backlog).
