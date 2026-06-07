@@ -1,0 +1,11 @@
+{
+  "package_dir": "dccd",
+  "base_branch": "develop",
+  "roadmap": "doc/dev/07-roadmap.md",
+  "decisions": "doc/dev/03-decisions.md",
+  "status": "doc/dev/06-status.md",
+  "changelog": "CHANGELOG.md",
+  "test_cmd": "pytest",
+  "lint_cmd": "ruff check dccd/",
+  "docs_src": "doc/source"
+}
