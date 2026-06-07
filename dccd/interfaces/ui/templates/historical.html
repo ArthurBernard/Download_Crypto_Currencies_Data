@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% block title %}Historical{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+  <h1 style="margin:0">Historical</h1>
+  <div class="row" style="gap:.5rem">
+    <button class="ghost" onclick="runAllJobs()">▶ Run all</button>
+    <button onclick="toggleNewExchange()">＋ Add</button>
+  </div>
+</div>
+<p class="muted" style="margin:.2rem 0 .6rem">
+  Manage historical collection jobs. Pick a data type, expand an exchange, then
+  set the <strong>first date</strong> you want to reach and hit <strong>Run</strong>
+  to fill the missing history. The bar shows real coverage from
+  <code>first&nbsp;date → today</code>. A <strong>Schedule</strong> turns a job
+  into a recurring backfill (a cron) — it runs only while the daemon
+  (<code>dccd&nbsp;start</code>) is up. Deleting a job never deletes stored data.
+</p>
+
+<!-- New job for a not-yet-listed exchange -->
+<div id="new-exchange-form" class="card" style="display:none"></div>
+
+<div class="tabs" id="hist-tabs">
+  <button class="tab" data-tab="ohlc">OHLC</button>
+  <button class="tab" data-tab="trades">Trades</button>
+</div>
+
+<div data-pane="ohlc"><span class="muted">Loading…</span></div>
+<div data-pane="trades"><span class="muted">Loading…</span></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EXCHANGES = ['binance','coinbase','kraken','bybit','okx','bitfinex','bitmex'];
+const SPANS = [[60,'1m'],[300,'5m'],[900,'15m'],[1800,'30m'],[3600,'1h'],
+               [14400,'4h'],[86400,'1d'],[604800,'1w']];
+// Schedule presets (seconds) offered in the cron dropdown.
+const SCHEDULES = [[3600,'Hourly'],[21600,'Every 6h'],[43200,'Every 12h'],[86400,'Daily']];
+const NS = 1e9;
+let JOBS = [], INV = [], openExchanges = {};
+
+function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
+function keyOf(ex, pair, dt, span){ return `${ex}|${pair}|${dt}|${span??''}`; }
+function spanLabel(s){ const m = SPANS.find(x=>x[0]===s); return m?m[1]:(s?s+'s':'—'); }
+
+async function loadAll() {
+  try {
+    const [jr, ir] = await Promise.all([
+      api('GET','/api/jobs'), api('GET','/api/inventory')]);
+    JOBS = (jr.jobs||[]).filter(j => j.operation === 'backfill');
+    INV = ir.datasets || [];
+    for (const dt of ['ohlc','trades']) renderPane(dt);
+  } catch (e) {
+    document.querySelectorAll('[data-pane]').forEach(p =>
+      p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
+  }
+}
+
+function invFor(ex, pair, dt, span) {
+  return INV.find(d => d.exchange===ex && d.pair===pair && d.data_type===dt
+    && (dt!=='ohlc' || d.span===span));
+}
+
+function renderPane(dt) {
+  const pane = document.querySelector(`[data-pane="${dt}"]`);
+  // Rows = backfill jobs of this data type, plus orphan datasets (no job).
+  const jobs = JOBS.filter(j => j.data_type === dt);
+  const jobKeys = new Set(jobs.map(j => keyOf(j.exchange, j.symbol.replace(/\//g,'-'), dt, j.span)));
+  const orphans = INV.filter(d => d.data_type===dt
+    && !jobKeys.has(keyOf(d.exchange, d.pair, dt, d.span)));
+
+  const exchanges = [...new Set([...jobs.map(j=>j.exchange), ...orphans.map(o=>o.exchange)])].sort();
+  if (!exchanges.length) {
+    pane.innerHTML = `<div class="card muted" style="text-align:center;padding:1.5rem">
+      No ${dt} jobs yet. Use <strong>＋ Add</strong> above to create one.</div>`;
+    return;
+  }
+  let html = '';
+  for (const ex of exchanges) {
+    const exJobs = jobs.filter(j => j.exchange === ex);
+    const exOrphans = orphans.filter(o => o.exchange === ex);
+    const open = openExchanges[dt+'|'+ex] !== false;  // default open
+    const runAllBtn = exJobs.length
+      ? `<button class="ghost" style="font-size:.72rem;padding:.15rem .45rem"
+          onclick='event.preventDefault();event.stopPropagation();runExchange(${attrJson(ex)}, ${attrJson(dt)})'>▶ Run all</button>`
+      : '';
+    html += `<details class="ex" ${open?'open':''} data-ex="${escapeHtml(ex)}" data-dt="${dt}">
+      <summary><span class="ex-name">${escapeHtml(ex)}</span>
+        <span class="ex-meta">${exJobs.length} job${exJobs.length!==1?'s':''} ${runAllBtn}</span></summary>
+      <div class="ex-body">
+        <table><thead><tr>
+          <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>First date</th>
+          <th>Schedule</th><th>Last date</th>
+          <th>Coverage (first date → today)</th><th>Rows</th><th></th>
+        </tr></thead><tbody>`;
+    for (const j of exJobs) html += rowHtml(j, dt);
+    if (exOrphans.length) {
+      html += `<tr><td colspan="8" class="muted" style="padding-top:.6rem">
+        On disk, not tracked by a job:</td></tr>`;
+      for (const o of exOrphans) html += orphanRowHtml(o, dt);
+    }
+    html += `</tbody></table>
+      ${addFormHtml(ex, dt)}
+      <button class="ghost" style="font-size:.8rem;margin-top:.4rem"
+        onclick="toggleAddForm('${sid(ex+dt)}')">＋ Add dataset</button>
+      </div></details>`;
+  }
+  pane.innerHTML = html;
+  // Persist accordion open/close state.
+  pane.querySelectorAll('details.ex').forEach(d =>
+    d.addEventListener('toggle', () =>
+      openExchanges[d.dataset.dt+'|'+d.dataset.ex] = d.open));
+}
+
+function coverageHtml(j, dt) {
+  const pair = j.symbol.replace(/\//g,'-');
+  const inv = invFor(j.exchange, pair, dt, j.span);
+  const now = Date.now()*1e6;
+  // Left edge = target first date (job.start if a date), else dataset start.
+  let left = startToNs(j.start);
+  if (left == null) left = inv ? inv.min_ts : now;
+  const total = Math.max(1, now - left);
+  let pct = 0, gapPct = 0, title = 'No data yet';
+  if (inv && inv.min_ts != null) {
+    const cs = Math.max(inv.min_ts, left), ce = Math.min(inv.max_ts, now);
+    const covered = Math.max(0, ce - cs);
+    const leadGap = Math.max(0, Math.min(inv.min_ts, now) - left);
+    pct = Math.min(100, Math.round(covered/total*100));
+    gapPct = Math.min(100, Math.round(leadGap/total*100));
+    title = `${fmtNum(inv.rows||0)} rows · ${fmtNs(inv.min_ts)} → ${fmtNs(inv.max_ts)}`;
+    if (dt==='ohlc' && inv.expected_rows) {
+      title += ` · ${fmtNum(inv.missing_rows||0)} missing of ${fmtNum(inv.expected_rows)} bars`;
+    }
+  }
+  return `<div class="row" style="gap:.5rem">
+    <div class="cov" id="cov-${sid(j.id)}" title="${escapeHtml(title)}" style="flex:1">
+      <div class="cov-gap" style="left:0;width:${gapPct}%"></div>
+      <div class="cov-fill" style="left:${gapPct}%;width:${pct}%"></div>
+    </div>
+    <span class="muted" id="covpct-${sid(j.id)}" style="font-size:.78rem;min-width:2.6rem;text-align:right">${pct}%</span>
+  </div>`;
+}
+
+// Cron cadence as a human label, e.g. "hourly", "every 6h", or "off".
+function scheduleLabel(every) {
+  if (!every) return 'off';
+  const known = SCHEDULES.find(s => s[0] === every);
+  if (known) return known[1].toLowerCase();
+  if (every % 86400 === 0) return `every ${every/86400}d`;
+  if (every % 3600 === 0) return `every ${every/3600}h`;
+  if (every % 60 === 0) return `every ${every/60}m`;
+  return `every ${every}s`;
+}
+
+// A <select> to set the recurring schedule (cron) of a job.
+function scheduleHtml(j) {
+  const isSched = j.trigger === 'interval' && j.every;
+  const opts = [`<option value="off"${!isSched?' selected':''}>Off (manual)</option>`];
+  let matched = false;
+  for (const [secs, label] of SCHEDULES) {
+    const sel = isSched && j.every === secs;
+    if (sel) matched = true;
+    opts.push(`<option value="${secs}"${sel?' selected':''}>${label}</option>`);
+  }
+  if (isSched && !matched)
+    opts.push(`<option value="${j.every}" selected>⏱ ${scheduleLabel(j.every)}</option>`);
+  opts.push('<option value="custom">Custom…</option>');
+  return `<select style="font-size:.76rem;padding:.15rem .3rem"
+    title="Recurring backfill (runs under dccd start)"
+    onchange='setSchedule(${attrJson(j.id)}, this.value, this)'>${opts.join('')}</select>`;
+}
+
+function rowHtml(j, dt) {
+  const pair = j.symbol.replace(/\//g,'-');
+  const inv = invFor(j.exchange, pair, dt, j.span);
+  const last = inv && inv.max_ts != null ? fmtNs(inv.max_ts) : '<span class="muted">empty</span>';
+  const rows = inv ? fmtNum(inv.rows||0) : '0';
+  // Default the date input to the dataset's earliest stored bar when the job
+  // has no explicit start (start=last/origin), so the field isn't blank.
+  const dateVal = startToDate(j.start)
+    || (inv && inv.min_ts != null ? new Date(inv.min_ts/1e6).toISOString().slice(0,10) : '');
+  return `<tr id="row-${sid(j.id)}">
+    <td><strong>${escapeHtml(j.symbol)}</strong></td>
+    ${dt==='ohlc'?`<td>${spanLabel(j.span)}</td>`:''}
+    <td><input type="date" value="${dateVal}" style="font-size:.78rem;padding:.2rem .3rem"
+        title="Target first date (job start)"
+        onchange='updateStart(${attrJson(j.id)}, this.value)'></td>
+    <td>${scheduleHtml(j)}</td>
+    <td class="muted" style="font-size:.8rem">${last}</td>
+    <td style="min-width:200px">${coverageHtml(j, dt)}</td>
+    <td class="muted">${rows}</td>
+    <td style="white-space:nowrap">
+      <button id="run-${sid(j.id)}" style="font-size:.75rem;padding:.2rem .5rem"
+        onclick='runJob(${attrJson(j.id)}, ${attrJson(j.exchange)}, ${attrJson(j.symbol)}, ${attrJson(dt)}, ${JSON.stringify(j.span)})'>▶ Run</button>
+      <button class="ghost" id="del-${sid(j.id)}" style="font-size:.75rem;padding:.2rem .4rem"
+        onclick='confirmDelete(${attrJson(j.id)})'>🗑</button>
+    </td></tr>`;
+}
+
+function orphanRowHtml(o, dt) {
+  const sym = o.pair.replace(/-/, '/');
+  return `<tr>
+    <td>${escapeHtml(o.pair)}</td>
+    ${dt==='ohlc'?`<td>${spanLabel(o.span)}</td>`:''}
+    <td class="muted" style="font-size:.8rem">${fmtNs(o.min_ts)}</td>
+    <td class="muted">—</td>
+    <td class="muted" style="font-size:.8rem">${fmtNs(o.max_ts)}</td>
+    <td class="muted" style="font-size:.8rem">${fmtNum(o.rows||0)} rows on disk</td>
+    <td></td>
+    <td><button class="ghost" style="font-size:.75rem;padding:.2rem .5rem"
+      onclick='importAsJob(${attrJson(o.exchange)}, ${attrJson(sym)}, ${attrJson(dt)}, ${JSON.stringify(o.span)})'>＋ Track</button></td>
+  </tr>`;
+}
+
+// --- start <-> date conversions -------------------------------------------
+function startToNs(start) {
+  if (!start || start==='last' || start==='origin') return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(start)) return Date.parse(start.slice(0,10)+'T00:00:00Z')*1e6;
+  if (/^\d+$/.test(start)) return parseInt(start,10);
+  return null;
+}
+function startToDate(start) {
+  const ns = startToNs(start);
+  return ns!=null ? new Date(ns/1e6).toISOString().slice(0,10) : '';
+}
+
+// --- actions ---------------------------------------------------------------
+async function updateStart(jobId, dateVal) {
+  try {
+    await api('POST','/api/jobs/update', { job_id: jobId, start: dateVal || 'last' });
+    toast('First date updated', 'ok');
+    await loadAll();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function setSchedule(jobId, val, sel) {
+  let every = null;
+  if (val === 'custom') {
+    const raw = prompt('Backfill every how many seconds? (must be ≥ the span)');
+    if (raw == null) { await loadAll(); return; }  // cancelled → restore
+    every = parseInt(raw, 10);
+    if (!every || every <= 0) { toast('Invalid interval', 'err'); await loadAll(); return; }
+  } else if (val !== 'off') {
+    every = parseInt(val, 10);
+  }
+  try {
+    await api('POST','/api/jobs/update', { job_id: jobId, schedule: true, every });
+    toast(every ? `Scheduled — ${scheduleLabel(every)}` : 'Schedule cleared', 'ok');
+    await loadAll();
+  } catch (e) { toast(e.message, 'err'); await loadAll(); }
+}
+
+const polls = {};
+async function runJob(jobId, ex, symbol, dt, span) {
+  const btn = document.getElementById('run-'+sid(jobId));
+  // Use the job's first date as the backfill start so Run fills missing history.
+  const j = JOBS.find(x => x.id === jobId);
+  const start = (j && j.start) ? j.start : 'last';
+  const payload = { exchange: ex, symbol, data_type: dt, start };
+  if (span != null) payload.span = span;
+  btn.disabled = true; btn.textContent = '…';
+  const cov = document.getElementById('cov-'+sid(jobId));
+  if (cov) cov.classList.add('running');
+  try {
+    const { run_id } = await api('POST','/api/backfill', payload);
+    btn.textContent = '⏹';
+    btn.disabled = false;
+    btn.onclick = () => cancelRun(jobId, run_id);
+    pollRun(jobId, run_id);
+  } catch (e) {
+    toast(e.message, 'err'); btn.disabled = false; btn.textContent = '▶ Run';
+    if (cov) cov.classList.remove('running');
+  }
+}
+
+// Run every backfill job of one exchange (current tab) via the configured spec.
+async function runExchange(ex, dt) {
+  const jobs = JOBS.filter(j => j.exchange===ex && j.data_type===dt);
+  let started = 0;
+  for (const j of jobs) {
+    if (polls[j.id]) continue;  // already running
+    try {
+      const { run_id } = await api('POST','/api/jobs/run', { job_id: j.id });
+      const cov = document.getElementById('cov-'+sid(j.id));
+      if (cov) cov.classList.add('running');
+      pollRun(j.id, run_id);
+      started++;
+    } catch (e) { toast(`${j.symbol}: ${e.message}`, 'err'); }
+  }
+  if (started) toast(`Started ${started} backfill(s) on ${ex}`, 'ok');
+}
+
+// Run all backfill jobs across every exchange/type.
+async function runAllJobs() {
+  try {
+    const { started, runs } = await api('POST','/api/jobs/run-all', {});
+    toast(`Started ${started} backfill(s)`, 'ok');
+    for (const r of (runs||[])) {
+      const cov = document.getElementById('cov-'+sid(r.job_id));
+      if (cov) cov.classList.add('running');
+      pollRun(r.job_id, r.run_id);
+    }
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function cancelRun(jobId, runId) {
+  try { await api('DELETE','/api/backfill/'+runId); toast('Cancelling…','ok'); }
+  catch (e) { toast(e.message,'err'); }
+}
+
+function pollRun(jobId, runId) {
+  if (polls[jobId]) clearInterval(polls[jobId]);
+  polls[jobId] = setInterval(async () => {
+    try {
+      const run = await api('GET','/api/backfill/'+runId);
+      const cov = document.getElementById('cov-'+sid(jobId));
+      const pctEl = document.getElementById('covpct-'+sid(jobId));
+      const prog = run.progress;
+      if (prog && prog.total > 0 && cov) {
+        const p = Math.min(100, Math.round(prog.done/prog.total*100));
+        const fill = cov.querySelector('.cov-fill');
+        fill.style.left = '0%'; fill.style.width = p + '%';
+        if (pctEl) pctEl.textContent = p + '%';
+      }
+      if (['succeeded','failed','cancelled'].includes(run.state)) {
+        clearInterval(polls[jobId]); delete polls[jobId];
+        if (run.state==='succeeded') toast(`Done — ${fmtNum(run.rows_written||0)} rows`,'ok');
+        else if (run.state==='failed') toast(run.error||'Failed','err');
+        else toast('Cancelled','ok');
+        await loadAll();
+      }
+    } catch (_) {}
+  }, 1000);
+}
+
+function confirmDelete(jobId) {
+  const row = document.getElementById('row-'+sid(jobId));
+  if (!row) return;
+  const td = row.lastElementChild;
+  td.dataset.prev = td.innerHTML;
+  td.innerHTML = `<span class="muted" style="font-size:.75rem">Delete job?</span>
+    <button class="danger" style="font-size:.72rem;padding:.15rem .4rem" onclick='doDelete(${attrJson(jobId)})'>Yes</button>
+    <button class="ghost" style="font-size:.72rem;padding:.15rem .4rem" onclick='cancelDelete(${attrJson(jobId)})'>No</button>`;
+}
+function cancelDelete(jobId) {
+  const td = document.getElementById('row-'+sid(jobId)).lastElementChild;
+  td.innerHTML = td.dataset.prev;
+}
+async function doDelete(jobId) {
+  try { await api('POST','/api/jobs/delete', { job_id: jobId });
+    toast('Job deleted (data kept)','ok'); await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+// --- add-job forms ---------------------------------------------------------
+function addFormHtml(ex, dt) {
+  const spanSel = dt==='ohlc'
+    ? `<div><label>Span</label><select id="span-${sid(ex+dt)}">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>` : '';
+  return `<div class="inline-form" id="addf-${sid(ex+dt)}" style="display:none">
+    <div><label>Pair</label><input id="pair-${sid(ex+dt)}" placeholder="BTC/USDT" style="width:9rem"></div>
+    ${spanSel}
+    <div><label>First date</label><input type="date" id="date-${sid(ex+dt)}"></div>
+    <button style="font-size:.8rem" onclick='createJob(${attrJson(ex)}, ${attrJson(dt)})'>Create</button>
+  </div>`;
+}
+function toggleAddForm(key) {
+  const f = document.getElementById('addf-'+key);
+  if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+async function createJob(ex, dt) {
+  const k = sid(ex+dt);
+  const pair = (document.getElementById('pair-'+k).value||'').trim();
+  if (!pair) { toast('Pair required (e.g. BTC/USDT)','err'); return; }
+  const dateV = document.getElementById('date-'+k).value;
+  const payload = { operation:'backfill', exchange:ex, symbol:pair, data_type:dt,
+                    start: dateV || 'last', trigger_kind:'manual' };
+  if (dt==='ohlc') payload.span = parseInt(document.getElementById('span-'+k).value,10);
+  try { await api('POST','/api/jobs/create', payload);
+    toast('Job created','ok'); await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+function importAsJob(ex, sym, dt, span) {
+  // Track existing data as a manual (non-scheduled) job.
+  const payload = { operation:'backfill', exchange:ex, symbol:sym, data_type:dt,
+                    start:'last', trigger_kind:'manual' };
+  if (span != null) payload.span = span;
+  api('POST','/api/jobs/create', payload)
+    .then(() => { toast('Now tracked as a job','ok'); loadAll(); })
+    .catch(e => toast(e.message,'err'));
+}
+
+// --- new exchange (top-level add) -----------------------------------------
+function toggleNewExchange() {
+  const el = document.getElementById('new-exchange-form');
+  if (el.style.display !== 'none' && el.innerHTML) { el.style.display='none'; return; }
+  const dt = (location.hash||'#ohlc').slice(1) || 'ohlc';
+  el.innerHTML = `<div class="inline-form" style="padding:.2rem 0">
+    <div><label>Exchange</label><select id="ne-ex">${EXCHANGES.map(e=>`<option>${e}</option>`).join('')}</select></div>
+    <div><label>Data type</label><select id="ne-dt" onchange="neToggleSpan()">
+      <option value="ohlc"${dt==='ohlc'?' selected':''}>OHLC</option>
+      <option value="trades"${dt==='trades'?' selected':''}>Trades</option></select></div>
+    <div id="ne-span-wrap"><label>Span</label><select id="ne-span">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>
+    <div><label>Pair</label><input id="ne-pair" placeholder="BTC/USDT" style="width:9rem"></div>
+    <div><label>First date</label><input type="date" id="ne-date"></div>
+    <button style="font-size:.8rem" onclick="createNew()">Create</button>
+    <button class="ghost" style="font-size:.8rem" onclick="toggleNewExchange()">Cancel</button>
+  </div>`;
+  el.style.display = '';
+  neToggleSpan();
+}
+function neToggleSpan() {
+  const dt = document.getElementById('ne-dt').value;
+  document.getElementById('ne-span-wrap').style.display = dt==='ohlc' ? '' : 'none';
+}
+async function createNew() {
+  const ex = document.getElementById('ne-ex').value;
+  const dt = document.getElementById('ne-dt').value;
+  const pair = (document.getElementById('ne-pair').value||'').trim();
+  if (!pair) { toast('Pair required','err'); return; }
+  const payload = { operation:'backfill', exchange:ex, symbol:pair, data_type:dt,
+                    start: document.getElementById('ne-date').value || 'last',
+                    trigger_kind:'manual' };
+  if (dt==='ohlc') payload.span = parseInt(document.getElementById('ne-span').value,10);
+  try { await api('POST','/api/jobs/create', payload);
+    toast('Job created','ok'); toggleNewExchange();
+    if (location.hash.slice(1)!==dt) { location.hash = dt; }
+    await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+initTabs('#hist-tabs');
+loadAll();
+</script>
+{% endblock %}

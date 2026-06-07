@@ -4,19 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dccd"
-version = "2.4.0"
-description = "Download Crypto Currency Data from different exchanges."
+version = "3.0.0"
+description = "Download Crypto Currency Data — hexagonal architecture, async-first."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Arthur Bernard", email = "arthur.bernard.92@gmail.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -24,27 +23,58 @@ classifiers = [
     "Topic :: Office/Business :: Financial",
 ]
 dependencies = [
-    "numpy>=1.26",
+    "httpx>=0.27",
+    "websockets>=12.0",
+    "pydantic>=2.0",
     "polars>=0.20",
     "pyarrow>=13",
-    "requests>=2.28",
-    "openpyxl>=3.1",
-    "websockets>=12.0",
+    "numpy>=1.26",
     "scipy>=1.10",
     "SQLAlchemy>=2.0",
-    "tenacity>=8.0",
-    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
-io = ["polars>=0.20", "pyarrow>=13"]
-daemon = ["pyyaml>=6.0", "apscheduler>=3.10,<4", "typer>=0.12", "tqdm>=4.64"]
-ui = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "jinja2>=3.1"]
-dev = ["pytest>=7.4", "pytest-asyncio>=0.23", "pytest-cov>=4.1", "ruff>=0.4", "interrogate>=1.5", "mypy>=1.0", "pyyaml>=6.0", "apscheduler>=3.10,<4", "typer>=0.12", "tqdm>=4.64", "fastapi>=0.110", "uvicorn[standard]>=0.29", "jinja2>=3.1", "httpx>=0.27"]
-doc = ["sphinx>=7.0", "furo", "numpydoc", "sphinx-design", "sphinx-copybutton", "pyyaml>=6.0", "apscheduler>=3.10,<4", "fastapi>=0.110", "uvicorn[standard]>=0.29", "jinja2>=3.1"]
+daemon = [
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "tqdm>=4.64",
+    "uvicorn[standard]>=0.29",
+    "fastapi>=0.110",
+    "jinja2>=3.1",
+    "apscheduler>=3.10,<4",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "interrogate>=1.5",
+    "mypy>=1.0",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "tqdm>=4.64",
+    "uvicorn[standard]>=0.29",
+    "fastapi>=0.110",
+    "jinja2>=3.1",
+    "apscheduler>=3.10,<4",
+    "httpx>=0.27",
+]
+doc = [
+    "sphinx>=7.0",
+    "furo",
+    "numpydoc",
+    "sphinx-design",
+    "sphinx-copybutton",
+    "sphinx-click",
+    "autodoc-pydantic>=2.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+]
 
 [project.scripts]
-dccd = "dccd.daemon.cli:app"
+dccd = "dccd.interfaces.cli.main:app"
 
 [project.urls]
 Homepage = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data"
@@ -55,14 +85,19 @@ Changelog = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/bl
 include = ["dccd*"]
 
 [tool.setuptools.package-data]
+"dccd.interfaces.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
 "dccd.daemon.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules --exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing"
+addopts = "--exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing -m 'not network'"
 testpaths = ["dccd"]
+asyncio_mode = "auto"
+markers = [
+    "network: end-to-end tests that hit real exchange APIs (run with -m network)",
+]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
@@ -77,22 +112,26 @@ ignore = ["E501"]
 omit = []
 
 [tool.mypy]
-python_version = "3.10"
+# 3.12: the dev/docs env ships Sphinx, whose source uses 3.12 `type` statements.
+# With python_version 3.11 mypy parsed those installed files with the 3.11
+# grammar and aborted before checking our code at all. dccd supports 3.11–3.13,
+# so assuming 3.12 semantics is safe and lets mypy actually run.
+python_version = "3.12"
 ignore_missing_imports = true
 warn_return_any = false
 warn_unused_configs = true
-disable_error_code = ["import-untyped"]
-exclude = ["dccd/tests/"]
+follow_imports = "silent"
+# Full annotations are enforced only on the domain layer (strict override
+# below). Interfaces/application are glue around FastAPI/Typer/Polars where
+# requiring return annotations on every handler adds noise, not safety.
+disable_error_code = ["import-untyped", "no-untyped-def", "no-untyped-call"]
+exclude = ["dccd/tests/", "dccd/histo_dl/", "dccd/continuous_dl/", "dccd/daemon/"]
 
 [[tool.mypy.overrides]]
-module = [
-    "dccd.tools.websocket",
-    "dccd",
-    "dccd.continuous_dl.binance",
-    "dccd.continuous_dl.kraken",
-    "dccd.continuous_dl.okx",
-]
-ignore_errors = true
+module = ["dccd.domain.*"]
+strict = true
+warn_return_any = true
+enable_error_code = ["no-untyped-def", "no-untyped-call"]
 
 [tool.interrogate]
 ignore-init-method = true

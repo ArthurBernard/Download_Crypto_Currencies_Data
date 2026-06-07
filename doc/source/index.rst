@@ -27,11 +27,26 @@
    </div>
 
 ``dccd`` downloads crypto-currency data (OHLCV, trades, order book) from
-multiple exchanges via REST and WebSocket APIs.
+7 exchanges and stores it as nanosecond-precision Parquet — backfill history or
+stream live, from Python, a CLI, or a web UI. No API key required.
 
 .. code-block:: bash
 
    pip install dccd
+
+.. code-block:: python
+
+   import asyncio
+   from dccd import Client
+
+   async def main():
+       async with Client() as c:
+           await c.backfill("binance", "BTC/USDT", "ohlc", span=3600, start="2024-01-01")
+           print(c.read("binance", "BTC/USDT", "ohlc", span=3600).tail())
+
+   asyncio.run(main())              # → a Polars DataFrame of hourly candles
+
+New here? Start with :doc:`tutorials/first-backfill`.
 
 .. grid:: 1 1 2 3
    :gutter: 3
@@ -43,98 +58,96 @@ multiple exchanges via REST and WebSocket APIs.
       Historical REST downloads and real-time WebSocket streams — use
       ``dccd`` directly in your scripts or notebooks.
 
-   .. grid-item-card:: CLI Daemon
-      :link: daemon
+   .. grid-item-card:: CLI & Daemon
+      :link: cli
       :link-type: doc
 
-      Autonomous server-side collector driven by a YAML config with
-      scheduling, WebSocket streams, and rclone remote sync.
+      ``dccd`` command line: ``backfill``, ``stream``, ``start`` (daemon +
+      web UI), ``inventory`` — driven by a YAML config.
 
-   .. grid-item-card:: Storage & Formats
-      :link: storage
+   .. grid-item-card:: API Reference
+      :link: api
       :link-type: doc
 
-      Annual Parquet files by default · CSV · Excel · SQLite ·
-      PostgreSQL · Polars & Pandas output.
+      The hexagonal layers — domain, transport, sources, storage,
+      application, interfaces.
 
 .. rubric:: Key features
 
-- **7 exchanges** — Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, Bitmex
+- **7 exchanges** — Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, BitMEX
 - **3 data types** — OHLCV candles, trade history, order book snapshots
-- **Incremental updates** — ``start='last'`` resumes from the last saved timestamp, no duplicates
-- **Polars-native output** — ``get_data()`` returns a :class:`polars.DataFrame`; ``get_data(format='pandas')`` for Pandas
+- **Async-first** — ``async with Client() as c: await c.backfill(...)``; httpx + websockets
+- **Cursor-paginated trades** — backfills drain the full window (no silent loss)
+- **Incremental & idempotent** — ``start="last"`` resumes from the last bar; dedup on the natural key
+- **Nanosecond Parquet storage** — ns UTC ``int64``, provenance, atomic writes; read back as a :class:`polars.DataFrame`
 - **No API key required** — all endpoints used are public
-- **Autonomous daemon** — YAML config, APScheduler, WebSocket streams, rclone remote sync
+- **Autonomous daemon** — YAML config, async scheduler, WebSocket streams, rclone remote sync
+
+.. rubric:: Guides
+
+.. grid:: 1 2 2 2
+   :gutter: 3
+
+   .. grid-item-card:: Architecture
+      :link: architecture
+      :link-type: doc
+
+      The hexagonal layers and how a backfill flows through them.
+
+   .. grid-item-card:: Exchanges
+      :link: exchanges
+      :link-type: doc
+
+      Per-exchange capabilities and OHLC field fidelity.
 
 .. _supported-exchanges:
 
 Supported exchanges
 -------------------
 
+You pick a **data type** (OHLC · trades · order book) and an **operation** —
+**backfill** (download history) or **stream** (collect live). Each cell lists
+the data types an exchange supports for that operation.
+
 .. list-table::
    :header-rows: 1
    :stub-columns: 1
+   :widths: 16 44 40
 
    * - Exchange
-     - REST OHLCV
-     - REST Trades
-     - REST Order Book
-     - WS OHLCV
-     - WS Trades
-     - WS Order Book
+     - Backfill (history)
+     - Stream (live)
    * - Binance
-     - ✓
-     - ✓
-     - ✓
-     -
-     - ✓
-     - ✓
+     - OHLC · trades · book
+     - OHLC · trades · book
    * - Coinbase
-     - ✓
-     - ✓ †
-     - ✓
-     -
-     -
-     -
+     - OHLC · book · trades [#recent]_
+     - trades
    * - Kraken
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
+     - OHLC [#kr]_ · trades · book
+     - OHLC · trades · book
    * - Bybit
-     - ✓
-     - ✓ †
-     - ✓
-     -
-     - ✓
-     - ✓
+     - OHLC · book
+     - OHLC · trades · book
    * - OKX
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
-     - ✓
+     - OHLC · trades · book
+     - OHLC · trades · book
    * - Bitfinex
-     -
-     -
-     -
-     - ✓ \*
-     - ✓
-     - ✓
-   * - Bitmex
-     -
-     -
-     -
-     -
-     - ✓
-     - ✓
+     - OHLC · trades · book
+     - OHLC · trades
+   * - BitMEX
+     - OHLC · trades · book
+     - OHLC · trades · book
 
-\* Bitfinex WS OHLCV is aggregated from the trades stream via :func:`~dccd.continuous_dl.bitfinex.get_ohlc_bitfinex`.
+.. [#recent] Coinbase trades backfill returns recent trades only (no deep
+   history). Bybit spot has no trade history at all.
+.. [#kr] Kraken OHLC backfill serves the 720 most recent bars; a deeper request
+   is clamped to that window. Order-book "backfill" is a single point-in-time
+   snapshot.
 
-† Recent trades only (Bybit ≤ 1 000, Coinbase ≤ 100) — no deep historical pagination via the public REST API.
+See :doc:`exchanges` for per-exchange notes and OHLC field fidelity.
+Bybit spot has no trade history at all (WS only). All other trade backfills are
+cursor-paginated and drain the full requested window.
 
 .. toctree::
    :hidden:
@@ -142,23 +155,44 @@ Supported exchanges
 
    installation
    quickstart
-   changelog
 
 .. toctree::
    :hidden:
-   :caption: Data Collection
+   :caption: Tutorials
 
-   histo_dl
-   continuous_dl
-   daemon
+   tutorials/first-backfill
+   tutorials/stream-live
+
+.. toctree::
+   :hidden:
+   :caption: How-to guides
+
+   how-to/schedule-daily
+   how-to/deep-trades
+   how-to/analyse
+   how-to/sync-remote
+   how-to/protect-ui
+   how-to/add-exchange
+
+.. toctree::
+   :hidden:
+   :caption: Concepts
+
+   architecture
+   exchanges
 
 .. toctree::
    :hidden:
    :caption: Reference
 
-   storage
-   models
-   tools
-   process_data
+   api
    cli
+   http-api
    configuration
+   web-ui
+
+.. toctree::
+   :hidden:
+   :caption: About
+
+   changelog

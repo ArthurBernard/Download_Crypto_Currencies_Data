@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}dccd{% endblock %} — dccd UI</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <style>
+    :root { --bg:#0f1419; --fg:#e6e6e6; --muted:#8b98a5; --accent:#4a9eff;
+            --border:#2a3038; --card:#161b22; --ok:#3fb950; --err:#f85149; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg);
+           color:var(--fg); }
+    nav { display:flex; gap:.25rem; align-items:center; flex-wrap:wrap;
+          padding:.4rem 1rem; background:var(--card);
+          border-bottom:1px solid var(--border);
+          position:sticky; top:0; z-index:5; }
+    nav .brand-group { display:flex; align-items:center; gap:.5rem;
+            margin-right:auto; }
+    nav .brand-group img { height:28px; width:auto; display:block; }
+    nav .brand-group .brand { font-size:1.1rem; font-weight:700;
+            letter-spacing:.02em; color:var(--fg); }
+    nav .brand-group .ver { color:var(--muted); font-size:.78rem;
+            font-family:ui-monospace,monospace; }
+    nav a { color:var(--muted); text-decoration:none; padding:.4rem .8rem;
+            border-radius:6px; }
+    nav a:hover { background:var(--border); color:var(--fg); }
+    nav a.active { color:var(--accent); background:rgba(74,158,255,.12);
+            font-weight:600; }
+    nav .nav-menu { position:relative; }
+    nav .nav-menu-btn { color:var(--muted); background:transparent; border:0;
+            padding:.4rem .8rem; border-radius:6px; cursor:pointer; font:inherit; }
+    nav .nav-menu-btn:hover { background:var(--border); color:var(--fg); }
+    nav .nav-menu-btn.active { color:var(--accent); background:rgba(74,158,255,.12);
+            font-weight:600; }
+    nav .nav-menu-items { display:none; position:absolute; top:100%; left:0;
+            margin-top:.25rem; background:var(--card); border:1px solid var(--border);
+            border-radius:8px; padding:.25rem; min-width:9rem; z-index:10;
+            box-shadow:0 6px 18px rgba(0,0,0,.4); }
+    nav .nav-menu.open .nav-menu-items { display:block; }
+    nav .nav-menu-items a { display:block; }
+    /* Pills (data-type tabs) */
+    .tabs { display:flex; gap:.4rem; margin:.5rem 0 1rem; flex-wrap:wrap; }
+    .tab { background:transparent; color:var(--muted); border:1px solid var(--border);
+           border-radius:999px; padding:.35rem .9rem; cursor:pointer; font-size:.85rem; }
+    .tab.active { background:rgba(74,158,255,.12); color:var(--accent);
+           border-color:var(--accent); font-weight:600; }
+    /* Accordion per exchange */
+    details.ex { border:1px solid var(--border); border-radius:8px;
+           margin:.5rem 0; background:var(--card); overflow:hidden; }
+    details.ex > summary { cursor:pointer; padding:.6rem .9rem; list-style:none;
+           display:flex; align-items:center; justify-content:space-between;
+           font-weight:600; user-select:none; }
+    details.ex > summary::-webkit-details-marker { display:none; }
+    details.ex > summary::before { content:'▶'; color:var(--muted);
+           font-size:.7rem; margin-right:.5rem; transition:transform .15s; }
+    details.ex[open] > summary::before { transform:rotate(90deg); }
+    details.ex > summary .ex-name { flex:1; }
+    details.ex > summary .ex-meta { color:var(--muted); font-weight:400;
+           font-size:.8rem; }
+    details.ex .ex-body { padding:.2rem .9rem .8rem; }
+    /* Coverage / progress bar with hatched (missing) portion */
+    .cov { position:relative; height:9px; background:var(--border);
+           border-radius:4px; overflow:hidden; min-width:120px; }
+    .cov > .cov-fill { position:absolute; top:0; left:0; height:100%;
+           background:var(--accent); border-radius:4px; transition:width .4s; }
+    .cov > .cov-gap { position:absolute; top:0; height:100%;
+           background:repeating-linear-gradient(45deg, var(--err) 0 3px,
+           transparent 3px 6px); opacity:.5; }
+    .cov.running > .cov-fill { background:var(--ok); }
+    /* Liveness dot */
+    .live-dot { display:inline-block; width:.55rem; height:.55rem;
+           border-radius:50%; margin-right:.35rem; vertical-align:middle; }
+    .live-dot.fresh { background:var(--ok); box-shadow:0 0 5px var(--ok); }
+    .live-dot.stale { background:#d29922; }
+    .live-dot.dead  { background:var(--muted); }
+    .inline-form { display:flex; gap:.4rem; align-items:flex-end; flex-wrap:wrap;
+           padding:.6rem 0; }
+    .inline-form label { font-size:.72rem; color:var(--muted); display:block; }
+    input[type=date] { color-scheme:dark; }
+    main { padding:1rem; max-width:1100px; margin:0 auto; }
+    footer { color:var(--muted); font-size:.8rem; text-align:center;
+            padding:1.5rem 1rem; }
+    footer a { color:var(--muted); }
+    h1 { font-size:1.3rem; margin:0 0 1rem; }
+    h2 { font-size:1.05rem; margin:1.5rem 0 .5rem; }
+    table { width:100%; border-collapse:collapse; margin:.5rem 0; }
+    th, td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:600; }
+    button { background:var(--accent); color:#fff; border:0; border-radius:6px;
+             padding:.4rem .8rem; cursor:pointer; font-size:.9rem; }
+    button:hover { opacity:.9; }
+    button.ghost { background:transparent; color:var(--muted);
+                   border:1px solid var(--border); }
+    button.danger { background:var(--err); }
+    input, select, textarea { background:var(--bg); color:var(--fg);
+      border:1px solid var(--border); border-radius:6px; padding:.4rem .6rem;
+      font:inherit; }
+    textarea { width:100%; min-height:340px; font-family:ui-monospace, monospace; }
+    pre { background:var(--card); border:1px solid var(--border); border-radius:6px;
+          padding:.8rem; overflow:auto; max-height:70vh; white-space:pre-wrap;
+          word-break:break-word; }
+    .card { background:var(--card); border:1px solid var(--border);
+            border-radius:8px; padding:1rem; margin:.5rem 0; }
+    .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+    .muted { color:var(--muted); }
+    .ok { color:var(--ok); } .err { color:var(--err); }
+    .bar { height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+    .bar > span { display:block; height:100%; background:var(--accent); }
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6);
+                display:none; align-items:center; justify-content:center; }
+    .modal-bg.show { display:flex; }
+    .modal { background:var(--card); border:1px solid var(--border);
+             border-radius:8px; padding:1.5rem; min-width:320px; position:relative; }
+    .modal-close { position:absolute; top:.5rem; right:.5rem; background:transparent;
+             color:var(--muted); border:0; font-size:1.4rem; line-height:1;
+             padding:.2rem .5rem; cursor:pointer; }
+    .modal-close:hover { color:var(--fg); }
+    #toast-root { position:fixed; bottom:1rem; right:1rem; z-index:50;
+                  display:flex; flex-direction:column; gap:.5rem; }
+    .toast { background:var(--card); border:1px solid var(--border);
+             border-left-width:4px; border-radius:6px; padding:.6rem .9rem;
+             box-shadow:0 2px 8px rgba(0,0,0,.4); max-width:22rem;
+             animation:toast-in .15s ease-out; }
+    .toast.ok { border-left-color:var(--ok); }
+    .toast.err { border-left-color:var(--err); }
+    @keyframes toast-in { from { opacity:0; transform:translateY(.5rem); }
+                          to { opacity:1; transform:none; } }
+    .j-key { color:#4a9eff; } .j-str { color:#3fb950; }
+    .j-num { color:#d2a8ff; } .j-bool { color:#f0883e; } .j-null { color:#8b98a5; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand-group" style="text-decoration:none">
+      <img src="/static/logo.svg" alt="dccd logo">
+      <span class="brand">dccd</span>
+      <span class="ver">v{{ version }}</span>
+    </a>
+    <a href="/"{% if active == '/' %} class="active"{% endif %}>Dashboard</a>
+    <a href="/data"{% if active in ['/data', '/inventory'] %} class="active"{% endif %}>Data</a>
+    {% set collect = [('/historical', 'Historical'), ('/live', 'Live')] %}
+    {% set system = [('/logs', 'Logs'), ('/config', 'Config'), ('/storage', 'Storage')] %}
+    <div class="nav-menu">
+      <button type="button" class="nav-menu-btn{% if active in ['/historical', '/live'] %} active{% endif %}"
+              onclick="toggleNavMenu(this)">Collect ▾</button>
+      <div class="nav-menu-items">
+        {% for href, text in collect %}
+        <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ text }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="nav-menu">
+      <button type="button" class="nav-menu-btn{% if active in ['/logs', '/config', '/storage'] %} active{% endif %}"
+              onclick="toggleNavMenu(this)">System ▾</button>
+      <div class="nav-menu-items">
+        {% for href, text in system %}
+        <a href="{{ href }}"{% if active == href %} class="active"{% endif %}>{{ text }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    dccd v{{ version }} —
+    <a href="https://github.com/ArthurBernard/Download_Crypto_Currencies_Data">GitHub</a>
+  </footer>
+  <div id="toast-root"></div>
+  <script>
+    // Minimal vanilla helpers shared across pages — no JS framework.
+    // Display timezone from settings.timezone: "local" (browser), "UTC", or a
+    // zoneinfo name (e.g. "Europe/Paris"). Absolute dates render in this zone.
+    const DCCD_TZ = "{{ timezone }}";
+    // Format a ms epoch as "YYYY-MM-DD HH:mm" in the configured display tz.
+    function fmtDate(ms) {
+      const opts = { year:'numeric', month:'2-digit', day:'2-digit',
+                     hour:'2-digit', minute:'2-digit', hour12:false };
+      if (DCCD_TZ && DCCD_TZ.toLowerCase() !== 'local') opts.timeZone = DCCD_TZ;
+      // en-CA yields "2024-01-02, 03:04" → drop the comma.
+      return new Date(ms).toLocaleString('en-CA', opts).replace(',', '');
+    }
+    // ts in seconds → human date
+    function fmtTs(ts) {
+      if (ts == null) return '-';
+      return fmtDate(ts * 1000);
+    }
+    // ts in nanoseconds (v3 internal format) → human date
+    function fmtNs(ns) {
+      if (ns == null) return '-';
+      return fmtDate(ns / 1_000_000);
+    }
+    // Human "x ago" from a nanosecond timestamp (or ms via fromMs).
+    function fmtAge(ns, fromMs) {
+      if (ns == null) return '—';
+      const ms = fromMs ? ns : ns / 1e6;
+      let s = Math.max(0, (Date.now() - ms) / 1000);
+      if (s < 60) return `il y a ${Math.round(s)}s`;
+      if (s < 3600) return `il y a ${Math.round(s/60)} min`;
+      if (s < 86400) return `il y a ${Math.round(s/3600)} h`;
+      return `il y a ${Math.round(s/86400)} j`;
+    }
+    // Freshness label from a ns timestamp: a live relative age ("il y a N min")
+    // when recent (< 24h), the absolute date once it's older — relative time is
+    // meaningless past a day, an absolute date is clearer.
+    function fmtFreshness(ns) {
+      if (ns == null) return '';
+      const ageS = (Date.now() - ns / 1e6) / 1000;
+      return ageS < 86400 ? fmtAge(ns) : fmtNs(ns);
+    }
+    // Freshness class from a ns timestamp. The "fresh" window defaults to 10s
+    // but can be widened (spanS) so span-based feeds (a 1h OHLC bar, a 60s
+    // order-book snapshot) stay green between updates instead of always reading
+    // "dead": fresh < spanS, stale < 2×spanS, else dead.
+    function freshnessClass(ns, spanS) {
+      if (ns == null) return 'dead';
+      const s = (Date.now() - ns/1e6) / 1000;
+      const fresh = spanS || 10;
+      if (s < fresh) return 'fresh';
+      if (s < 2*fresh) return 'stale';
+      return 'dead';
+    }
+    // Coarser staleness class for stored data (Inventory): fresh<1h, stale<1d.
+    function stalenessClass(ns) {
+      if (ns == null) return 'dead';
+      const s = (Date.now() - ns/1e6) / 1000;
+      if (s < 3600) return 'fresh';
+      if (s < 86400) return 'stale';
+      return 'dead';
+    }
+    function fmtBytes(n) {
+      if (n == null) return '—';
+      const u = ['B','KB','MB','GB','TB']; let i = 0; let v = n;
+      while (v >= 1024 && i < u.length-1) { v /= 1024; i++; }
+      return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${u[i]}`;
+    }
+    // Format a number with thousands separators (no scientific notation),
+    // trimming needless decimals — e.g. 1000 → "1,000", 42153.7 → "42,153.7".
+    function fmtNum(n) {
+      if (n == null || isNaN(n)) return '—';
+      return Number(n).toLocaleString('en-US', { maximumFractionDigits: 8 });
+    }
+    // Nav dropdown menus (Collect ▾ / System ▾): toggle one open at a time.
+    function toggleNavMenu(btn) {
+      const menu = btn.parentElement;
+      const wasOpen = menu.classList.contains('open');
+      document.querySelectorAll('nav .nav-menu.open').forEach(m => m.classList.remove('open'));
+      if (!wasOpen) menu.classList.add('open');
+    }
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.nav-menu'))
+        document.querySelectorAll('nav .nav-menu.open').forEach(m => m.classList.remove('open'));
+    });
+    // Wire up a .tabs container: clicking a .tab[data-tab] shows the matching
+    // [data-pane] and syncs location.hash. Returns the activated tab key.
+    function initTabs(rootSel, onChange) {
+      const root = document.querySelector(rootSel);
+      if (!root) return;
+      const tabs = root.querySelectorAll('.tab');
+      function activate(key) {
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === key));
+        document.querySelectorAll('[data-pane]').forEach(p =>
+          p.style.display = p.dataset.pane === key ? '' : 'none');
+        history.replaceState(null, '', '#' + key);
+        if (onChange) onChange(key);
+      }
+      tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tab)));
+      const initial = (location.hash || '').slice(1);
+      activate([...tabs].some(t => t.dataset.tab === initial) ? initial : tabs[0].dataset.tab);
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    // Home-grown JSON syntax highlighter (no dependency): wraps tokens in
+    // colored <span>s. Input is a JSON string; output is escaped HTML.
+    function highlightJson(json) {
+      const esc = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return esc.replace(
+        /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+        function (m) {
+          let cls = 'j-num';
+          if (/^"/.test(m)) cls = /:$/.test(m) ? 'j-key' : 'j-str';
+          else if (/^(true|false)$/.test(m)) cls = 'j-bool';
+          else if (/^null$/.test(m)) cls = 'j-null';
+          return '<span class="' + cls + '">' + m + '</span>';
+        });
+    }
+    // Serialize a JS value for use inside a double-quoted inline onclick="…"
+    // attribute. JSON.stringify emits double quotes that would otherwise
+    // terminate the attribute early and break the handler; &quot; lets the
+    // browser decode them back to real quotes when the attribute is parsed.
+    function attrJson(v) {
+      return JSON.stringify(v).replace(/"/g, '&quot;');
+    }
+    function openModal(id) { document.getElementById(id).classList.add('show'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function toast(message, kind) {
+      const root = document.getElementById('toast-root');
+      const el = document.createElement('div');
+      el.className = 'toast ' + (kind === 'err' ? 'err' : 'ok');
+      el.textContent = message;
+      root.appendChild(el);
+      setTimeout(function () { el.remove(); }, kind === 'err' ? 6000 : 3500);
+    }
+    const DCCD_TOKEN = "{{ auth_token }}";
+    async function api(method, url, body) {
+      const opts = { method, headers: {} };
+      if (DCCD_TOKEN) opts.headers['Authorization'] = 'Bearer ' + DCCD_TOKEN;
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const r = await fetch(url, opts);
+      const text = await r.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+      if (!r.ok) throw new Error((data && data.detail) || r.statusText);
+      return data;
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

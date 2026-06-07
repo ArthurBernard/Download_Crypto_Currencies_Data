@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}Live{% endblock %}
+{% block content %}
+<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
+  <h1 style="margin:0">Live</h1>
+  <div class="row" style="gap:.5rem">
+    <span id="sse-status" class="muted" style="font-size:.8rem">Connecting…</span>
+    <button onclick="toggleNewStream()">＋ Add</button>
+  </div>
+</div>
+<p class="muted" style="margin:.2rem 0 .6rem">
+  Live WebSocket streams. The <strong>liveness</strong> column shows the last
+  sample received (price / quote) and how long ago — a green dot means data is
+  flowing right now.
+</p>
+
+<div id="new-stream-form" class="card" style="display:none"></div>
+
+<div class="tabs" id="live-tabs">
+  <button class="tab" data-tab="trades">Trades</button>
+  <button class="tab" data-tab="orderbook">Order Book</button>
+</div>
+
+<div data-pane="trades"><span class="muted">Loading…</span></div>
+<div data-pane="orderbook"><span class="muted">Loading…</span></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EXCHANGES = ['binance','coinbase','kraken','bybit','okx','bitfinex','bitmex'];
+let JOBS = [], RUNNING = {}, INV = [], openExchanges = {};
+// spec_id -> { value|bid|ask, ts(ns), live }. `live` marks a real-time SSE
+// sample; entries without it are seeded from on-disk data (last stored point).
+const samples = {};
+let lastSig = '';
+
+function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
+function invFor(j) {
+  const pair = j.symbol.replace(/\//g,'-');
+  return INV.find(d => d.exchange===j.exchange && d.pair===pair && d.data_type===j.data_type);
+}
+
+async function loadAll() {
+  try {
+    const [jr, sr, ir] = await Promise.all([
+      api('GET','/api/jobs'), api('GET','/api/streams'), api('GET','/api/inventory')]);
+    JOBS = (jr.jobs||[]).filter(j => j.operation === 'stream');
+    RUNNING = {};
+    for (const s of (sr.streams||[])) RUNNING[s.id] = s.running;
+    // Seed liveness from what's on disk so a page refresh immediately reflects
+    // the last stored data point (and its freshness) instead of "waiting…".
+    // Real-time SSE samples (`live`) always win and are never overwritten here.
+    INV = ir.datasets || [];
+    for (const j of JOBS) {
+      if (samples[j.id] && samples[j.id].live) continue;
+      const inv = invFor(j);
+      if (inv && inv.max_ts != null) samples[j.id] = { ts: inv.max_ts };
+      else delete samples[j.id];
+    }
+    // Only rebuild the tables when the structure actually changed (jobs added/
+    // removed, running-state flipped). Otherwise leave the DOM alone so the
+    // span-cadenced liveness ticker isn't forced to repaint on every 8s poll.
+    const sig = JOBS.map(j => `${j.id}:${RUNNING[j.id]?1:0}:${j.snapshot_interval||''}`).join('|');
+    if (sig === lastSig) { refreshLiveness(); return; }
+    lastSig = sig;
+    for (const dt of ['trades','orderbook']) renderPane(dt);
+  } catch (e) {
+    document.querySelectorAll('[data-pane]').forEach(p =>
+      p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
+  }
+}
+
+function renderPane(dt) {
+  const pane = document.querySelector(`[data-pane="${dt}"]`);
+  const jobs = JOBS.filter(j => j.data_type === dt);
+  const exchanges = [...new Set(jobs.map(j=>j.exchange))].sort();
+  if (!exchanges.length) {
+    pane.innerHTML = `<div class="card muted" style="text-align:center;padding:1.5rem">
+      No ${dt} streams yet. Use <strong>＋ Add</strong> above to create one.</div>`;
+    return;
+  }
+  let html = '';
+  for (const ex of exchanges) {
+    const exJobs = jobs.filter(j => j.exchange === ex);
+    const open = openExchanges[dt+'|'+ex] !== false;
+    const liveN = exJobs.filter(j => RUNNING[j.id]).length;
+    html += `<details class="ex" ${open?'open':''} data-ex="${escapeHtml(ex)}" data-dt="${dt}">
+      <summary><span class="ex-name">${escapeHtml(ex)}</span>
+        <span class="ex-meta">${liveN}/${exJobs.length} live</span></summary>
+      <div class="ex-body">
+        <table><thead><tr>
+          <th>Pair</th><th>Cadence</th><th>State</th>
+          <th>Liveness</th><th></th>
+        </tr></thead><tbody>`;
+    for (const j of exJobs) html += rowHtml(j, dt);
+    html += `</tbody></table>
+      ${addFormHtml(ex, dt)}
+      <button class="ghost" style="font-size:.8rem;margin-top:.4rem"
+        onclick="toggleAddForm('${sid(ex+dt)}')">＋ Add stream</button>
+      </div></details>`;
+  }
+  pane.innerHTML = html;
+  pane.querySelectorAll('details.ex').forEach(d =>
+    d.addEventListener('toggle', () =>
+      openExchanges[d.dataset.dt+'|'+d.dataset.ex] = d.open));
+  // The table was just rebuilt, so repaint every liveness cell now.
+  refreshLiveness();
+}
+
+function rowHtml(j, dt) {
+  const running = !!RUNNING[j.id];
+  const state = running
+    ? '<span class="ok">● live</span>' : '<span class="muted">○ stopped</span>';
+  const cadence = dt==='orderbook'
+    ? `<span title="snapshot interval">Δ ${j.snapshot_interval||60}s</span>`
+    : '<span class="muted">tick</span>';
+  return `<tr id="row-${sid(j.id)}">
+    <td><strong>${escapeHtml(j.symbol)}</strong></td>
+    <td style="font-size:.82rem">${cadence}</td>
+    <td id="state-${sid(j.id)}">${state}</td>
+    <td id="live-${sid(j.id)}" style="font-size:.82rem;min-width:200px">
+      <span class="live-dot dead"></span><span class="muted">—</span></td>
+    <td style="white-space:nowrap">
+      <button id="ss-${sid(j.id)}" style="font-size:.75rem;padding:.2rem .5rem"
+        onclick='toggleStream(${attrJson(j.id)})'>${running?'⏹ Stop':'▶ Start'}</button>
+      <button class="ghost" style="font-size:.75rem;padding:.2rem .4rem"
+        onclick='confirmDelete(${attrJson(j.id)})'>🗑</button>
+    </td></tr>`;
+}
+
+// --- liveness rendering ----------------------------------------------------
+// Expected gap between samples per data type — the dot stays green while the
+// last sample is younger than this: a 1h OHLC bar / a 60s order-book snapshot
+// shouldn't read "dead" just because nothing arrived in the last 10s.
+function spanFor(j) {
+  if (j.data_type === 'orderbook') return j.snapshot_interval || 60;
+  return 10;  // trades: a real-time feed, expect sub-10s ticks
+}
+function sampleText(s) {
+  if (s.bid != null || s.ask != null) return `bid ${fmtNum(s.bid)} / ask ${fmtNum(s.ask)}`;
+  return fmtNum(s.value);
+}
+function renderLivenessCell(j) {
+  const cell = document.getElementById('live-'+sid(j.id));
+  if (!cell) return;
+  const running = !!RUNNING[j.id];
+  const s = samples[j.id];
+  if (!s || s.ts == null) {
+    cell.innerHTML = `<span class="live-dot ${running?'stale':'dead'}"></span>` +
+      `<span class="muted">${running?'waiting…':'—'}</span>`;
+    return;
+  }
+  // Freshness is the age of the latest data point itself (works for both live
+  // samples and disk-seeded entries).
+  const cls = freshnessClass(s.ts, spanFor(j));
+  const dot = `<span class="live-dot ${cls}"></span>`;
+  const val = (s.value != null || s.bid != null || s.ask != null)
+    ? `<strong>${escapeHtml(sampleText(s))}</strong>` : '';
+  let infoTxt;
+  if (!running) {
+    // Not running: when it last produced data — relative if recent, else date.
+    infoTxt = fmtFreshness(s.ts);
+  } else if (j.data_type === 'trades') {
+    // Real-time feed: dot + price say it all; only surface an age once it stalls.
+    infoTxt = cls === 'fresh' ? '' : fmtFreshness(s.ts);
+  } else {
+    // Span data: how long since the last bar/snapshot — relative if recent, else date.
+    infoTxt = fmtFreshness(s.ts);
+  }
+  const info = infoTxt ? `<span class="muted">${escapeHtml(infoTxt)}</span>` : '';
+  const tail = [val, info].filter(Boolean).join(' <span class="muted">·</span> ');
+  cell.innerHTML = dot + (tail ? ' ' + tail : '');
+}
+// Repaint every cell once a second — a tiny text update that keeps the relative
+// "N min ago" counters live (the heavy table rebuild is gated separately in
+// loadAll, so this never causes the flicker the per-pane rebuild used to).
+function refreshLiveness() {
+  for (const j of JOBS) renderLivenessCell(j);
+}
+
+// --- actions ---------------------------------------------------------------
+async function toggleStream(jobId) {
+  const btn = document.getElementById('ss-'+sid(jobId));
+  const running = !!RUNNING[jobId];
+  btn.disabled = true;
+  try {
+    await api('POST', running?'/api/streams/stop':'/api/streams/start', { spec_id: jobId });
+    toast(running?'Stream stopped':'Stream started','ok');
+    if (running) delete samples[jobId];
+    setTimeout(loadAll, 400);
+  } catch (e) { toast(e.message,'err'); btn.disabled = false; }
+}
+
+function confirmDelete(jobId) {
+  const row = document.getElementById('row-'+sid(jobId));
+  const td = row.lastElementChild;
+  td.dataset.prev = td.innerHTML;
+  td.innerHTML = `<span class="muted" style="font-size:.75rem">Delete?</span>
+    <button class="danger" style="font-size:.72rem;padding:.15rem .4rem" onclick='doDelete(${attrJson(jobId)})'>Yes</button>
+    <button class="ghost" style="font-size:.72rem;padding:.15rem .4rem" onclick='cancelDelete(${attrJson(jobId)})'>No</button>`;
+}
+function cancelDelete(jobId) {
+  const td = document.getElementById('row-'+sid(jobId)).lastElementChild;
+  td.innerHTML = td.dataset.prev;
+}
+async function doDelete(jobId) {
+  try {
+    if (RUNNING[jobId]) { try { await api('POST','/api/streams/stop',{spec_id:jobId}); } catch(_){} }
+    await api('POST','/api/jobs/delete', { job_id: jobId });
+    toast('Stream deleted','ok'); await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+// --- add-stream forms ------------------------------------------------------
+function addFormHtml(ex, dt) {
+  const k = sid(ex+dt);
+  const extra = dt==='orderbook'
+    ? `<div><label>Snapshot every (s)</label><input id="snap-${k}" type="number" value="60" min="1" style="width:6rem"></div>` : '';
+  return `<div class="inline-form" id="addf-${k}" style="display:none">
+    <div><label>Pair</label><input id="pair-${k}" placeholder="BTC/USDT" style="width:9rem"></div>
+    ${extra}
+    <button style="font-size:.8rem" onclick='createStream(${attrJson(ex)}, ${attrJson(dt)})'>Create</button>
+  </div>`;
+}
+function toggleAddForm(key) {
+  const f = document.getElementById('addf-'+key);
+  if (f) f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+async function createStream(ex, dt) {
+  const k = sid(ex+dt);
+  const pair = (document.getElementById('pair-'+k).value||'').trim();
+  if (!pair) { toast('Pair required','err'); return; }
+  const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
+                    trigger_kind:'supervised' };
+  if (dt==='orderbook') payload.snapshot_interval = parseInt(document.getElementById('snap-'+k).value,10)||60;
+  try { await api('POST','/api/jobs/create', payload);
+    toast('Stream created','ok'); await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+function toggleNewStream() {
+  const el = document.getElementById('new-stream-form');
+  if (el.style.display !== 'none' && el.innerHTML) { el.style.display='none'; return; }
+  const dt = (location.hash||'#trades').slice(1) || 'trades';
+  el.innerHTML = `<div class="inline-form" style="padding:.2rem 0">
+    <div><label>Exchange</label><select id="ns-ex">${EXCHANGES.map(e=>`<option>${e}</option>`).join('')}</select></div>
+    <div><label>Data type</label><select id="ns-dt" onchange="nsToggleSpan()">
+      <option value="trades"${dt==='trades'?' selected':''}>Trades</option>
+      <option value="orderbook"${dt==='orderbook'?' selected':''}>Order Book</option></select></div>
+    <div id="ns-snap-wrap" style="display:none"><label>Snapshot every (s)</label><input id="ns-snap" type="number" value="60" min="1" style="width:6rem"></div>
+    <div><label>Pair</label><input id="ns-pair" placeholder="BTC/USDT" style="width:9rem"></div>
+    <button style="font-size:.8rem" onclick="createNew()">Create</button>
+    <button class="ghost" style="font-size:.8rem" onclick="toggleNewStream()">Cancel</button>
+  </div>`;
+  el.style.display = '';
+  nsToggleSpan();
+}
+function nsToggleSpan() {
+  const dt = document.getElementById('ns-dt').value;
+  document.getElementById('ns-snap-wrap').style.display = dt==='orderbook' ? '' : 'none';
+}
+async function createNew() {
+  const ex = document.getElementById('ns-ex').value;
+  const dt = document.getElementById('ns-dt').value;
+  const pair = (document.getElementById('ns-pair').value||'').trim();
+  if (!pair) { toast('Pair required','err'); return; }
+  const payload = { operation:'stream', exchange:ex, symbol:pair, data_type:dt,
+                    trigger_kind:'supervised' };
+  if (dt==='orderbook') payload.snapshot_interval = parseInt(document.getElementById('ns-snap').value,10)||60;
+  try { await api('POST','/api/jobs/create', payload);
+    toast('Stream created','ok'); toggleNewStream();
+    if (location.hash.slice(1)!==dt) location.hash = dt;
+    await loadAll();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+// --- SSE for liveness ------------------------------------------------------
+let es;
+function connectSSE() {
+  if (es) es.close();
+  es = new EventSource('/api/events' + (DCCD_TOKEN ? '?token='+encodeURIComponent(DCCD_TOKEN) : ''));
+  const st = document.getElementById('sse-status');
+  es.onopen = () => { st.innerHTML = '<span class="ok">● connected</span>'; };
+  es.onmessage = (e) => {
+    if (e.data.startsWith(':')) return;
+    let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
+    if (ev.kind === 'sample') {
+      // stream run_id is "<spec.id>@stream" → strip the trailing @segment.
+      const specId = ev.run_id.slice(0, ev.run_id.lastIndexOf('@'));
+      samples[specId] = { value: ev.value, bid: ev.bid, ask: ev.ask, ts: ev.ts, live: true };
+    } else if (ev.kind === 'status') {
+      // a stream stopping/failing → refresh state soon
+      setTimeout(loadAll, 300);
+    }
+  };
+  es.onerror = () => {
+    st.innerHTML = '<span class="err">disconnected — retrying…</span>';
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+initTabs('#live-tabs');
+loadAll();
+connectSSE();
+setInterval(refreshLiveness, 1000);
+setInterval(loadAll, 8000);
+</script>
+{% endblock %}

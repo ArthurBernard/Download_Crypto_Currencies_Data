@@ -6,6 +6,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.0.0] - 2026-06-07
+
+### Added
+
+- Reworked web UI split by concern: a read-only enriched **Inventory** (data
+  freshness, OHLC gap detection, on-disk size, per-exchange totals) and two
+  collection pages — **Historical** and **Live** — each with data-type tabs and
+  per-exchange accordions. Jobs are created, edited (first date) and deleted
+  inline on the page; the Live page shows a real-time liveness indicator (last
+  trade/quote + age) fed by a throttled stream heartbeat over SSE. (#76)
+- Job CRUD over the API: `POST /api/jobs/create|delete|update`, backed by
+  `AppConfig.add_job`/`remove_job`/`update_job_start` (persisted to `config.yml`).
+- `ParquetStore.inventory()` now reports on-disk `bytes` and, for OHLC,
+  `expected_rows`/`missing_rows` (gap detection) at no extra read cost.
+- `EventBus` fan-out to multiple SSE consumers and a `StreamSampleEvent`
+  liveness sample emitted (throttled) by `operations.stream`.
+- UI polish: nav reorganised into `Collect ▾`/`System ▾` dropdowns; **Inventory**
+  renamed **Data** (`/inventory`→`/data`) with data-type tabs; reworked Live
+  liveness — seeded from the last on-disk data point so a page refresh shows
+  freshness immediately (no "waiting…"), span-aware dot, a freshness label that
+  is a live relative "N min ago" counter under 24h and an absolute date beyond,
+  and no noise age for fresh trades, with client-side number formatting;
+  order-book cadence (`snapshot_interval`) shown and settable;
+  Storage shows on-disk sizes; Dashboard adds a KPI bar and clearer sections;
+  Logs reoriented around recent runs with human run labels. The Config page no
+  longer duplicates job management (jobs live on Historical/Live; raw edit via
+  its JSON tab). `GET /api/jobs` now returns `start`/`every`/`snapshot_interval`/
+  `depth`. (#76)
+- Cursor-based trades pagination: the engine now follows each adapter's opaque
+  cursor until a window is drained, instead of advancing by a fixed time window.
+  Fixes silent loss of >95% of trades on every liquid pair (all exchanges).
+- UI: single-line top bar (brand + nav on one row); per-job **Schedule** on
+  Historical (a recurring backfill cron — Off/hourly/daily/custom, independent of
+  the span but `≥` it), reconciled live via `Scheduler.sync_intervals`; **Run
+  all** (global) and per-exchange run; timezone-aware date display driven by
+  `settings.timezone` (`local`/`UTC`/zoneinfo). OHLC removed from Live (collected
+  via Historical schedule); order books removed from Historical (no REST
+  history). `POST /api/jobs/update` now also sets `every` (schedule); new
+  `manual` trigger kind for never-auto-run jobs.
+- Bearer auth on `/api/*` when `settings.ui_auth_token` is set, with a `?token=`
+  fallback for Server-Sent Events; `settings.ui_allow_origins` for opt-in CORS.
+- Public async `Client.read()` and `Client.stream()`; `Client` wires adapters
+  via `service_factory` (single source of truth).
+- Network-marked end-to-end tests (`pytest -m network`) validating pagination
+  against live exchange APIs.
+
+### Fixed
+
+- Data loss on merge: writing into an existing legacy v2 Parquet file no longer
+  silently overwrites it; existing rows are canonicalised and preserved.
+- Provenance is now actually written into the Parquet footer (was computed but
+  dropped).
+- Custom ISO start date for backfill no longer raises (`JobParams.start`).
+- Historical *first date* edit no longer reverts on reload: `GET /api/jobs` was
+  not returning `start`, so the UI reset the field after every refresh. (#76)
+- Live order-book streams reported a crossed/incorrect best bid-ask: the WS
+  adapters emitted unmerged diff levels. binance/okx/bitmex now use full
+  snapshot channels (`@depth<N>`, `books5`, `orderBook10`) and bybit
+  reconstructs full state from snapshot+deltas (like kraken); best bid/ask is
+  computed defensively (`max` bid / `min` ask). (#76)
+- Order-book Live liveness was incoherent with its cadence: it sampled the WS
+  every second while only one snapshot per ``snapshot_interval`` is captured. The
+  liveness sample is now emitted when a snapshot is actually saved, so its age
+  counts up to the interval and resets (matching the "Δ Ns" cadence). (#76)
+- `dccd inventory` no longer crashes on OHLC datasets.
+- Streams with no real implementation (Coinbase OHLC/order book, Bitfinex order
+  book) are rejected with `NoCapability` instead of "running" with zero output.
+- `history="recent"` exchanges (Kraken OHLC) are clamped + warned instead of
+  silently returning wrong deep history.
+- Kraken live OHLC timestamps were epoch 0 (1970): the WS adapter read a
+  non-existent `timestamp_open`; it now parses `interval_begin` (ISO-8601).
+- `mypy dccd/` runs and passes again (it had been aborting on the dev Sphinx).
+
+### Changed / Removed
+
+- Docs/examples swept to v3: README drops the removed `dccd migrate` command and
+  the "Migrating from v2" section; `examples/` rewritten to the v3 `Client` and
+  `dccd.application` daemon wiring with a v3 `jobs:` config, and the stale v2
+  `historical_downloader.ipynb` removed. (#82)
+- Honest OHLC fidelity: Coinbase `quote_volume` is null (was a fabricated
+  `close×volume`); Kraken now fills its native trade count.
+- Removed the dead `parallel` backfill flag, the unused `Page` model and the
+  unused bundled `htmx.min.js`.
+- Removed the v2→v3 Parquet migration tool entirely: `dccd migrate`,
+  `POST /api/migrate`, the Storage-page migrate card, `dccd/storage/migrate.py`,
+  and the `migrate` operation in the registry.
+
+> v3 is a full hexagonal rewrite. It **removes** the v2 daemon web UI shipped in
+> 2.4.0 (`dccd/daemon/*`) and replaces it with `dccd/interfaces/` (api/cli/ui).
+
 ## [2.4.0] - 2026-06-04
 
 ### Added
