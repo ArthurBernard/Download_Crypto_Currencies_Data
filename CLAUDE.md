@@ -72,6 +72,36 @@ Do not add `Co-Authored-By` trailers to commits — this is a personal repo.
 
 **Before every commit:** run `pytest`. It must pass.
 
+**One PR = one concern, small and disposable.** Even a large plan ships as
+*several* small atomic PRs — never one fourre-tout branch. A PR you couldn't throw
+away without losing unrelated good work is too big: split it. This is what makes
+`/abandon-task` (kill a bad PR, keep the lesson) viable.
+
+### Dev loop & docs of record
+
+The iterative loop is tooled by skills, with three tracked docs as the sources of
+truth:
+
+| Doc | Holds | Updated by |
+|-----|-------|-----------|
+| `doc/dev/07-roadmap.md` | open work (single source) | `/pick-task` reads · `/finish-task`, `/abandon-task` update |
+| `doc/dev/03-decisions.md` | the *why* — ADR journal (+ settled rationale) | `/finish-task` (accepted), `/abandon-task` (rejected/tombstone) |
+| `doc/dev/06-status.md` | where things stand | `/finish-task`, `/groom-docs` |
+
+`CHANGELOG.md` + git log stay authoritative for *what* shipped. The loop:
+`/pick-task` (smallest slice → branch) → plan (split big plans into small PRs) →
+`/finish-task` (tests, ADR entry, status, PR) **or** `/abandon-task` (salvage the
+lesson + close the PR); `/groom-docs` periodically keeps `doc/dev/` lean and true.
+
+**Model per task** (advisory — you set it via `/model`, or a skill spawns a
+subagent with an explicit `model`; subagents otherwise *inherit* the parent):
+
+| Model | For |
+|-------|-----|
+| `opus` | judgement, design, decisions, planning, review |
+| `sonnet` | implementation — code, tests, docstrings |
+| `haiku` | mechanical fan-out (doc scans, checklists) — spawn it explicitly as a subagent |
+
 ## Architecture (v3 — hexagonal)
 
 ### Three usage modes
