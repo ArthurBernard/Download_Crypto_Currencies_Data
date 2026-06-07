@@ -33,7 +33,7 @@ Interfaces: CLI · HTTP API · Web UI · Python Client
 ```
 
 - **Async-first** — httpx + websockets, one event loop; CLI via `asyncio.run`
-- **Nanosecond timestamps** — uniform int64 UTC; run `dccd migrate` on existing data
+- **Nanosecond timestamps** — uniform int64 UTC throughout the store
 - **Generic Paginator** — no per-exchange chunking; Coinbase 300-limit is a capability declaration
 - **NoCapability early** — Bybit no spot trades history, Kraken OHLC recent-only → clear error
 - **Four iso-functional interfaces** — same operations everywhere (parity test enforces this)
@@ -112,7 +112,6 @@ dccd backfill -e binance -s BTC/USDT --type ohlc --span 3600  # ad-hoc
 dccd stream   --config config.yml      # run WebSocket stream jobs
 dccd start    --config config.yml      # full daemon + UI
 dccd ui       --config config.yml      # UI only (no scheduler)
-dccd migrate  --config config.yml      # migrate v2 Parquet (s → ns)
 dccd inventory --config config.yml     # list stored datasets
 dccd status   --config config.yml      # show recent runs
 ```
@@ -173,21 +172,6 @@ GET  /health                  liveness check
 ```
 
 All timestamps are **nanoseconds UTC** (int64).
-
-## Migrating from v2
-
-```bash
-# Preview what would change
-dccd migrate --config config.yml --dry-run
-
-# Apply (irreversible — back up first)
-dccd migrate --config config.yml --no-dry-run
-```
-
-**Breaking changes:**
-- `histo_dl`, `continuous_dl`, `daemon` removed — new `sources/`, `application/`, `interfaces/`
-- `DataStore` → `ParquetStore`; `CollectorConfig` → `AppConfig`
-- Timestamps: seconds → nanoseconds
 
 ## Development
 

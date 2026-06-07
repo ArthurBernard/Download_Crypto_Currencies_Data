@@ -47,7 +47,8 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
 - **Deploy**: `Dockerfile` (python:3.12-slim, runs the daemon; bind `0.0.0.0`,
   mount `/data`) and `deploy/dccd.service` (systemd unit for `dccd start`).
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
-- **Examples**: `examples/` (config sample, daemon example, downloader notebook).
+- **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
+  `dccd.application` daemon example).
 - **Project skills** (`.claude/skills/`): `data-e2e` (real-data verification),
   `release-gate` (pre-release checks), `ui-audit` (browser audit). Plus the
   user-level `/finish-task` flow used to open PRs.

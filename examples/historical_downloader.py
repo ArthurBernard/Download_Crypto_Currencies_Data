@@ -1,29 +1,45 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" Simple example showing how to use the historical downloader.
+"""Simple example: download historical data with the v3 async ``Client``.
 
-Exchange classes (FromBinance, FromKraken, FromCoinbase, FromBybit, FromOKX)
-share the same interface: initialise with a path, crypto symbol, and time
-span in seconds, then call import_data() → save() → get_data().
+``Client`` is the one-stop entry point — it wires every exchange adapter and the
+local Parquet store, and exposes the four operations as methods: ``backfill``
+(download history), ``stream`` (collect live), ``read`` (load stored data) and
+``inventory`` (list datasets). Use it as an async context manager so the shared
+HTTP client is opened and closed cleanly.
 
-start / end accept:
-  - a timestamp (int)
-  - a date string 'yyyy-mm-dd hh:mm:ss'
-  - 'last' (resume from last saved point) / 'now' (current time)
+The store root comes from ``settings.data_path`` in your ``config.yml`` (resolved
+via the XDG fallback); see ``examples/config.example.yml``.
 
+``start`` accepts:
+  - an ISO date string, e.g. ``'2024-01-01'``
+  - ``'last'`` (resume from the last stored row)
+  - ``'origin'`` (full available history)
 """
 
-from dccd.histo_dl import FromBinance
+import asyncio
 
-# Download hourly BTC/USDT data for 2024
-obj = FromBinance('/home/arthur/Data/Crypto_Currencies/', 'BTC', 3600, fiat='USDT')
+from dccd import Client
 
-obj.import_data(start='2024-01-01 00:00:00', end='2024-12-31 00:00:00')
-obj.save(form='parquet')
 
-df = obj.get_data()
-print(df.head())
+async def main() -> None:
+    async with Client() as c:
+        # Download hourly BTC/USDT OHLC for 2024. Re-running only adds what is
+        # missing (resume + dedup), so this doubles as an incremental update.
+        result = await c.backfill(
+            "binance", "BTC/USDT", "ohlc", span=3600, start="2024-01-01"
+        )
+        print(f"wrote {result['rows_written']} rows")
 
-# Incremental update (resumes from last saved timestamp)
-obj.import_data(start='last', end='now').save(form='parquet')
+        # Load what landed on disk (returns a Polars DataFrame).
+        df = c.read("binance", "BTC/USDT", "ohlc", span=3600)
+        print(df.head())
+
+        # List every stored dataset.
+        for dataset in c.inventory():
+            print(dataset)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

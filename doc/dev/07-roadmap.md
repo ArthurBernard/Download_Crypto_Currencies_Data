@@ -24,8 +24,6 @@ release it and finish the v3-era docs.
 - [ ] **Release v3.0** — `develop → master` + `v3.0.0` tag. `pyproject` already
   says `3.0.0`; last published tag is `v2.4.0`. Use the `release-gate` skill
   before, the `release` skill to cut it.
-- [ ] **v3 docs sweep** — confirm `CLAUDE.md`, `README`, Sphinx (`doc/source/`)
-  and `examples/` all describe the v3 hexagonal architecture (no v2 leftovers).
 
 ---
 
