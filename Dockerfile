@@ -30,7 +30,7 @@ COPY dccd ./dccd
 # polars-lts-cpu lags the latest polars release, so the variant is installed
 # unpinned (newest available that runs on the older CPU) — not pinned to polars's
 # version, which would fail to resolve.
-RUN pip install ".[daemon,ui]" \
+RUN pip install ".[daemon]" \
  && if [ "$POLARS_VARIANT" != "polars" ]; then \
         pip uninstall -y polars \
      && pip install "${POLARS_VARIANT}"; \

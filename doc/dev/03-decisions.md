@@ -120,6 +120,21 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — systemd deploy: venv `ExecStart` + `StateDirectory` (PR #XX) [accepted]
+- **Choice**: `deploy/dccd.service` runs dccd from a venv at `/opt/dccd/venv` and
+  uses `StateDirectory=dccd` (systemd creates/owns `/var/lib/dccd` for `User=dccd`),
+  rather than a system-wide `pip install` at `/usr/local/bin/dccd` + a manual
+  `useradd --create-home`.
+- **Why**: Ubuntu 24.04 is PEP 668 (externally-managed) — a system pip install needs
+  `--break-system-packages`; a venv is clean and isolated. The old hard-coded
+  `ExecStart=/usr/local/bin/dccd` failed `systemd-analyze verify` on a real host.
+  `StateDirectory` removes the manual mkdir/chown and guarantees correct ownership
+  under `ProtectSystem=strict`. Verified live (install, auto-restart, hardened write).
+- **Rejected alternatives**: system-wide pip (`--break-system-packages`, pollutes the
+  system env); `DynamicUser=yes` (loses a stable uid for the data dir across
+  restarts); manual `useradd --create-home` + mkdir (more steps, easy to get perms
+  wrong). Also fixed: `.[daemon,ui]` referenced a non-existent `ui` extra → `.[daemon]`.
+
 ### 2026-06-09 — Old-CPU support via a `POLARS_VARIANT` build arg + digest-pinned base (PR #97) [accepted]
 - **Choice**: the `Dockerfile` pins the base image to a `python:3.12-slim` digest
   and exposes `ARG POLARS_VARIANT=polars`. Modern hosts build unchanged; hosts

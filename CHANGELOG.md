@@ -28,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `deploy/dccd.service`: `ExecStart` pointed at `/usr/local/bin/dccd` and failed
+  `systemd-analyze verify`; it now uses a venv path (`/opt/dccd/venv/bin/dccd`) with
+  `StateDirectory=dccd` (systemd owns `/var/lib/dccd`). The install spec dropped the
+  non-existent `ui` extra (`.[daemon,ui]` → `.[daemon]`, also in the `Dockerfile`).
+  Verified a real system-wide install: `systemd-analyze verify` passes, the service
+  is active, auto-restarts after SIGKILL, and a backfill writes correct OHLC under
+  the hardened `/var/lib/dccd/data` (`ProtectSystem=strict`). (#XX)
+
 ### Deprecated
 
 ### Removed
