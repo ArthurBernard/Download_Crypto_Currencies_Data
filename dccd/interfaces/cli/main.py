@@ -167,6 +167,7 @@ def cmd_start(
         registry, store, runs_store, bus,
         remote=remote, sync_interval=cfg.storage.sync_interval,
         coverage_store=coverage_store,
+        data_path=cfg.settings.data_path, min_free_gb=cfg.storage.min_free_gb,
     )
     if remote is not None:
         typer.echo(

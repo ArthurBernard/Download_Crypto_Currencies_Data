@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dataset's `[min_ts, max_ts]` extent, and `start="last"` falls back to the
   manifest's `max_ts` when no local file exists — so local data can be dropped to
   free disk without forcing a re-download on the next backfill. (#88)
+- Free-space purge: `storage.min_free_gb` (default `0` = off). After each
+  successful sync the daemon drops the oldest already-synced Parquet files until
+  free space is back above the floor (the coverage manifest keeps the resume
+  cursor, `.dccd/` is never touched). (#XX)
 
 ### Changed
 
