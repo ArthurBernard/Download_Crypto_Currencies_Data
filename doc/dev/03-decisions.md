@@ -120,6 +120,20 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Restart safety is reconstruction-from-config, verified by reboot (PR #99) [accepted]
+- **Choice**: keep restart safety as *stateless reconstruction* — the daemon holds
+  no cross-process state; on boot it rebuilds everything from `config.yml` +
+  on-disk stores (`cmd_start` → `scheduler.start(cfg.all_job_specs())`) and resumes
+  from the coverage manifest / `store.last_timestamp`. No checkpoint/PID file. A real
+  `systemctl reboot` is the acceptance test, plus `test_restart.py` as the guard.
+- **Why**: config + the SQLite WAL stores (`runs.db`, `coverage.db`) are already the
+  durable truth; a separate restart-state file would be a second source to keep in
+  sync. The real reboot confirmed: service auto-active, stream reconnected (trades
+  2000→3000 contiguous), interval re-armed, `runs` 6→12 (append), coverage intact.
+- **Rejected alternatives**: a checkpoint/resume file (duplicates config + stores,
+  drifts); relying on systemd to re-run a one-shot (loses the live stream). No code
+  change was needed — this records *why* and adds the regression guard.
+
 ### 2026-06-10 — systemd deploy: venv `ExecStart` + `StateDirectory` (PR #98) [accepted]
 - **Choice**: `deploy/dccd.service` runs dccd from a venv at `/opt/dccd/venv` and
   uses `StateDirectory=dccd` (systemd creates/owns `/var/lib/dccd` for `User=dccd`),
