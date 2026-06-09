@@ -41,10 +41,12 @@ from dccd.application.registry import REGISTRY
 from dccd.application.scheduler import Scheduler
 from dccd.application.service_factory import (
     build_registry,
+    build_remote,
     build_runs_store,
     build_store,
 )
 from dccd.domain.symbol import Symbol
+from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
 from dccd.storage.runs_sqlite import RunsStore
 
@@ -169,6 +171,10 @@ def create_app(
         app.state.runs_store = build_runs_store(cfg.settings.data_path)
         app.state.event_bus = EventBus()
         app.state.registry = build_registry()
+        # Remote sync target (None when storage.remotes is empty). Resolved from
+        # config — not the scheduler — so "Sync now" works in `dccd ui` mode too,
+        # where the standalone scheduler has no remote wired in.
+        app.state.remote = build_remote(cfg)
 
         if scheduler is not None:
             app.state.scheduler = scheduler
@@ -337,6 +343,58 @@ def create_app(
     async def get_inventory(request: Request) -> dict[str, Any]:
         """Return all stored datasets."""
         return {"datasets": _store(request).inventory()}
+
+    # -----------------------------------------------------------------------
+    # Remote sync
+    # -----------------------------------------------------------------------
+
+    @app.get("/api/storage/sync")
+    async def get_sync_status(request: Request) -> dict[str, Any]:
+        """Remote-sync status for the Storage page.
+
+        Reports whether remotes are configured, the last persisted ``sync`` run
+        (state/time/error), the next scheduled sync ETA, and the on-disk store
+        size (the "synced volume" proxy — after a successful mirror local equals
+        remote).
+        """
+        cfg = _cfg(request)
+        remotes = [r.remote for r in cfg.storage.remotes]
+        configured = bool(remotes)
+        interval = cfg.storage.sync_interval
+        runs = _runs(request).list_runs(spec_id="remote-sync", limit=1)
+        last = None
+        next_eta = None
+        if runs:
+            r = runs[0]
+            last = {
+                "state": r["state"],
+                "ended_at": r["ended_at"],
+                "error": r["error"],
+                "rows_written": r["rows_written"],
+            }
+            if configured and r["ended_at"]:
+                next_eta = r["ended_at"] + interval * NS
+        total_bytes = sum(d.get("bytes", 0) for d in _store(request).inventory())
+        return {
+            "configured": configured,
+            "remotes": remotes,
+            "sync_interval": interval,
+            "last": last,
+            "next_eta": next_eta,
+            "bytes": total_bytes,
+        }
+
+    @app.post("/api/storage/sync")
+    async def trigger_sync(request: Request) -> dict[str, Any]:
+        """Trigger a remote sync now (runs in the background)."""
+        remote = request.app.state.remote
+        if remote is None:
+            raise HTTPException(400, "no remotes configured")
+        from dccd.application.operations import sync_remote
+
+        events = request.app.state.event_bus.for_run("remote-sync")
+        _spawn(request, sync_remote(remote, runs_store=_runs(request), events=events))
+        return {"status": "started"}
 
     # -----------------------------------------------------------------------
     # Backfill

@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Surface remote sync in the Storage UI; share one sync-cycle primitive (PR #87) [accepted]
+- **Choice**: extract the single sync cycle (create run → `sync_all` → finish +
+  events) into `operations.sync_remote`, reused by both the scheduler loop and a
+  new manual `POST /api/storage/sync`. The Storage page reads `GET
+  /api/storage/sync` (last/next/volume/remotes) and gets a "Sync now" button. The
+  manual endpoint resolves the remote from **config** (`app.state.remote =
+  build_remote(cfg)` in the lifespan), not from the scheduler.
+- **Why**: in `dccd ui` mode the standalone scheduler has no remote wired in, so
+  reading it from the scheduler would make "Sync now" silently dead there;
+  resolving from config works in both `dccd ui` and `dccd start`. Sharing
+  `sync_remote` keeps run-recording in one place so the manual and scheduled
+  paths can't drift. The page persists status (a plain GET) via the existing
+  `sync` runs; no SSE — kept deliberately light per the user's ask.
+- **Rejected alternatives**: duplicate the run-recording in the endpoint (drift
+  risk); drive the sync from `scheduler._remote` (dead in `dccd ui`); push live
+  status over SSE on the Storage page (heavier than asked — a 10s poll suffices).
+
 ### 2026-06-09 — Daemon drives rclone sync; own the loop in the Scheduler (PR #86) [accepted]
 - **Choice**: schedule the existing `RemoteStorage.sync_all` from `dccd start` by
   giving `Scheduler` an optional `remote`/`sync_interval` and a `_sync_loop`

@@ -63,9 +63,6 @@ Goal: open the dashboard securely from a laptop or phone, not just `localhost`.
 Goal: the Parquet store is mirrored to off-box storage (S3/B2/Drive/…) so a server
 loss doesn't lose data.
 
-- [ ] **Surface sync status in the UI** — last successful sync time + errors on
-  the Storage page; manual "Sync now" button (API endpoint). *(Next PR — the
-  daemon already persists `sync` runs + emits a `remote-sync` EventBus status.)*
 - [ ] **rclone provisioning docs** — how to configure a remote (`rclone config`)
   in the container/host; mount or inject `rclone.conf` securely.
 - [ ] **Integrity** — one-way `sync` (mirror) semantics, dedup-safe; document

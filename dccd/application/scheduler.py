@@ -240,53 +240,31 @@ class Scheduler:
         """Periodically mirror the local store to the configured rclone remotes.
 
         Runs only when a :class:`~dccd.storage.remote.RemoteStorage` was wired in
-        (``storage.remotes`` non-empty). Each cycle is recorded as a ``sync`` run
-        in :class:`RunsStore` (so the Storage UI can show "last sync") and emitted
-        live on the ``remote-sync`` EventBus channel. On failure it backs off
-        exponentially (30s → capped at ``sync_interval``) so a flapping remote
-        doesn't hammer rclone.
+        (``storage.remotes`` non-empty). Each cycle is delegated to
+        :func:`dccd.application.operations.sync_remote` (which records a ``sync``
+        run in :class:`RunsStore` and emits live ``remote-sync`` EventBus status);
+        this loop only owns the cadence and the exponential backoff on failure
+        (30s → capped at ``sync_interval``) so a flapping remote doesn't hammer
+        rclone.
         """
+        from dccd.application.operations import sync_remote
         assert self._remote is not None
         run_events = self._events.for_run("remote-sync")
         backoff = 30.0
-        while self._running:
-            run_id = f"remote-sync@{time.time_ns()}"
-            if self._runs_store:
-                self._runs_store.create_run(
-                    run_id, "remote-sync", "sync", "-", "all", "-"
+        try:
+            while self._running:
+                result = await sync_remote(
+                    self._remote, runs_store=self._runs_store, events=run_events
                 )
-            run_events.status("running")
-            try:
-                results = await self._remote.sync_all()
-                failed = [r for r, ok in results.items() if not ok]
-                if failed:
-                    msg = f"Remote sync failed for: {', '.join(failed)}"
-                    run_events.log(msg, "error")
-                    run_events.status("failed")
-                    if self._runs_store:
-                        self._runs_store.finish_run(run_id, "failed", error=msg)
+                if result["ok"]:
+                    backoff = 30.0
+                    await asyncio.sleep(self._sync_interval)
+                else:
+                    logger.warning("Remote sync failed — retry in %ds", int(backoff))
                     await asyncio.sleep(min(backoff, self._sync_interval))
                     backoff = min(backoff * 2, float(self._sync_interval))
-                    continue
-                run_events.log(f"Synced {len(results)} remote(s)")
-                run_events.status("succeeded")
-                if self._runs_store:
-                    self._runs_store.finish_run(
-                        run_id, "succeeded", rows_written=len(results)
-                    )
-                backoff = 30.0
-                await asyncio.sleep(self._sync_interval)
-            except asyncio.CancelledError:
-                return
-            except Exception as exc:
-                msg = f"Remote sync error: {exc}"
-                logger.warning("%s — retry in %ds", msg, int(backoff))
-                run_events.log(msg, "error")
-                run_events.status("failed")
-                if self._runs_store:
-                    self._runs_store.finish_run(run_id, "failed", error=str(exc))
-                await asyncio.sleep(min(backoff, self._sync_interval))
-                backoff = min(backoff * 2, float(self._sync_interval))
+        except asyncio.CancelledError:
+            return
 
     async def _interval_loop(self, spec: JobSpec) -> None:
         every = spec.trigger.every or spec.target.span or 3600

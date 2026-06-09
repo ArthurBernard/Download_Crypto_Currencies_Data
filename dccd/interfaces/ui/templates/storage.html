@@ -4,12 +4,65 @@
 <h1>Storage</h1>
 
 <div class="card">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem">
+    <h2 style="margin:0">Remote sync</h2>
+    <button id="sync-now" type="button" onclick="syncNow()" style="display:none">Sync now</button>
+  </div>
+  <div id="sync-content" style="margin-top:.75rem"><span class="muted">Loading…</span></div>
+</div>
+
+<div class="card">
   <h2 style="margin-top:0">Datasets on disk</h2>
   <div id="inv-content"><span class="muted">Loading…</span></div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
+const SYNC_DOT = { succeeded: 'fresh', running: 'stale', failed: 'dead' };
+
+async function loadSync() {
+  try {
+    const s = await api('GET', '/api/storage/sync');
+    const btn = document.getElementById('sync-now');
+    if (!s.configured) {
+      btn.style.display = 'none';
+      document.getElementById('sync-content').innerHTML =
+        '<span class="muted">No remote configured — add <code>storage.remotes</code> on the Config page.</span>';
+      return;
+    }
+    btn.style.display = '';
+    const st = s.last ? s.last.state : null;
+    const dot = SYNC_DOT[st] || 'dead';
+    const lastLabel = s.last && s.last.ended_at ? fmtFreshness(s.last.ended_at)
+      : (st === 'running' ? 'running…' : 'never');
+    let html = `<p style="margin:.2rem 0">
+      <span class="live-dot ${dot}"></span>
+      <strong>Last sync:</strong> ${escapeHtml(lastLabel)}${st ? ` <span class="muted">(${escapeHtml(st)})</span>` : ''}
+    </p>`;
+    if (s.next_eta) html += `<p class="muted" style="margin:.2rem 0">Next sync: ${fmtNs(s.next_eta)}</p>`;
+    html += `<p class="muted" style="margin:.2rem 0">Remotes: ${s.remotes.map(escapeHtml).join(', ')} · Synced volume: ${fmtBytes(s.bytes)}</p>`;
+    if (s.last && s.last.state === 'failed' && s.last.error)
+      html += `<p class="err" style="margin:.2rem 0">${escapeHtml(s.last.error)}</p>`;
+    document.getElementById('sync-content').innerHTML = html;
+  } catch (e) {
+    document.getElementById('sync-content').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+async function syncNow() {
+  const btn = document.getElementById('sync-now');
+  btn.disabled = true;
+  try {
+    await api('POST', '/api/storage/sync');
+    // Poll a few times so the result lands without a manual refresh.
+    for (const ms of [400, 1200, 3000]) setTimeout(loadSync, ms);
+  } catch (e) {
+    document.getElementById('sync-content').innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`;
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 1000);
+  }
+}
+
 async function loadInventory() {
   try {
     const { datasets } = await api('GET', '/api/inventory');
@@ -48,6 +101,8 @@ async function loadInventory() {
   }
 }
 
+loadSync();
 loadInventory();
+setInterval(loadSync, 10000);
 </script>
 {% endblock %}

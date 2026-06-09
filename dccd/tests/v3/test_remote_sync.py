@@ -12,6 +12,7 @@ import asyncio
 
 from dccd.application.config import AppConfig, RemoteConfig, StorageConfig
 from dccd.application.events import EventBus, LogEvent, StatusEvent
+from dccd.application.operations import sync_remote
 from dccd.application.scheduler import Scheduler
 from dccd.application.service_factory import (
     build_registry,
@@ -127,3 +128,45 @@ class TestSyncLoop:
         assert any(
             r["operation"] == "sync" and r["state"] == "succeeded" for r in runs
         )
+
+
+# ---------------------------------------------------------------------------
+# sync_remote — the shared one-cycle primitive (loop + manual endpoint reuse it)
+# ---------------------------------------------------------------------------
+
+class TestSyncRemoteOnce:
+    async def test_success(self, tmp_path):
+        runs_store = build_runs_store(tmp_path)
+        bus = EventBus()
+        queue = bus.add_queue()
+        result = await sync_remote(
+            _FakeRemote(result={"r:bucket": True}),
+            runs_store=runs_store,
+            events=bus.for_run("remote-sync"),
+        )
+        assert result["ok"] is True
+        runs = runs_store.list_runs(spec_id="remote-sync", limit=1)
+        assert runs and runs[0]["state"] == "succeeded"
+        events = []
+        while not queue.empty():
+            events.append(queue.get_nowait())
+        assert any(
+            isinstance(e, StatusEvent) and e.state == "succeeded" for e in events
+        )
+
+    async def test_failure_persists_and_returns_not_ok(self, tmp_path):
+        runs_store = build_runs_store(tmp_path)
+        result = await sync_remote(
+            _FakeRemote(result={"r:bucket": False}),
+            runs_store=runs_store,
+        )
+        assert result["ok"] is False
+        runs = runs_store.list_runs(spec_id="remote-sync", limit=1)
+        assert runs and runs[0]["state"] == "failed"
+
+    async def test_exception_is_caught(self, tmp_path):
+        runs_store = build_runs_store(tmp_path)
+        result = await sync_remote(_FakeRemote(raises=True), runs_store=runs_store)
+        assert result["ok"] is False
+        runs = runs_store.list_runs(spec_id="remote-sync", limit=1)
+        assert runs and runs[0]["state"] == "failed"
