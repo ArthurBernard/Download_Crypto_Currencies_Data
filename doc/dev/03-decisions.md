@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Free-space purge runs right after a successful sync (PR #89) [accepted]
+- **Choice**: a `storage.purge.purge_to_free_space` drops the **oldest** Parquet
+  files (by mtime, `.dccd/` excluded) until free space is back above
+  `storage.min_free_gb`. The Scheduler calls it **only after a successful sync
+  cycle**, off-thread. Free accounting is simulated (start probe + summed file
+  sizes) so it's deterministic and unit-testable via a `free_fn` injection.
+- **Why**: dropping local files is only safe once they're mirrored off-box;
+  tying the purge to a just-completed sync gives that guarantee without tracking
+  per-file sync state. Oldest-first keeps recent data local (most likely to be
+  read) and offloads cold data. The coverage manifest (#88) preserves the resume
+  cursor, so a purged dataset still resumes correctly on the next backfill.
+- **Rejected alternatives**: a fixed local-size cap or age-based retention (the
+  user asked specifically for "when I run low on disk" → a free-space floor); a
+  standalone purge daemon/timer (the sync loop is already the natural,
+  safety-gated trigger); deleting during the sync itself (must be strictly after
+  the mirror confirms).
+
 ### 2026-06-09 — Coverage manifest in SQLite so local data can be dropped safely (PR #88) [accepted]
 - **Choice**: a `CoverageStore` (SQLite at `.dccd/coverage.db`) records each
   dataset's `[min_ts, max_ts]` + row count on every successful backfill;

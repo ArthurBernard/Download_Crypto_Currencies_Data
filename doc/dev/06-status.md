@@ -46,9 +46,11 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   EventBus status), and the **Storage page shows last/next sync + volume with a
   "Sync now" button**. A **coverage manifest** (`CoverageStore`, `.dccd/`) now
   records each dataset's extent so `start="last"` resumes from it when local files
-  are gone — local data can be dropped without a re-download. Still pending in
-  Epic C: the free-space purge that actually drops synced files, and read-through
-  restore.
+  are gone — local data can be dropped without a re-download. A **free-space
+  purge** (`storage.min_free_gb`) drops the oldest already-synced files after each
+  sync to stay above the floor. Still pending in Epic C: **read-through restore**
+  (pull a purged file back from the remote on read) and the deploy/rclone how-to
+  docs.
 
 ## Tooling & infra present in the repo
 
