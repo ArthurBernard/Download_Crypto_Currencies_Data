@@ -120,6 +120,20 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Blessed deploy path = systemd (venv), Docker as alternative (PR #XX) [accepted]
+- **Choice**: `how-to/deploy` documents **systemd + a venv** as the recommended path
+  for a long-lived server, with **Docker** as the containerised alternative (not the
+  default). Closes Epic A.
+- **Why**: a home/VPS box that runs dccd 24/7 wants the lightest persistent setup —
+  no container runtime, native journald logs, clean `Restart=`/reboot semantics, a
+  stable data dir via `StateDirectory`. Docker suits ephemeral/orchestrated hosts but
+  adds an engine + volume indirection for the common single-box case. Both paths were
+  executed and verified on a real Ubuntu 24.04 server (build/install, `/health`,
+  reboot survival, alerts, healthcheck).
+- **Rejected alternatives**: Docker-first (heavier for the common case); documenting
+  both as equal (no guidance — readers want one blessed path); a compose stack
+  (over-engineered for a single service).
+
 ### 2026-06-10 — Wire HealthMonitor into the daemon + key alerts by job (PR #100) [accepted]
 - **Choice**: instantiate `HealthMonitor` in both daemon entry points — `cmd_start`
   (on the scheduler's bus) and the API lifespan (standalone `dccd ui` only, to avoid
