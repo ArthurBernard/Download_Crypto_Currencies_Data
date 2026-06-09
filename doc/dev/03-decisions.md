@@ -120,6 +120,24 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Coverage manifest in SQLite so local data can be dropped safely (PR #88) [accepted]
+- **Choice**: a `CoverageStore` (SQLite at `.dccd/coverage.db`) records each
+  dataset's `[min_ts, max_ts]` + row count on every successful backfill;
+  `backfill(start="last")` consults it (`get_max_ts`) when `store.last_timestamp`
+  returns `None`, i.e. the local Parquet is gone. Wired through `service_factory`
+  and threaded into backfill by every caller (Client, CLI, API, Scheduler).
+- **Why**: backfill resume reads the cursor from *local Parquet only*, so dropping
+  files to free disk (the point of Epic C) would make the next run re-download
+  from the bounded default lookback. A small manifest that lives outside the data
+  files (and is never purged) is the cheapest durable cursor. Chosen over a
+  remote-aware inventory (rclone listing on every run — network + remote-availability
+  coupling). The envelope only ever *widens* (min of mins, max of maxes) so a
+  narrow re-backfill can't shrink recorded coverage.
+- **Rejected alternatives**: query the remote for what exists (slow, couples
+  resume to remote uptime); store the cursor inside the Parquet footer (lost with
+  the file — the exact failure we're avoiding); reuse `RunsStore` (runs are an
+  event log, coverage is current-state per dataset — different shape and lifecycle).
+
 ### 2026-06-09 — Surface remote sync in the Storage UI; share one sync-cycle primitive (PR #87) [accepted]
 - **Choice**: extract the single sync cycle (create run → `sync_all` → finish +
   events) into `operations.sync_remote`, reused by both the scheduler loop and a

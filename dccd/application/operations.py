@@ -27,6 +27,7 @@ from dccd.domain.timeutils import NS, ns_now, ns_to_dt
 from dccd.domain.types import DataType
 from dccd.sources.base import OHLCHistory, OrderBookSnapshotREST, TradesHistory
 from dccd.sources.registry import SourceRegistry
+from dccd.storage.coverage_sqlite import CoverageStore
 from dccd.storage.parquet import ParquetStore
 from dccd.storage.remote import RemoteStorage
 from dccd.storage.runs_sqlite import RunsStore
@@ -113,6 +114,7 @@ async def backfill(
     registry: SourceRegistry,
     store: ParquetStore,
     runs_store: RunsStore | None = None,
+    coverage_store: CoverageStore | None = None,
     events: RunEvents | None = None,
     stop_event: asyncio.Event | None = None,
     run_id: str | None = None,
@@ -137,6 +139,10 @@ async def backfill(
     registry : SourceRegistry
     store : ParquetStore
     runs_store : RunsStore or None
+    coverage_store : CoverageStore or None
+        When set, ``start="last"`` falls back to the manifest's recorded
+        ``max_ts`` if no local file exists (so a dropped store doesn't trigger a
+        re-download), and the dataset's extent is recorded on success.
     events : RunEvents or None
     stop_event : asyncio.Event or None
         Set externally to cancel mid-run cleanly.
@@ -170,6 +176,11 @@ async def backfill(
 
     if params.start == "last":
         last = store.last_timestamp(ds)
+        if last is None and coverage_store is not None:
+            # Local files may have been dropped to free disk; the coverage
+            # manifest remembers how far we got, so we resume from there instead
+            # of re-downloading from the bounded default lookback.
+            last = coverage_store.get_max_ts(ds)
         if last is not None:
             start_ns: int = last + 1
         else:
@@ -200,6 +211,17 @@ async def backfill(
 
     # Counts every item received from the paginator, including unflushed ones.
     _collected: list[int] = [0]
+
+    # Min/max timestamp seen this run, fed to the coverage manifest on success so
+    # the dataset's extent survives a local-data drop (see CoverageStore).
+    _run_min: list[int | None] = [None]
+    _run_max: list[int | None] = [None]
+
+    def _track_ts(ts: int) -> None:
+        if _run_min[0] is None or ts < _run_min[0]:
+            _run_min[0] = ts
+        if _run_max[0] is None or ts > _run_max[0]:
+            _run_max[0] = ts
 
     # Progress is reported by *time covered* of the requested window, which gives
     # a real, smooth bar for both OHLC and cursor-paginated trades (the latter
@@ -258,6 +280,7 @@ async def backfill(
                     break
                 bars.append(bar)
                 _collected[0] += 1
+                _track_ts(bar.ts)
                 if _collected[0] % 200 == 0:
                     _emit_time(bar.ts)
                 if len(bars) >= _FLUSH_BATCH:
@@ -296,6 +319,7 @@ async def backfill(
                     break
                 batch.append(trade)
                 _collected[0] += 1
+                _track_ts(trade.ts)
                 if _collected[0] % 1000 == 0:
                     _emit_time(trade.ts)  # progress by time covered, not page count
                 if len(batch) >= _FLUSH_BATCH:
@@ -310,6 +334,7 @@ async def backfill(
                 raise NoCapability(target.exchange, "orderbook", "snapshot")
             depth = params.depth or 50
             snap = await adapter.fetch_orderbook(target.symbol, depth)
+            _track_ts(snap.ts)
             total_written += await _flush(store, ds, [snap], prov_src)
 
     except Exception as exc:
@@ -328,6 +353,12 @@ async def backfill(
         events.status(state)
     if runs_store:
         runs_store.finish_run(run_id, state, rows_written=total_written)
+
+    # Record coverage so this dataset's extent survives a later local-data drop.
+    if coverage_store is not None and _run_max[0] is not None:
+        coverage_store.record(
+            ds, min_ts=_run_min[0], max_ts=_run_max[0], rows_added=total_written
+        )
 
     return {"run_id": run_id, "rows_written": total_written, "start_ns": start_ns, "end_ns": end_ns}
 

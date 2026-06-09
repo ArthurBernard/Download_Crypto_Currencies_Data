@@ -13,11 +13,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from dccd.application.config import AppConfig
     from dccd.sources.registry import SourceRegistry
+    from dccd.storage.coverage_sqlite import CoverageStore
     from dccd.storage.parquet import ParquetStore
     from dccd.storage.remote import RemoteStorage
     from dccd.storage.runs_sqlite import RunsStore
 
-__all__ = ["build_registry", "build_store", "build_runs_store", "build_remote"]
+__all__ = [
+    "build_registry",
+    "build_store",
+    "build_runs_store",
+    "build_remote",
+    "build_coverage_store",
+]
 
 
 def build_registry() -> "SourceRegistry":
@@ -79,6 +86,26 @@ def build_runs_store(data_path: str | pathlib.Path) -> "RunsStore":
     from dccd.storage.runs_sqlite import RunsStore
 
     return RunsStore(pathlib.Path(data_path) / ".dccd" / "runs.db")
+
+
+def build_coverage_store(data_path: str | pathlib.Path) -> "CoverageStore":
+    """Return a :class:`~dccd.storage.coverage_sqlite.CoverageStore`.
+
+    The database lives at ``{data_path}/.dccd/coverage.db`` — the manifest that
+    lets local data be dropped without forcing a re-download on the next
+    backfill.
+
+    Parameters
+    ----------
+    data_path : str or Path
+
+    Returns
+    -------
+    CoverageStore
+    """
+    from dccd.storage.coverage_sqlite import CoverageStore
+
+    return CoverageStore(pathlib.Path(data_path) / ".dccd" / "coverage.db")
 
 
 def build_remote(cfg: "AppConfig") -> "RemoteStorage | None":

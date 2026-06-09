@@ -70,6 +70,7 @@ class Client:
         self._config: AppConfig | None = None
         self._store: ParquetStore | None = None
         self._registry: SourceRegistry | None = None
+        self._coverage_store: Any = None
 
     def _require_ready(self) -> tuple["SourceRegistry", "ParquetStore"]:
         if self._registry is None or self._store is None:
@@ -78,7 +79,11 @@ class Client:
 
     async def __aenter__(self) -> "Client":
         from dccd.application.config import AppConfig, load_config, resolve_config_path
-        from dccd.application.service_factory import build_registry, build_store
+        from dccd.application.service_factory import (
+            build_coverage_store,
+            build_registry,
+            build_store,
+        )
 
         try:
             path = resolve_config_path(self._config_path)
@@ -88,6 +93,7 @@ class Client:
 
         # Single source of truth for adapter wiring — same as CLI and API.
         self._store = build_store(self._config.settings.data_path)
+        self._coverage_store = build_coverage_store(self._config.settings.data_path)
         self._registry = build_registry()
         return self
 
@@ -156,7 +162,8 @@ class Client:
             origin="runtime",
         )
         registry, store = self._require_ready()
-        return await do_backfill(spec, registry=registry, store=store)
+        return await do_backfill(spec, registry=registry, store=store,
+                                 coverage_store=self._coverage_store)
 
     async def stream(self, exchange: str, symbol: str, data_type: str = "trades",
                      span: int | None = None, depth: int | None = None,

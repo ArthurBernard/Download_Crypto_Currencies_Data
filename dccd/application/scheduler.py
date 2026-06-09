@@ -9,6 +9,7 @@ import time
 from dccd.application.events import EventBus
 from dccd.application.jobs import JobSpec
 from dccd.sources.registry import SourceRegistry
+from dccd.storage.coverage_sqlite import CoverageStore
 from dccd.storage.parquet import ParquetStore
 from dccd.storage.remote import RemoteStorage
 from dccd.storage.runs_sqlite import RunsStore
@@ -106,6 +107,7 @@ class Scheduler:
         events: EventBus | None = None,
         remote: RemoteStorage | None = None,
         sync_interval: int = 3600,
+        coverage_store: CoverageStore | None = None,
     ) -> None:
         self._registry = registry
         self._store = store
@@ -113,6 +115,7 @@ class Scheduler:
         self._events = events or EventBus()
         self._remote = remote
         self._sync_interval = sync_interval
+        self._coverage_store = coverage_store
         self._sync_task: asyncio.Task[None] | None = None
         self._streams: dict[str, _StreamWorker] = {}
         self._interval_tasks: list[asyncio.Task[None]] = []
@@ -281,6 +284,7 @@ class Scheduler:
                 registry=self._registry,
                 store=self._store,
                 runs_store=self._runs_store,
+                coverage_store=self._coverage_store,
                 events=run_events,
             )
         except Exception as exc:
