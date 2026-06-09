@@ -120,6 +120,24 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Daemon drives rclone sync; own the loop in the Scheduler (PR #XX) [accepted]
+- **Choice**: schedule the existing `RemoteStorage.sync_all` from `dccd start` by
+  giving `Scheduler` an optional `remote`/`sync_interval` and a `_sync_loop`
+  (mirroring the existing interval-loop pattern), and record each cycle as a
+  `sync` run in `RunsStore` (zero schema change) while emitting live `remote-sync`
+  EventBus status. Wiring goes through `service_factory.build_remote`.
+- **Why**: `RemoteStorage` was fully implemented but never instantiated outside
+  tests, so a server `dccd start` mirrored nothing off-box. Owning the loop in the
+  Scheduler makes it unit-testable without rclone and gives clean teardown via the
+  existing `stop()`. Persisting a run row makes the sync observable after the fact
+  (the Storage page is a plain GET) — the keystone the upcoming UI (PR2) reads.
+  This is PR 1 of a 4-PR Epic C (tiered storage: sync → UI → coverage manifest →
+  free-space purge).
+- **Rejected alternatives**: firing rclone directly from `cmd_start` (untestable,
+  no reconcile/stop, no status surface); a new always-on service object (more
+  wiring than a scheduler loop for no gain); EventBus-only with no persistence
+  (status vanishes on UI refresh, so the Storage page couldn't show "last sync").
+
 ### 2026-06-07 — v3 docs sweep: drop the v2 migration story, consolidate examples (PR #82) [accepted]
 - **Choice**: removed the README "Migrating from v2" section (and every `dccd
   migrate` mention) outright rather than keeping a slim note; consolidated

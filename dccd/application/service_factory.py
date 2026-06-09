@@ -11,11 +11,13 @@ import pathlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from dccd.application.config import AppConfig
     from dccd.sources.registry import SourceRegistry
     from dccd.storage.parquet import ParquetStore
+    from dccd.storage.remote import RemoteStorage
     from dccd.storage.runs_sqlite import RunsStore
 
-__all__ = ["build_registry", "build_store", "build_runs_store"]
+__all__ = ["build_registry", "build_store", "build_runs_store", "build_remote"]
 
 
 def build_registry() -> "SourceRegistry":
@@ -77,3 +79,30 @@ def build_runs_store(data_path: str | pathlib.Path) -> "RunsStore":
     from dccd.storage.runs_sqlite import RunsStore
 
     return RunsStore(pathlib.Path(data_path) / ".dccd" / "runs.db")
+
+
+def build_remote(cfg: "AppConfig") -> "RemoteStorage | None":
+    """Return a :class:`~dccd.storage.remote.RemoteStorage`, or ``None``.
+
+    Returns ``None`` when no rclone remotes are configured (``storage.remotes``
+    empty) — there is nothing to sync, so the daemon skips the sync loop. The
+    local root is ``settings.data_path`` (the canonical store root used by
+    :func:`build_store`).
+
+    Parameters
+    ----------
+    cfg : AppConfig
+
+    Returns
+    -------
+    RemoteStorage or None
+    """
+    if not cfg.storage.remotes:
+        return None
+
+    from dccd.storage.remote import RemoteStorage
+
+    return RemoteStorage(
+        cfg.settings.data_path,
+        [r.model_dump() for r in cfg.storage.remotes],
+    )
