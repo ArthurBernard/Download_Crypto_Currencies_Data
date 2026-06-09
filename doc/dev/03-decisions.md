@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Surface remote sync in the Storage UI; share one sync-cycle primitive (PR #XX) [accepted]
+### 2026-06-09 — Surface remote sync in the Storage UI; share one sync-cycle primitive (PR #87) [accepted]
 - **Choice**: extract the single sync cycle (create run → `sync_all` → finish +
   events) into `operations.sync_remote`, reused by both the scheduler loop and a
   new manual `POST /api/storage/sync`. The Storage page reads `GET
