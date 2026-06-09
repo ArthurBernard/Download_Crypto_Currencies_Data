@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Read-through restore in operations.read, whole-dir copy (PR #XX) [accepted]
+- **Choice**: when `operations.read` finds no local Parquet for a dataset and a
+  remote is configured, it `rclone copy`s the dataset's **whole directory** back
+  (via `RemoteStorage.restore`, copy not sync — never deletes) before loading.
+  The remote is resolved from config (`build_remote`) and threaded into
+  `Client.read` and `POST /api/read` (off-thread there, since restore shells out).
+- **Why**: the free-space purge (#89) makes a dataset's local files disappear;
+  backfill resume already survives via the coverage manifest (#88), but *reads*
+  would silently return empty. Pulling the dataset back on a read-miss makes the
+  purge transparent. Whole-dir copy keeps it simple and matches the coarse
+  annual/daily file layout — a time-sliced restore would add rclone-filter
+  complexity for little gain.
+- **Rejected alternatives**: restore only the period files overlapping the read
+  window (more rclone plumbing, marginal benefit at this file granularity); teach
+  `ParquetStore` about remotes (breaks the storage/remote separation — the
+  application layer already owns this orchestration, as with sync/purge).
+
 ### 2026-06-09 — Free-space purge runs right after a successful sync (PR #89) [accepted]
 - **Choice**: a `storage.purge.purge_to_free_space` drops the **oldest** Parquet
   files (by mtime, `.dccd/` excluded) until free space is back above
