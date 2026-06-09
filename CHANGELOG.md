@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Dockerfile`: pin the base image to a digest (reproducible builds) and add a
+  `POLARS_VARIANT` build arg — on CPUs without AVX2 (older servers) the default
+  `polars` wheel crashes with SIGILL, so
+  `docker build --build-arg POLARS_VARIANT=polars-lts-cpu` installs the LTS-CPU
+  build instead. Verified end-to-end on a real host (build, run, `/health`, Bearer
+  auth, a backfill writing correct OHLC to the `/data` volume). (#XX)
+
 ### Fixed
 
 ### Deprecated

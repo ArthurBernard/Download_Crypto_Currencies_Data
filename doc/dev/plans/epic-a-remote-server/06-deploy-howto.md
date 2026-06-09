@@ -43,6 +43,11 @@ Record the rationale in `doc/dev/03-decisions.md`.
   4. Ops: `/health` + healthcheck/watchdog, resource limits, journald logs, webhook
      alerts (04).
   5. Restart/reboot safety note (03). Cross-link `protect-ui`, `sync-remote`.
+  6. **Old-CPU caveat** (ADR 2026-06-09): on servers without AVX2 the default
+     `polars` wheel crashes (SIGILL) — Docker users add
+     `--build-arg POLARS_VARIANT=polars-lts-cpu`; venv users
+     `pip install polars-lts-cpu` (after uninstalling `polars`). Quick check:
+     `grep -o -m1 avx2 /proc/cpuinfo` — empty ⇒ use the LTS-CPU variant.
 - the how-to toctree — add `deploy`.
 - `doc/dev/06-status.md` — flip Epic A from pending → done (deploy section).
 - `doc/dev/07-roadmap.md` — **remove the entire Epic A block** (via `/finish-task`).

@@ -30,7 +30,12 @@ Fix the `ExecStart` path assumption surfaced by the static gate.
   `ReadWritePaths=/var/lib/dccd`. Install header uses `data_path: /var/lib/dccd/data`.
 
 ## Target environment
-`ssh dccd-testbox`. systemd 255, passwordless sudo, PID 1 = systemd.
+`ssh dccd-testbox`. systemd 255, passwordless sudo, PID 1 = systemd. **No-AVX2 CPU**
+(Sandy Bridge i3) — so after `pip install ".[daemon,ui]"` into the venv, swap polars:
+`/opt/dccd/venv/bin/pip uninstall -y polars && /opt/dccd/venv/bin/pip install polars-lts-cpu`
+(the systemd analogue of leaf 01's `POLARS_VARIANT` build arg; ADR 2026-06-09).
+Without it the service crashes at import with SIGILL — verify
+`/opt/dccd/venv/bin/dccd --help` runs before installing the unit.
 
 ## Files to change
 - `deploy/dccd.service`:

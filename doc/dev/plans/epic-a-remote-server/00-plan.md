@@ -56,6 +56,11 @@ verification discipline still applies: run it on the server, observe, compare.
   leaves no gap.
 - **Ports/paths line up**: `ui_port=8080` (`config.py:44`), Dockerfile `EXPOSE 8080`
   + `CMD --port 8080`; `/health` exists at `api/app.py` (`@app.get("/health")`).
+- **Old CPUs without AVX2 need `polars-lts-cpu`** (found in leaf 01 on the test box,
+  an Intel Sandy Bridge i3): the default `polars` wheel crashes the daemon at import
+  with SIGILL. The `Dockerfile` now takes `--build-arg POLARS_VARIANT=polars-lts-cpu`
+  (PR #XX, ADR 2026-06-09). **Cross-cutting**: leaf 02's venv install must use the
+  lts-cpu variant on this box, and leaf 06 must document the old-CPU caveat.
 
 ## Decomposition
 
@@ -78,7 +83,7 @@ verification discipline still applies: run it on the server, observe, compare.
 
 ## Leaf checklist
 
-- [ ] 01 verify-container — chore/verify-container — medium
+- [x] 01 verify-container — chore/verify-container — medium
 - [ ] 02 verify-systemd — chore/verify-systemd — medium
 - [ ] 03 restart-safety — feat/restart-safety — high (depends on 02)
 - [ ] 04 resource-ops — feat/resource-ops — high (depends on 01, 02)
