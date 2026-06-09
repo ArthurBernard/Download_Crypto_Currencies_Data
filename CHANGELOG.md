@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.1.0] - 2026-06-09
+
+### Added
+
 - `dccd start` now schedules rclone remote sync: when `storage.remotes` is set,
   the daemon mirrors the store off-box every `storage.sync_interval` seconds with
   exponential backoff, persisted run history (`sync` runs in `RunsStore`) and a
