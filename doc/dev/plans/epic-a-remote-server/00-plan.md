@@ -84,7 +84,7 @@ verification discipline still applies: run it on the server, observe, compare.
 ## Leaf checklist
 
 - [x] 01 verify-container — chore/verify-container — medium
-- [ ] 02 verify-systemd — chore/verify-systemd — medium
+- [x] 02 verify-systemd — chore/verify-systemd — medium
 - [ ] 03 restart-safety — feat/restart-safety — high (depends on 02)
 - [ ] 04 resource-ops — feat/resource-ops — high (depends on 01, 02)
 - [ ] 05 secrets-config — docs/secrets-injection — low (depends on 01)
