@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Coverage manifest in SQLite so local data can be dropped safely (PR #XX) [accepted]
+### 2026-06-09 — Coverage manifest in SQLite so local data can be dropped safely (PR #88) [accepted]
 - **Choice**: a `CoverageStore` (SQLite at `.dccd/coverage.db`) records each
   dataset's `[min_ts, max_ts]` + row count on every successful backfill;
   `backfill(start="last")` consults it (`get_max_ts`) when `store.last_timestamp`

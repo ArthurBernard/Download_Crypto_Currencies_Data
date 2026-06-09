@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Coverage manifest (`CoverageStore`, SQLite under `.dccd/`): backfill records each
   dataset's `[min_ts, max_ts]` extent, and `start="last"` falls back to the
   manifest's `max_ts` when no local file exists — so local data can be dropped to
-  free disk without forcing a re-download on the next backfill. (#XX)
+  free disk without forcing a re-download on the next backfill. (#88)
 
 ### Changed
 
