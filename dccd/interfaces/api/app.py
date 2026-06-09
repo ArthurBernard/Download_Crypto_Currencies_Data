@@ -40,6 +40,7 @@ from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
 from dccd.application.registry import REGISTRY
 from dccd.application.scheduler import Scheduler
 from dccd.application.service_factory import (
+    build_coverage_store,
     build_registry,
     build_remote,
     build_runs_store,
@@ -169,6 +170,7 @@ def create_app(
         app.state.config_path = config_path
         app.state.store = build_store(cfg.settings.data_path)
         app.state.runs_store = build_runs_store(cfg.settings.data_path)
+        app.state.coverage_store = build_coverage_store(cfg.settings.data_path)
         app.state.event_bus = EventBus()
         app.state.registry = build_registry()
         # Remote sync target (None when storage.remotes is empty). Resolved from
@@ -184,6 +186,7 @@ def create_app(
                 app.state.store,
                 app.state.runs_store,
                 app.state.event_bus,
+                coverage_store=app.state.coverage_store,
             )
 
         # Register stream workers from config so they can be started/stopped
@@ -308,6 +311,7 @@ def create_app(
         reg = _reg(request)
         store = _store(request)
         runs_store = _runs(request)
+        coverage_store = request.app.state.coverage_store
         bus = _bus(request)
         stops = request.app.state.backfill_stops
         stop_event = asyncio.Event()
@@ -317,6 +321,7 @@ def create_app(
             from dccd.application.operations import backfill
             try:
                 await backfill(spec, registry=reg, store=store, runs_store=runs_store,
+                               coverage_store=coverage_store,
                                events=bus.for_run(run_id), run_id=run_id,
                                stop_event=stop_event)
             except Exception as exc:

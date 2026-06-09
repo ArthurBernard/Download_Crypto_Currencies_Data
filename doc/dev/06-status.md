@@ -44,8 +44,11 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   `dccd start`** — a periodic loop mirrors the store off-box every
   `storage.sync_interval` (backoff + persisted `sync` runs + `remote-sync`
   EventBus status), and the **Storage page shows last/next sync + volume with a
-  "Sync now" button**. Still pending in Epic C: a coverage manifest so local files
-  can be dropped without re-downloading, and free-space purge.
+  "Sync now" button**. A **coverage manifest** (`CoverageStore`, `.dccd/`) now
+  records each dataset's extent so `start="last"` resumes from it when local files
+  are gone — local data can be dropped without a re-download. Still pending in
+  Epic C: the free-space purge that actually drops synced files, and read-through
+  restore.
 
 ## Tooling & infra present in the repo
 

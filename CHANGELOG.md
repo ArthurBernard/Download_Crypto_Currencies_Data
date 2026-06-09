@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and synced volume, plus a **Sync now** button — backed by
   `GET`/`POST /api/storage/sync`. The shared `operations.sync_remote` primitive
   records each cycle, so the manual button and the scheduled loop stay in sync. (#87)
+- Coverage manifest (`CoverageStore`, SQLite under `.dccd/`): backfill records each
+  dataset's `[min_ts, max_ts]` extent, and `start="last"` falls back to the
+  manifest's `max_ts` when no local file exists — so local data can be dropped to
+  free disk without forcing a re-download on the next backfill. (#XX)
 
 ### Changed
 

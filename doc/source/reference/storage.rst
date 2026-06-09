@@ -76,3 +76,9 @@ Run history
 
 .. autoclass:: dccd.storage.runs_sqlite.RunsStore
    :members:
+
+Coverage manifest
+=================
+
+.. autoclass:: dccd.storage.coverage_sqlite.CoverageStore
+   :members:
