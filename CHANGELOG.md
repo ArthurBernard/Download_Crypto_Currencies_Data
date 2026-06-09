@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read-through restore: reading a dataset whose local Parquet was purged now pulls
   it back from the remote (`rclone copy`) before loading, so a purge is
   transparent to readers (`Client.read`, `POST /api/read`). (#90)
+- Docs: the `how-to/sync-remote` guide now covers rclone provisioning, the
+  `min_free_gb` free-space purge, read-through restore, and restore/integrity
+  (`rclone copy`/`rclone check`) — completing Epic C (tiered storage). (#91)
 
 ### Changed
 
