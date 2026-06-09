@@ -49,8 +49,9 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   are gone — local data can be dropped without a re-download. A **free-space
   purge** (`storage.min_free_gb`) drops the oldest already-synced files after each
   sync to stay above the floor, and **read-through restore** pulls a purged
-  dataset back from the remote on read. Remaining in Epic C: the rclone
-  provisioning / integrity how-to docs.
+  dataset back from the remote on read. **Epic C (tiered storage) is complete** —
+  provisioning, restore and integrity are documented in
+  `doc/source/how-to/sync-remote.rst`.
 
 ## Tooling & infra present in the repo
 
