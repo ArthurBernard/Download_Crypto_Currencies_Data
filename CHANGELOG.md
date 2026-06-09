@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   systemd resource limits, and journald log-rotation guidance. Verified live on a
   server: a failing job past the threshold delivered a real webhook POST, and the
   container reports `healthy`. (#100)
+- Docs: new `how-to/deploy` guide — a blessed, host-validated path to run dccd
+  unattended on a server (systemd + venv recommended, Docker alternative), covering
+  install, secret injection, `/health`, restart/reboot safety, logs, alerts and the
+  old-CPU caveat. Completes **Epic A** (run on a remote server). (#102)
 
 ### Changed
 

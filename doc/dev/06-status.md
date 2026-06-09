@@ -55,8 +55,12 @@ _(nothing release-blocking — see the roadmap for the next epics)_
 
 ## Tooling & infra present in the repo
 
-- **Deploy**: `Dockerfile` (python:3.12-slim, runs the daemon; bind `0.0.0.0`,
-  mount `/data`) and `deploy/dccd.service` (systemd unit for `dccd start`).
+- **Deploy (Epic A — done)**: `Dockerfile` (digest-pinned `python:3.12-slim`,
+  `POLARS_VARIANT` build arg for no-AVX2 CPUs, `HEALTHCHECK`) and
+  `deploy/dccd.service` (venv `ExecStart`, `StateDirectory=dccd`, hardened) — both
+  verified end-to-end on a real Ubuntu server (build/install, `/health`, **real
+  reboot** survival, `HealthMonitor` webhook alerts, secret injection). Documented in
+  `doc/source/how-to/deploy.rst`.
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
   `dccd.application` daemon example).
@@ -79,5 +83,6 @@ expected after the 3.0 release.
 
 ## What's next
 
-See [`07-roadmap.md`](07-roadmap.md): run the app on a remote server, reach the UI
-remotely from a PC/mobile, and sync data to remote storage.
+See [`07-roadmap.md`](07-roadmap.md): Epic A (remote server) and Epic C (sync) are
+done; **Epic B** (reach the UI remotely from a PC/mobile, behind TLS + auth) is the
+next axis.
