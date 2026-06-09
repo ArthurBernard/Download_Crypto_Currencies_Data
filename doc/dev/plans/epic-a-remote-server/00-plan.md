@@ -59,7 +59,7 @@ verification discipline still applies: run it on the server, observe, compare.
 - **Old CPUs without AVX2 need `polars-lts-cpu`** (found in leaf 01 on the test box,
   an Intel Sandy Bridge i3): the default `polars` wheel crashes the daemon at import
   with SIGILL. The `Dockerfile` now takes `--build-arg POLARS_VARIANT=polars-lts-cpu`
-  (PR #XX, ADR 2026-06-09). **Cross-cutting**: leaf 02's venv install must use the
+  (PR #97, ADR 2026-06-09). **Cross-cutting**: leaf 02's venv install must use the
   lts-cpu variant on this box, and leaf 06 must document the old-CPU caveat.
 
 ## Decomposition

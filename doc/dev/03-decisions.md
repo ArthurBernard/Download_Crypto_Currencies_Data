@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Old-CPU support via a `POLARS_VARIANT` build arg + digest-pinned base (PR #XX) [accepted]
+### 2026-06-09 — Old-CPU support via a `POLARS_VARIANT` build arg + digest-pinned base (PR #97) [accepted]
 - **Choice**: the `Dockerfile` pins the base image to a `python:3.12-slim` digest
   and exposes `ARG POLARS_VARIANT=polars`. Modern hosts build unchanged; hosts
   whose CPU lacks AVX2 build with `--build-arg POLARS_VARIANT=polars-lts-cpu`,
