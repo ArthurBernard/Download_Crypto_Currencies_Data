@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Free-space purge runs right after a successful sync (PR #XX) [accepted]
+### 2026-06-09 — Free-space purge runs right after a successful sync (PR #89) [accepted]
 - **Choice**: a `storage.purge.purge_to_free_space` drops the **oldest** Parquet
   files (by mtime, `.dccd/` excluded) until free space is back above
   `storage.min_free_gb`. The Scheduler calls it **only after a successful sync

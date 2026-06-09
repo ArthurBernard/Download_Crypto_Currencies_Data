@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Free-space purge: `storage.min_free_gb` (default `0` = off). After each
   successful sync the daemon drops the oldest already-synced Parquet files until
   free space is back above the floor (the coverage manifest keeps the resume
-  cursor, `.dccd/` is never touched). (#XX)
+  cursor, `.dccd/` is never touched). (#89)
 
 ### Changed
 
