@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cursor, `.dccd/` is never touched). (#89)
 - Read-through restore: reading a dataset whose local Parquet was purged now pulls
   it back from the remote (`rclone copy`) before loading, so a purge is
-  transparent to readers (`Client.read`, `POST /api/read`). (#XX)
+  transparent to readers (`Client.read`, `POST /api/read`). (#90)
 
 ### Changed
 

@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Read-through restore in operations.read, whole-dir copy (PR #XX) [accepted]
+### 2026-06-09 — Read-through restore in operations.read, whole-dir copy (PR #90) [accepted]
 - **Choice**: when `operations.read` finds no local Parquet for a dataset and a
   remote is configured, it `rclone copy`s the dataset's **whole directory** back
   (via `RemoteStorage.restore`, copy not sync — never deletes) before loading.
