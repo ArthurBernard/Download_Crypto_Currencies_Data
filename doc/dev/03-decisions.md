@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Blessed deploy path = systemd (venv), Docker as alternative (PR #XX) [accepted]
+### 2026-06-10 — Blessed deploy path = systemd (venv), Docker as alternative (PR #102) [accepted]
 - **Choice**: `how-to/deploy` documents **systemd + a venv** as the recommended path
   for a long-lived server, with **Docker** as the containerised alternative (not the
   default). Closes Epic A.

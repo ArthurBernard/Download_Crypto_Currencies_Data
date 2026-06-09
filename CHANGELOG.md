@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docs: new `how-to/deploy` guide — a blessed, host-validated path to run dccd
   unattended on a server (systemd + venv recommended, Docker alternative), covering
   install, secret injection, `/health`, restart/reboot safety, logs, alerts and the
-  old-CPU caveat. Completes **Epic A** (run on a remote server). (#XX)
+  old-CPU caveat. Completes **Epic A** (run on a remote server). (#102)
 
 ### Changed
 
