@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Restart safety is reconstruction-from-config, verified by reboot (PR #XX) [accepted]
+### 2026-06-10 — Restart safety is reconstruction-from-config, verified by reboot (PR #99) [accepted]
 - **Choice**: keep restart safety as *stateless reconstruction* — the daemon holds
   no cross-process state; on boot it rebuilds everything from `config.yml` +
   on-disk stores (`cmd_start` → `scheduler.start(cfg.all_job_specs())`) and resumes

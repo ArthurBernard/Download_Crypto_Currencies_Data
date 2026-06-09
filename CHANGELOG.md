@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   auto-starts, the trades stream reconnects, the interval backfill re-arms, the
   `RunsStore` (SQLite WAL) survives and appends, and the coverage manifest keeps the
   resume cursor (no gap). New `test_restart.py` guards RunsStore persistence across a
-  reopen and scheduler interval re-arm from config. (#XX)
+  reopen and scheduler interval re-arm from config. (#99)
 
 ### Changed
 

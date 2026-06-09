@@ -2,7 +2,7 @@
 
 Durable state must survive a process restart and the scheduler must re-arm its
 recurring work from config alone (so a reboot resumes with no manual step and no
-gap). Verified live on a real `systemctl reboot` of a server in PR #XX — these are
+gap). Verified live on a real `systemctl reboot` of a server in PR #99 — these are
 the cheap regression guards for that behaviour.
 """
 
