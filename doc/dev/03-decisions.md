@@ -112,13 +112,34 @@ Conventions:
 
 Template:
 ```
-### YYYY-MM-DD — <short title> (PR #NN)  [accepted|rejected|tombstone]
+### YYYY-MM-DD — <short title> (PR #94)  [accepted|rejected|tombstone]
 - **Choice**: …
 - **Why**: …
 - **Rejected alternatives**: …
 ```
 
 <!-- new entries below, newest first -->
+
+### 2026-06-09 — Hierarchical file-based plan trees + complexity-derived agent execution (PR #94) [accepted]
+- **Choice**: plans become durable, hierarchical **files in the repo**
+  (`doc/dev/plans/<epic>/`: a global `00-plan.md` + precise leaf specs, adaptive
+  depth). Each leaf declares a `complexity` that derives the execution model
+  (`low→haiku`/`medium→sonnet`/`high→opus`). The tree lands on `develop` via a
+  **"plan PR" first**, then `/execute-leaf` spawns an agent per leaf that must
+  **verify on real data**; `/finish-task` archives the leaf and ticks the global,
+  the last leaf triggers `/release`. Gated on a `plans_dir` descriptor key (absent
+  ⇒ the legacy plan-mode loop — backward compatible).
+- **Why**: `plan mode` plans live in `~/.claude/plans/` (lost on `/compact`), and
+  the old loop never materialised *whether we were planning one slice or the whole
+  set*. Files in the repo are durable, reviewable, and visible to every leaf
+  branch; an explicit global+leaf hierarchy fixes the granularity ambiguity; the
+  precise leaf level is what makes safe agent handoff possible.
+- **Rejected alternatives**: keep ephemeral plan-mode only (the status quo — fails
+  durability); one flat plan file per epic (doesn't separate the map from the
+  executable detail, and can't express per-leaf model/deps). Note: `~/.claude`
+  isn't a git repo, so the skill bodies themselves are applied directly, not via
+  this PR — only the repo-tracked parts (descriptor, `doc/dev/plans/`, `CLAUDE.md`)
+  ship here.
 
 ### 2026-06-09 — Read-through restore in operations.read, whole-dir copy (PR #90) [accepted]
 - **Choice**: when `operations.read` finds no local Parquet for a dataset and a

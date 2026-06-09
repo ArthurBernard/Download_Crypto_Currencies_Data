@@ -5,6 +5,8 @@
   "decisions": "doc/dev/03-decisions.md",
   "status": "doc/dev/06-status.md",
   "changelog": "CHANGELOG.md",
+  "plans_dir": "doc/dev/plans",
+  "plans_archive": "doc/dev/_archive/plans",
   "test_cmd": "pytest",
   "lint_cmd": "ruff check dccd/",
   "docs_src": "doc/source"

@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dev workflow: hierarchical, file-based **plan trees** under `doc/dev/plans/`
+  (committed) with a `<plans_dir>` descriptor key. A roadmap item expands into a
+  global `00-plan.md` + precise leaf specs (adaptive depth); each leaf declares a
+  `complexity` that derives its execution model (`low→haiku`/`medium→sonnet`/
+  `high→opus`). New `/plan` (build the tree + open the plan PR first) and
+  `/execute-leaf` (spawn an agent per leaf, verify on real data) skills; `/pick-task`,
+  `/finish-task`, `/abandon-task`, `/release` and `CLAUDE.md` updated to chain
+  through it. Backward-compatible: no `plans_dir` ⇒ the old plan-mode loop. (#94)
+
 ### Changed
 
 ### Fixed
