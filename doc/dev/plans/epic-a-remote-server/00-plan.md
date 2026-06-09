@@ -87,7 +87,7 @@ verification discipline still applies: run it on the server, observe, compare.
 - [x] 02 verify-systemd — chore/verify-systemd — medium
 - [x] 03 restart-safety — feat/restart-safety — high (depends on 02)
 - [x] 04 resource-ops — feat/resource-ops — high (depends on 01, 02)
-- [ ] 05 secrets-config — docs/secrets-injection — low (depends on 01)
+- [x] 05 secrets-config — docs/secrets-injection — low (depends on 01)
 - [ ] 06 deploy-howto — docs/deploy-howto — medium (depends on 01–05)
 
 ## Dependencies
