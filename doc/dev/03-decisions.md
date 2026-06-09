@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Old-CPU support via a `POLARS_VARIANT` build arg + digest-pinned base (PR #97) [accepted]
+- **Choice**: the `Dockerfile` pins the base image to a `python:3.12-slim` digest
+  and exposes `ARG POLARS_VARIANT=polars`. Modern hosts build unchanged; hosts
+  whose CPU lacks AVX2 build with `--build-arg POLARS_VARIANT=polars-lts-cpu`,
+  which uninstalls `polars` and installs the LTS-CPU wheel **unpinned** (it lags the
+  latest `polars`, so pinning to polars's version fails to resolve).
+- **Why**: discovered on the real Epic A test box — an Intel i3-2367M (Sandy Bridge,
+  no AVX2/FMA/BMI). The default `polars` wheel crashes the daemon at import with
+  SIGILL (exit 132). dccd depends on polars, so the whole app is unusable on such
+  CPUs (common for recycled home servers). Real-host verification caught this; unit
+  tests never would.
+- **Rejected alternatives**: make `polars-lts-cpu` the default everywhere (penalises
+  the common modern-CPU case with no AVX2 fast paths); doc-only (the image still
+  breaks out-of-the-box on those hosts); pin the variant to polars's exact version
+  (unresolvable — lts-cpu trails). The same variable applies to the systemd venv
+  install (leaf 02) and is documented in the deploy how-to (leaf 06).
+
 ### 2026-06-09 — Hierarchical file-based plan trees + complexity-derived agent execution (PR #94) [accepted]
 - **Choice**: plans become durable, hierarchical **files in the repo**
   (`doc/dev/plans/<epic>/`: a global `00-plan.md` + precise leaf specs, adaptive

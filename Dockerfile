@@ -7,7 +7,13 @@
 #
 # The config's settings.data_path should point at /data (the mounted volume),
 # and ui_host must be 0.0.0.0 to be reachable from outside the container.
-FROM python:3.12-slim AS base
+#
+# Old CPUs without AVX2 (e.g. pre-Haswell): the default polars wheel crashes with
+# SIGILL. Build with the LTS-CPU variant instead:
+#   docker build --build-arg POLARS_VARIANT=polars-lts-cpu -t dccd .
+#
+# Base image pinned to a digest for reproducible builds (tag: python:3.12-slim).
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -15,10 +21,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# polars (default, AVX2) or polars-lts-cpu (older CPUs). See header.
+ARG POLARS_VARIANT=polars
+
 # Install dependencies first for better layer caching.
 COPY pyproject.toml README.md ./
 COPY dccd ./dccd
-RUN pip install ".[daemon,ui]"
+# polars-lts-cpu lags the latest polars release, so the variant is installed
+# unpinned (newest available that runs on the older CPU) — not pinned to polars's
+# version, which would fail to resolve.
+RUN pip install ".[daemon,ui]" \
+ && if [ "$POLARS_VARIANT" != "polars" ]; then \
+        pip uninstall -y polars \
+     && pip install "${POLARS_VARIANT}"; \
+    fi
 
 # rclone is only needed if storage.remotes is configured; install on demand.
 VOLUME ["/data"]
