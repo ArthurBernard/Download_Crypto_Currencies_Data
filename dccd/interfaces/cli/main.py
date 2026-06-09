@@ -45,6 +45,7 @@ def cmd_backfill(
     from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
     from dccd.application.operations import backfill as do_backfill
     from dccd.application.service_factory import (
+        build_coverage_store,
         build_registry,
         build_runs_store,
         build_store,
@@ -55,6 +56,7 @@ def cmd_backfill(
     cfg, _ = _load_cfg(config)
     store = build_store(cfg.settings.data_path)
     runs_store = build_runs_store(cfg.settings.data_path)
+    coverage_store = build_coverage_store(cfg.settings.data_path)
     registry = build_registry()
 
     specs: list[JobSpec] = []
@@ -81,7 +83,8 @@ def cmd_backfill(
     async def _run():
         for spec in specs:
             typer.echo(f"Backfilling {spec.id}…")
-            result = await do_backfill(spec, registry=registry, store=store, runs_store=runs_store)
+            result = await do_backfill(spec, registry=registry, store=store,
+                                       runs_store=runs_store, coverage_store=coverage_store)
             if err := result.get("error"):
                 typer.echo(f"  ✗ {err}", err=True)
             else:
@@ -145,7 +148,9 @@ def cmd_start(
     from dccd.application.events import EventBus
     from dccd.application.scheduler import Scheduler
     from dccd.application.service_factory import (
+        build_coverage_store,
         build_registry,
+        build_remote,
         build_runs_store,
         build_store,
     )
@@ -154,9 +159,21 @@ def cmd_start(
     cfg, cfg_path = _load_cfg(config)
     store = build_store(cfg.settings.data_path)
     runs_store = build_runs_store(cfg.settings.data_path)
+    coverage_store = build_coverage_store(cfg.settings.data_path)
     registry = build_registry()
     bus = EventBus()
-    scheduler = Scheduler(registry, store, runs_store, bus)
+    remote = build_remote(cfg)
+    scheduler = Scheduler(
+        registry, store, runs_store, bus,
+        remote=remote, sync_interval=cfg.storage.sync_interval,
+        coverage_store=coverage_store,
+        data_path=cfg.settings.data_path, min_free_gb=cfg.storage.min_free_gb,
+    )
+    if remote is not None:
+        typer.echo(
+            f"Remote sync every {cfg.storage.sync_interval}s "
+            f"→ {len(cfg.storage.remotes)} remote(s)"
+        )
 
     # Run *all* configured jobs, not just streams: the scheduler routes each by
     # trigger kind (supervised → stream worker; interval/cron → periodic

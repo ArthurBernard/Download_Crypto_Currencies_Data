@@ -70,10 +70,12 @@ class RemoteConfig(BaseModel):
 
 
 class StorageConfig(BaseModel):
-    """Storage settings: local path, rclone remotes, and sync interval."""
+    """Storage settings: local path, rclone remotes, sync interval, and the
+    free-space floor (GiB) that triggers purging already-synced local files."""
     local_path: str = ""
     remotes: list[RemoteConfig] = Field(default_factory=list)
     sync_interval: int = 3600
+    min_free_gb: float = 0.0
 
 
 class AlertConfig(BaseModel):

@@ -6,10 +6,12 @@ import asyncio
 import logging
 import time
 
-from dccd.application.events import EventBus
+from dccd.application.events import EventBus, RunEvents
 from dccd.application.jobs import JobSpec
 from dccd.sources.registry import SourceRegistry
+from dccd.storage.coverage_sqlite import CoverageStore
 from dccd.storage.parquet import ParquetStore
+from dccd.storage.remote import RemoteStorage
 from dccd.storage.runs_sqlite import RunsStore
 
 __all__ = ["Scheduler"]
@@ -90,6 +92,11 @@ class Scheduler:
     store : ParquetStore
     runs_store : RunsStore or None
     events : EventBus
+    remote : RemoteStorage or None
+        When set (rclone remotes configured), :meth:`start` launches a periodic
+        loop that mirrors the local store off-box every ``sync_interval`` seconds.
+    sync_interval : int
+        Seconds between remote-sync cycles (default 3600).
     """
 
     def __init__(
@@ -98,11 +105,22 @@ class Scheduler:
         store: ParquetStore,
         runs_store: RunsStore | None = None,
         events: EventBus | None = None,
+        remote: RemoteStorage | None = None,
+        sync_interval: int = 3600,
+        coverage_store: CoverageStore | None = None,
+        data_path: str | None = None,
+        min_free_gb: float = 0.0,
     ) -> None:
         self._registry = registry
         self._store = store
         self._runs_store = runs_store
         self._events = events or EventBus()
+        self._remote = remote
+        self._sync_interval = sync_interval
+        self._coverage_store = coverage_store
+        self._data_path = data_path
+        self._min_free_gb = min_free_gb
+        self._sync_task: asyncio.Task[None] | None = None
         self._streams: dict[str, _StreamWorker] = {}
         self._interval_tasks: list[asyncio.Task[None]] = []
         # Per-spec recurring backfill loops, keyed by spec id, with the interval
@@ -186,6 +204,8 @@ class Scheduler:
     async def start(self, specs: list[JobSpec]) -> None:
         """Start all enabled specs (full daemon mode)."""
         self._running = True
+        if self._remote is not None and self._sync_task is None:
+            self._sync_task = asyncio.create_task(self._sync_loop())
         for spec in specs:
             if not spec.enabled:
                 continue
@@ -207,6 +227,13 @@ class Scheduler:
     async def stop(self) -> None:
         """Stop all running jobs."""
         self._running = False
+        if self._sync_task is not None:
+            self._sync_task.cancel()
+            try:
+                await self._sync_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._sync_task = None
         for task in self._interval_tasks:
             task.cancel()
         for task, _ in self._interval_loops.values():
@@ -215,6 +242,64 @@ class Scheduler:
             await worker.stop()
         self._interval_tasks.clear()
         self._interval_loops.clear()
+
+    async def _sync_loop(self) -> None:
+        """Periodically mirror the local store to the configured rclone remotes.
+
+        Runs only when a :class:`~dccd.storage.remote.RemoteStorage` was wired in
+        (``storage.remotes`` non-empty). Each cycle is delegated to
+        :func:`dccd.application.operations.sync_remote` (which records a ``sync``
+        run in :class:`RunsStore` and emits live ``remote-sync`` EventBus status);
+        this loop only owns the cadence and the exponential backoff on failure
+        (30s → capped at ``sync_interval``) so a flapping remote doesn't hammer
+        rclone.
+        """
+        from dccd.application.operations import sync_remote
+        assert self._remote is not None
+        run_events = self._events.for_run("remote-sync")
+        backoff = 30.0
+        try:
+            while self._running:
+                result = await sync_remote(
+                    self._remote, runs_store=self._runs_store, events=run_events
+                )
+                if result["ok"]:
+                    # Remote is now up to date → safe to free disk by dropping the
+                    # oldest already-synced files (the coverage manifest keeps the
+                    # resume cursor). Runs only when a floor is configured.
+                    await self._maybe_purge(run_events)
+                    backoff = 30.0
+                    await asyncio.sleep(self._sync_interval)
+                else:
+                    logger.warning("Remote sync failed — retry in %ds", int(backoff))
+                    await asyncio.sleep(min(backoff, self._sync_interval))
+                    backoff = min(backoff * 2, float(self._sync_interval))
+        except asyncio.CancelledError:
+            return
+
+    async def _maybe_purge(self, run_events: RunEvents) -> None:
+        """Free disk by dropping oldest synced files when below the floor.
+
+        Called right after a successful sync (remote is current), so dropped
+        files are recoverable from the remote. No-op unless ``min_free_gb`` and a
+        ``data_path`` are configured.
+        """
+        if self._min_free_gb <= 0 or not self._data_path:
+            return
+        from dccd.storage.purge import purge_to_free_space
+        try:
+            res = await asyncio.to_thread(
+                purge_to_free_space, self._data_path, self._min_free_gb
+            )
+        except Exception as exc:
+            logger.warning("Purge failed: %s", exc)
+            return
+        if res["removed"]:
+            run_events.log(
+                f"Purged {len(res['removed'])} file(s), "
+                f"freed ~{res['freed_bytes'] / (1024 ** 3):.2f} GiB to stay above "
+                f"{self._min_free_gb} GiB free"
+            )
 
     async def _interval_loop(self, spec: JobSpec) -> None:
         every = spec.trigger.every or spec.target.span or 3600
@@ -231,6 +316,7 @@ class Scheduler:
                 registry=self._registry,
                 store=self._store,
                 runs_store=self._runs_store,
+                coverage_store=self._coverage_store,
                 events=run_events,
             )
         except Exception as exc:

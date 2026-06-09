@@ -4,7 +4,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from dccd.application.config import AppConfig
+from dccd.application.config import AppConfig, RemoteConfig
 from dccd.interfaces.api.app import create_app
 
 
@@ -65,6 +65,54 @@ class TestAuth:
 
     def test_no_token_means_open(self, client):
         assert client.get("/api/inventory").status_code == 200
+
+
+class _OkRemote:
+    """In-test remote that reports success without invoking rclone."""
+
+    async def sync_all(self):
+        return {"r:bucket": True}
+
+
+class TestRemoteSync:
+    @pytest.fixture
+    def synced_app(self, tmp_data_path):
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.storage.remotes = [RemoteConfig(remote="r:bucket")]
+        cfg.storage.sync_interval = 1800
+        return create_app(config=cfg)
+
+    def test_get_sync_not_configured(self, client):
+        body = client.get("/api/storage/sync").json()
+        assert body["configured"] is False
+        assert body["remotes"] == []
+        assert body["last"] is None
+
+    def test_get_sync_configured_with_last(self, synced_app, tmp_data_path):
+        from dccd.application.service_factory import build_runs_store
+
+        with TestClient(synced_app) as c:
+            runs = build_runs_store(tmp_data_path)
+            runs.create_run("remote-sync@1", "remote-sync", "sync", "-", "all", "-")
+            runs.finish_run("remote-sync@1", "succeeded", rows_written=1)
+            body = c.get("/api/storage/sync").json()
+            assert body["configured"] is True
+            assert body["remotes"] == ["r:bucket"]
+            assert body["sync_interval"] == 1800
+            assert body["last"]["state"] == "succeeded"
+            assert body["next_eta"] is not None
+
+    def test_post_sync_no_remotes_400(self, client):
+        assert client.post("/api/storage/sync").status_code == 400
+
+    def test_post_sync_started(self, synced_app):
+        with TestClient(synced_app) as c:
+            c.app.state.remote = _OkRemote()  # avoid spawning a real rclone call
+            r = c.post("/api/storage/sync")
+            assert r.status_code == 200
+            assert r.json()["status"] == "started"
 
 
 class TestOperationsEndpoint:

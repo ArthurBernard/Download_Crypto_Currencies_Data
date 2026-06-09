@@ -16,6 +16,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.1.0] - 2026-06-09
+
+### Added
+
+- `dccd start` now schedules rclone remote sync: when `storage.remotes` is set,
+  the daemon mirrors the store off-box every `storage.sync_interval` seconds with
+  exponential backoff, persisted run history (`sync` runs in `RunsStore`) and a
+  live `remote-sync` EventBus status. Previously `RemoteStorage` was implemented
+  but never driven — a server synced nothing. (#86)
+- Storage page surfaces remote sync: last/next sync, status, configured remotes
+  and synced volume, plus a **Sync now** button — backed by
+  `GET`/`POST /api/storage/sync`. The shared `operations.sync_remote` primitive
+  records each cycle, so the manual button and the scheduled loop stay in sync. (#87)
+- Coverage manifest (`CoverageStore`, SQLite under `.dccd/`): backfill records each
+  dataset's `[min_ts, max_ts]` extent, and `start="last"` falls back to the
+  manifest's `max_ts` when no local file exists — so local data can be dropped to
+  free disk without forcing a re-download on the next backfill. (#88)
+- Free-space purge: `storage.min_free_gb` (default `0` = off). After each
+  successful sync the daemon drops the oldest already-synced Parquet files until
+  free space is back above the floor (the coverage manifest keeps the resume
+  cursor, `.dccd/` is never touched). (#89)
+- Read-through restore: reading a dataset whose local Parquet was purged now pulls
+  it back from the remote (`rclone copy`) before loading, so a purge is
+  transparent to readers (`Client.read`, `POST /api/read`). (#90)
+- Docs: the `how-to/sync-remote` guide now covers rclone provisioning, the
+  `min_free_gb` free-space purge, read-through restore, and restore/integrity
+  (`rclone copy`/`rclone check`) — completing Epic C (tiered storage). (#91)
+
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
 ## [3.0.0] - 2026-06-07
 
 ### Added

@@ -16,17 +16,6 @@ shipped; `03-decisions.md` for *why*). Keep it short and true.
 
 ---
 
-## Ship v3.0 (near-term)
-
-The hexagonal rewrite (P0–P8) is done and lives on `develop`; what remains is to
-release it and finish the v3-era docs.
-
-- [ ] **Release v3.0** — `develop → master` + `v3.0.0` tag. `pyproject` already
-  says `3.0.0`; last published tag is `v2.4.0`. Use the `release-gate` skill
-  before, the `release` skill to cut it.
-
----
-
 ## Epic A — Run the app on a remote server
 
 Goal: `dccd start` (scheduler + streams + UI) running 24/7 on a VPS/home server,
@@ -69,32 +58,15 @@ Goal: open the dashboard securely from a laptop or phone, not just `localhost`.
 - [ ] **Threat model note** — write down the assumptions (LAN vs internet, tunnel
   vs public) in the deploy how-to.
 
-## Epic C — Sync data to a remote space
-
-Goal: the Parquet store is mirrored to off-box storage (S3/B2/Drive/…) so a server
-loss doesn't lose data.
-
-- [~] **rclone sync exists** — `storage/remote.py` (`RemoteStorage.sync_one/
-  sync_all`) + `StorageConfig.remotes` + `sync_interval`. **Verify it's actually
-  scheduled** by `dccd start` (a periodic task), not just callable.
-- [ ] **Scheduled sync in the daemon** — if not wired, add a periodic sync task
-  (interval = `sync_interval`) with backoff + failure surfacing via EventBus/UI
-  ("last sync: …", already a v2 concept).
-- [ ] **Surface sync status in the UI** — last successful sync time + errors on
-  the Storage page; manual "Sync now" button (API endpoint).
-- [ ] **rclone provisioning docs** — how to configure a remote (`rclone config`)
-  in the container/host; mount or inject `rclone.conf` securely.
-- [ ] **Integrity** — one-way `sync` (mirror) semantics, dedup-safe; document
-  restore (pull a remote back into `data_path`). Consider a periodic verify
-  (counts/sizes) reusing the `data-e2e` skill.
-- [ ] **Optional: read-through restore** — ability to point a fresh instance at a
-  remote and hydrate the local store.
+_Epic C — Sync data to a remote space: **done.** Scheduled rclone sync + UI,
+coverage manifest, free-space purge, read-through restore, and the
+`how-to/sync-remote` guide all shipped. See `06-status.md`._
 
 ---
 
 ## Suggested sequence
 
-1. **C (sync)** first — protect the data before exposing anything.
+1. ~~**C (sync)**~~ — done.
 2. **A (remote run)** — get it running unattended with restart safety.
 3. **B (remote access)** — only then expose the UI, behind TLS + auth.
 

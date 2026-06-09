@@ -96,6 +96,8 @@ storage:
     # - provider: rclone
     #   remote: "s3:mybucket/crypto/"  # secondary destination (S3 backup)
   sync_interval: 3600          # seconds between sync cycles (0 = disable)
+  min_free_gb: 0               # free-space floor (GiB); >0 drops oldest synced
+                               # files after each sync to stay above it (0 = off)
 
 
 # ---------------------------------------------------------------------------

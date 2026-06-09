@@ -120,6 +120,93 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-09 — Read-through restore in operations.read, whole-dir copy (PR #90) [accepted]
+- **Choice**: when `operations.read` finds no local Parquet for a dataset and a
+  remote is configured, it `rclone copy`s the dataset's **whole directory** back
+  (via `RemoteStorage.restore`, copy not sync — never deletes) before loading.
+  The remote is resolved from config (`build_remote`) and threaded into
+  `Client.read` and `POST /api/read` (off-thread there, since restore shells out).
+- **Why**: the free-space purge (#89) makes a dataset's local files disappear;
+  backfill resume already survives via the coverage manifest (#88), but *reads*
+  would silently return empty. Pulling the dataset back on a read-miss makes the
+  purge transparent. Whole-dir copy keeps it simple and matches the coarse
+  annual/daily file layout — a time-sliced restore would add rclone-filter
+  complexity for little gain.
+- **Rejected alternatives**: restore only the period files overlapping the read
+  window (more rclone plumbing, marginal benefit at this file granularity); teach
+  `ParquetStore` about remotes (breaks the storage/remote separation — the
+  application layer already owns this orchestration, as with sync/purge).
+
+### 2026-06-09 — Free-space purge runs right after a successful sync (PR #89) [accepted]
+- **Choice**: a `storage.purge.purge_to_free_space` drops the **oldest** Parquet
+  files (by mtime, `.dccd/` excluded) until free space is back above
+  `storage.min_free_gb`. The Scheduler calls it **only after a successful sync
+  cycle**, off-thread. Free accounting is simulated (start probe + summed file
+  sizes) so it's deterministic and unit-testable via a `free_fn` injection.
+- **Why**: dropping local files is only safe once they're mirrored off-box;
+  tying the purge to a just-completed sync gives that guarantee without tracking
+  per-file sync state. Oldest-first keeps recent data local (most likely to be
+  read) and offloads cold data. The coverage manifest (#88) preserves the resume
+  cursor, so a purged dataset still resumes correctly on the next backfill.
+- **Rejected alternatives**: a fixed local-size cap or age-based retention (the
+  user asked specifically for "when I run low on disk" → a free-space floor); a
+  standalone purge daemon/timer (the sync loop is already the natural,
+  safety-gated trigger); deleting during the sync itself (must be strictly after
+  the mirror confirms).
+
+### 2026-06-09 — Coverage manifest in SQLite so local data can be dropped safely (PR #88) [accepted]
+- **Choice**: a `CoverageStore` (SQLite at `.dccd/coverage.db`) records each
+  dataset's `[min_ts, max_ts]` + row count on every successful backfill;
+  `backfill(start="last")` consults it (`get_max_ts`) when `store.last_timestamp`
+  returns `None`, i.e. the local Parquet is gone. Wired through `service_factory`
+  and threaded into backfill by every caller (Client, CLI, API, Scheduler).
+- **Why**: backfill resume reads the cursor from *local Parquet only*, so dropping
+  files to free disk (the point of Epic C) would make the next run re-download
+  from the bounded default lookback. A small manifest that lives outside the data
+  files (and is never purged) is the cheapest durable cursor. Chosen over a
+  remote-aware inventory (rclone listing on every run — network + remote-availability
+  coupling). The envelope only ever *widens* (min of mins, max of maxes) so a
+  narrow re-backfill can't shrink recorded coverage.
+- **Rejected alternatives**: query the remote for what exists (slow, couples
+  resume to remote uptime); store the cursor inside the Parquet footer (lost with
+  the file — the exact failure we're avoiding); reuse `RunsStore` (runs are an
+  event log, coverage is current-state per dataset — different shape and lifecycle).
+
+### 2026-06-09 — Surface remote sync in the Storage UI; share one sync-cycle primitive (PR #87) [accepted]
+- **Choice**: extract the single sync cycle (create run → `sync_all` → finish +
+  events) into `operations.sync_remote`, reused by both the scheduler loop and a
+  new manual `POST /api/storage/sync`. The Storage page reads `GET
+  /api/storage/sync` (last/next/volume/remotes) and gets a "Sync now" button. The
+  manual endpoint resolves the remote from **config** (`app.state.remote =
+  build_remote(cfg)` in the lifespan), not from the scheduler.
+- **Why**: in `dccd ui` mode the standalone scheduler has no remote wired in, so
+  reading it from the scheduler would make "Sync now" silently dead there;
+  resolving from config works in both `dccd ui` and `dccd start`. Sharing
+  `sync_remote` keeps run-recording in one place so the manual and scheduled
+  paths can't drift. The page persists status (a plain GET) via the existing
+  `sync` runs; no SSE — kept deliberately light per the user's ask.
+- **Rejected alternatives**: duplicate the run-recording in the endpoint (drift
+  risk); drive the sync from `scheduler._remote` (dead in `dccd ui`); push live
+  status over SSE on the Storage page (heavier than asked — a 10s poll suffices).
+
+### 2026-06-09 — Daemon drives rclone sync; own the loop in the Scheduler (PR #86) [accepted]
+- **Choice**: schedule the existing `RemoteStorage.sync_all` from `dccd start` by
+  giving `Scheduler` an optional `remote`/`sync_interval` and a `_sync_loop`
+  (mirroring the existing interval-loop pattern), and record each cycle as a
+  `sync` run in `RunsStore` (zero schema change) while emitting live `remote-sync`
+  EventBus status. Wiring goes through `service_factory.build_remote`.
+- **Why**: `RemoteStorage` was fully implemented but never instantiated outside
+  tests, so a server `dccd start` mirrored nothing off-box. Owning the loop in the
+  Scheduler makes it unit-testable without rclone and gives clean teardown via the
+  existing `stop()`. Persisting a run row makes the sync observable after the fact
+  (the Storage page is a plain GET) — the keystone the upcoming UI (PR2) reads.
+  This is PR 1 of a 4-PR Epic C (tiered storage: sync → UI → coverage manifest →
+  free-space purge).
+- **Rejected alternatives**: firing rclone directly from `cmd_start` (untestable,
+  no reconcile/stop, no status surface); a new always-on service object (more
+  wiring than a scheduler loop for no gain); EventBus-only with no persistence
+  (status vanishes on UI refresh, so the Storage page couldn't show "last sync").
+
 ### 2026-06-07 — v3 docs sweep: drop the v2 migration story, consolidate examples (PR #82) [accepted]
 - **Choice**: removed the README "Migrating from v2" section (and every `dccd
   migrate` mention) outright rather than keeping a slim note; consolidated

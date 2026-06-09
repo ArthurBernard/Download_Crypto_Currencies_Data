@@ -21,12 +21,13 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
   CORS via `ui_allow_origins`.
 - **Quality gates**: ~191 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`
   clean; Sphinx 0 warnings; CI matrix 3.11–3.13.
+- **Released**: `v3.0.0` tagged on `master` (2026-06-07), superseding `v2.4.0` —
+  GitHub Release published. `develop` and `master` are level; the next feature
+  merge into `develop` reopens the rolling release PR (`/release next-cycle`).
 
 ## Pending
 
-- **Release**: v3 is `3.0.0` in `pyproject` but lives on `develop` and is **not
-  tagged**. Last published tag is `v2.4.0`. Releasing = `develop → master` +
-  `v3.0.0` tag (use the `release-gate` skill).
+_(nothing release-blocking — see the roadmap for the next epics)_
 
 ## Known gaps / sharp edges (by design or deferred)
 
@@ -39,8 +40,18 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
   impractical.
 - **Order-book history** doesn't exist on any exchange for free — you build it by
   recording the live WS over time (snapshot per `snapshot_interval`).
-- **Remote data sync** (`storage/remote.py`, rclone) exists; confirm it's actually
-  scheduled by `dccd start` before relying on it unattended (see roadmap).
+- **Remote data sync** (`storage/remote.py`, rclone) is now **scheduled by
+  `dccd start`** — a periodic loop mirrors the store off-box every
+  `storage.sync_interval` (backoff + persisted `sync` runs + `remote-sync`
+  EventBus status), and the **Storage page shows last/next sync + volume with a
+  "Sync now" button**. A **coverage manifest** (`CoverageStore`, `.dccd/`) now
+  records each dataset's extent so `start="last"` resumes from it when local files
+  are gone — local data can be dropped without a re-download. A **free-space
+  purge** (`storage.min_free_gb`) drops the oldest already-synced files after each
+  sync to stay above the floor, and **read-through restore** pulls a purged
+  dataset back from the remote on read. **Epic C (tiered storage) is complete** —
+  provisioning, restore and integrity are documented in
+  `doc/source/how-to/sync-remote.rst`.
 
 ## Tooling & infra present in the repo
 
