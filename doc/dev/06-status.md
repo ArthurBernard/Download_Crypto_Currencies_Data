@@ -40,8 +40,11 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   impractical.
 - **Order-book history** doesn't exist on any exchange for free — you build it by
   recording the live WS over time (snapshot per `snapshot_interval`).
-- **Remote data sync** (`storage/remote.py`, rclone) exists; confirm it's actually
-  scheduled by `dccd start` before relying on it unattended (see roadmap).
+- **Remote data sync** (`storage/remote.py`, rclone) is now **scheduled by
+  `dccd start`** — a periodic loop mirrors the store off-box every
+  `storage.sync_interval` (backoff + persisted `sync` runs + `remote-sync`
+  EventBus status). Still pending in Epic C: UI surfacing, a coverage manifest so
+  local files can be dropped without re-downloading, and free-space purge.
 
 ## Tooling & infra present in the repo
 

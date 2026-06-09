@@ -146,6 +146,7 @@ def cmd_start(
     from dccd.application.scheduler import Scheduler
     from dccd.application.service_factory import (
         build_registry,
+        build_remote,
         build_runs_store,
         build_store,
     )
@@ -156,7 +157,16 @@ def cmd_start(
     runs_store = build_runs_store(cfg.settings.data_path)
     registry = build_registry()
     bus = EventBus()
-    scheduler = Scheduler(registry, store, runs_store, bus)
+    remote = build_remote(cfg)
+    scheduler = Scheduler(
+        registry, store, runs_store, bus,
+        remote=remote, sync_interval=cfg.storage.sync_interval,
+    )
+    if remote is not None:
+        typer.echo(
+            f"Remote sync every {cfg.storage.sync_interval}s "
+            f"→ {len(cfg.storage.remotes)} remote(s)"
+        )
 
     # Run *all* configured jobs, not just streams: the scheduler routes each by
     # trigger kind (supervised → stream worker; interval/cron → periodic
