@@ -62,7 +62,14 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   `dccd.application` daemon example).
 - **Project skills** (`.claude/skills/`): `data-e2e` (real-data verification),
   `release-gate` (pre-release checks), `ui-audit` (browser audit). Plus the
-  user-level `/finish-task` flow used to open PRs.
+  user-level loop skills used to open PRs.
+- **Dev loop = hierarchical plan trees**: `doc/dev/plans/<epic>/` holds durable
+  global + leaf plans (committed; finished ones archived to `_archive/plans/`).
+  The chain is `/pick-task → /plan` (build tree + plan PR) `→ /execute-leaf`
+  (agent per leaf, model from `complexity`, real-data verify) `→ /finish-task`
+  (per leaf: tests/ADR/PR/archive/tick) `→ … → /release`. Format reference:
+  `doc/dev/plans/README.md`; descriptor key `plans_dir` in `.claude/workflow.json`
+  (absent ⇒ legacy plan-mode loop).
 
 ## Deferred (post-3.0, "M3")
 
