@@ -648,7 +648,11 @@ def create_app(
             exchange=body.exchange, symbol=sym,
             data_type=DataType(body.data_type), span=body.span,
         )
-        df = read(target, store=_store(request), start_ns=body.start_ns, end_ns=body.end_ns)
+        # Off-thread: read-through restore may shell out to rclone (blocking).
+        df = await asyncio.to_thread(
+            read, target, store=_store(request), start_ns=body.start_ns,
+            end_ns=body.end_ns, remote=request.app.state.remote,
+        )
         rows = df.to_dicts() if hasattr(df, "to_dicts") else []
         return {"rows": len(rows), "data": rows[:1000]}
 

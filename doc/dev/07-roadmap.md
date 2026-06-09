@@ -68,8 +68,6 @@ loss doesn't lose data.
 - [ ] **Integrity** — one-way `sync` (mirror) semantics, dedup-safe; document
   restore (pull a remote back into `data_path`). Consider a periodic verify
   (counts/sizes) reusing the `data-e2e` skill.
-- [ ] **Optional: read-through restore** — ability to point a fresh instance at a
-  remote and hydrate the local store.
 
 ---
 

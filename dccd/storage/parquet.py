@@ -119,6 +119,11 @@ class ParquetStore:
         self._file_locks: dict[str, threading.Lock] = {}
         self._file_locks_guard = threading.Lock()
 
+    @property
+    def root(self) -> pathlib.Path:
+        """Root directory of the local store."""
+        return self._root
+
     def _lock_for(self, file_path: pathlib.Path) -> threading.Lock:
         key = str(file_path)
         with self._file_locks_guard:

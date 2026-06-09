@@ -71,6 +71,7 @@ class Client:
         self._store: ParquetStore | None = None
         self._registry: SourceRegistry | None = None
         self._coverage_store: Any = None
+        self._remote: Any = None
 
     def _require_ready(self) -> tuple["SourceRegistry", "ParquetStore"]:
         if self._registry is None or self._store is None:
@@ -82,6 +83,7 @@ class Client:
         from dccd.application.service_factory import (
             build_coverage_store,
             build_registry,
+            build_remote,
             build_store,
         )
 
@@ -94,6 +96,7 @@ class Client:
         # Single source of truth for adapter wiring — same as CLI and API.
         self._store = build_store(self._config.settings.data_path)
         self._coverage_store = build_coverage_store(self._config.settings.data_path)
+        self._remote = build_remote(self._config)
         self._registry = build_registry()
         return self
 
@@ -256,7 +259,8 @@ class Client:
         _, store = self._require_ready()
         target = JobTarget(exchange=exchange, symbol=Symbol.parse(symbol),
                            data_type=DataType(data_type), span=span)
-        return cast("pl.DataFrame", do_read(target, store=store, start_ns=start_ns, end_ns=end_ns))
+        return cast("pl.DataFrame", do_read(target, store=store, start_ns=start_ns,
+                                            end_ns=end_ns, remote=self._remote))
 
     def inventory(self) -> list[dict[str, Any]]:
         """List every stored dataset with its coverage.

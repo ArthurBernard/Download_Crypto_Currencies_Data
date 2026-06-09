@@ -493,9 +493,21 @@ def read(
     store: ParquetStore,
     start_ns: int | None = None,
     end_ns: int | None = None,
+    remote: RemoteStorage | None = None,
 ) -> Any:
-    """Read stored data for *target* in the given nanosecond range."""
+    """Read stored data for *target* in the given nanosecond range.
+
+    Read-through restore: when *remote* is set and the dataset has no local
+    Parquet (e.g. it was purged to free disk), the dataset directory is pulled
+    back from the remote (``rclone copy``) before loading, so a purge is
+    transparent to readers.
+    """
     ds = _make_dataset_id(target)
+    if remote is not None:
+        directory = store.directory(ds)
+        if not any(directory.glob("*.parquet")):
+            rel = directory.relative_to(store.root)
+            remote.restore(str(rel))
     return store.load(ds, start_ns, end_ns)
 
 

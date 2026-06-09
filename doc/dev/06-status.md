@@ -48,9 +48,9 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   records each dataset's extent so `start="last"` resumes from it when local files
   are gone — local data can be dropped without a re-download. A **free-space
   purge** (`storage.min_free_gb`) drops the oldest already-synced files after each
-  sync to stay above the floor. Still pending in Epic C: **read-through restore**
-  (pull a purged file back from the remote on read) and the deploy/rclone how-to
-  docs.
+  sync to stay above the floor, and **read-through restore** pulls a purged
+  dataset back from the remote on read. Remaining in Epic C: the rclone
+  provisioning / integrity how-to docs.
 
 ## Tooling & infra present in the repo
 
