@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the daemon mirrors the store off-box every `storage.sync_interval` seconds with
   exponential backoff, persisted run history (`sync` runs in `RunsStore`) and a
   live `remote-sync` EventBus status. Previously `RemoteStorage` was implemented
-  but never driven — a server synced nothing. (#XX)
+  but never driven — a server synced nothing. (#86)
 
 ### Changed
 

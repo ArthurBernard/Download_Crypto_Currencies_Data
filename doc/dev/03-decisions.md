@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Daemon drives rclone sync; own the loop in the Scheduler (PR #XX) [accepted]
+### 2026-06-09 — Daemon drives rclone sync; own the loop in the Scheduler (PR #86) [accepted]
 - **Choice**: schedule the existing `RemoteStorage.sync_all` from `dccd start` by
   giving `Scheduler` an optional `remote`/`sync_interval` and a `_sync_loop`
   (mirroring the existing interval-loop pattern), and record each cycle as a
