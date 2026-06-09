@@ -43,8 +43,9 @@ _(nothing release-blocking — see the roadmap for the next epics)_
 - **Remote data sync** (`storage/remote.py`, rclone) is now **scheduled by
   `dccd start`** — a periodic loop mirrors the store off-box every
   `storage.sync_interval` (backoff + persisted `sync` runs + `remote-sync`
-  EventBus status). Still pending in Epic C: UI surfacing, a coverage manifest so
-  local files can be dropped without re-downloading, and free-space purge.
+  EventBus status), and the **Storage page shows last/next sync + volume with a
+  "Sync now" button**. Still pending in Epic C: a coverage manifest so local files
+  can be dropped without re-downloading, and free-space purge.
 
 ## Tooling & infra present in the repo
 

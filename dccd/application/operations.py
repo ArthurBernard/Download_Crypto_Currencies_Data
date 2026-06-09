@@ -28,9 +28,10 @@ from dccd.domain.types import DataType
 from dccd.sources.base import OHLCHistory, OrderBookSnapshotREST, TradesHistory
 from dccd.sources.registry import SourceRegistry
 from dccd.storage.parquet import ParquetStore
+from dccd.storage.remote import RemoteStorage
 from dccd.storage.runs_sqlite import RunsStore
 
-__all__ = ["backfill", "stream", "read", "inventory"]
+__all__ = ["backfill", "stream", "read", "inventory", "sync_remote"]
 
 logger = logging.getLogger(__name__)
 
@@ -470,3 +471,66 @@ def read(
 def inventory(*, store: ParquetStore) -> list[dict[str, Any]]:
     """Return a list of dataset descriptors for all stored data."""
     return store.inventory()
+
+
+async def sync_remote(
+    remote: RemoteStorage,
+    *,
+    runs_store: RunsStore | None = None,
+    events: RunEvents | None = None,
+    run_id: str | None = None,
+) -> dict[str, Any]:
+    """Run one remote-sync cycle: mirror the local store to all rclone remotes.
+
+    Records the cycle as a ``sync`` run in *runs_store* (so the Storage UI can
+    show "last sync") and emits ``status``/``log`` on *events*. Shared by the
+    scheduler's periodic loop and the manual "Sync now" endpoint, so the
+    run-recording lives in exactly one place.
+
+    Parameters
+    ----------
+    remote : RemoteStorage
+    runs_store : RunsStore or None
+    events : RunEvents or None
+    run_id : str or None
+        Override the auto-generated run id.
+
+    Returns
+    -------
+    dict
+        ``{'run_id', 'results', 'ok'}`` — ``results`` maps remote → success;
+        ``ok`` is True only when every configured remote synced.
+    """
+    if run_id is None:
+        run_id = f"remote-sync@{time.time_ns()}"
+    if runs_store:
+        runs_store.create_run(run_id, "remote-sync", "sync", "-", "all", "-")
+    if events:
+        events.status("running")
+    try:
+        results = await remote.sync_all()
+    except Exception as exc:
+        msg = f"Remote sync error: {exc}"
+        if events:
+            events.log(msg, "error")
+            events.status("failed")
+        if runs_store:
+            runs_store.finish_run(run_id, "failed", error=str(exc))
+        return {"run_id": run_id, "results": {}, "ok": False}
+
+    failed = [r for r, ok in results.items() if not ok]
+    if failed:
+        msg = f"Remote sync failed for: {', '.join(failed)}"
+        if events:
+            events.log(msg, "error")
+            events.status("failed")
+        if runs_store:
+            runs_store.finish_run(run_id, "failed", error=msg)
+        return {"run_id": run_id, "results": results, "ok": False}
+
+    if events:
+        events.log(f"Synced {len(results)} remote(s)")
+        events.status("succeeded")
+    if runs_store:
+        runs_store.finish_run(run_id, "succeeded", rows_written=len(results))
+    return {"run_id": run_id, "results": results, "ok": True}
