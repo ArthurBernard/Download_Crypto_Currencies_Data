@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docs: `how-to/protect-ui` now covers deploy-time secret injection — the token and
   `rclone.conf` are mounted at run time, never baked into the image (verified on the
   built image: `docker history`/filesystem show no config); the YAML loader does not
-  expand `${ENV}` placeholders, so the mounted-file pattern is the blessed one. (#XX)
+  expand `${ENV}` placeholders, so the mounted-file pattern is the blessed one. (#101)
 
 ### Fixed
 
