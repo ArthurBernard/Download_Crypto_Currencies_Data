@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — systemd deploy: venv `ExecStart` + `StateDirectory` (PR #XX) [accepted]
+### 2026-06-10 — systemd deploy: venv `ExecStart` + `StateDirectory` (PR #98) [accepted]
 - **Choice**: `deploy/dccd.service` runs dccd from a venv at `/opt/dccd/venv` and
   uses `StateDirectory=dccd` (systemd creates/owns `/var/lib/dccd` for `User=dccd`),
   rather than a system-wide `pip install` at `/usr/local/bin/dccd` + a manual

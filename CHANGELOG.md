@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-existent `ui` extra (`.[daemon,ui]` → `.[daemon]`, also in the `Dockerfile`).
   Verified a real system-wide install: `systemd-analyze verify` passes, the service
   is active, auto-restarts after SIGKILL, and a backfill writes correct OHLC under
-  the hardened `/var/lib/dccd/data` (`ProtectSystem=strict`). (#XX)
+  the hardened `/var/lib/dccd/data` (`ProtectSystem=strict`). (#98)
 
 ### Deprecated
 
