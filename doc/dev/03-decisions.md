@@ -112,7 +112,7 @@ Conventions:
 
 Template:
 ```
-### YYYY-MM-DD — <short title> (PR #NN)  [accepted|rejected|tombstone]
+### YYYY-MM-DD — <short title> (PR #94)  [accepted|rejected|tombstone]
 - **Choice**: …
 - **Why**: …
 - **Rejected alternatives**: …
@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-09 — Hierarchical file-based plan trees + complexity-derived agent execution (PR #NN) [accepted]
+### 2026-06-09 — Hierarchical file-based plan trees + complexity-derived agent execution (PR #94) [accepted]
 - **Choice**: plans become durable, hierarchical **files in the repo**
   (`doc/dev/plans/<epic>/`: a global `00-plan.md` + precise leaf specs, adaptive
   depth). Each leaf declares a `complexity` that derives the execution model

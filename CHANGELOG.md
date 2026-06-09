@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `high→opus`). New `/plan` (build the tree + open the plan PR first) and
   `/execute-leaf` (spawn an agent per leaf, verify on real data) skills; `/pick-task`,
   `/finish-task`, `/abandon-task`, `/release` and `CLAUDE.md` updated to chain
-  through it. Backward-compatible: no `plans_dir` ⇒ the old plan-mode loop. (#NN)
+  through it. Backward-compatible: no `plans_dir` ⇒ the old plan-mode loop. (#94)
 
 ### Changed
 
