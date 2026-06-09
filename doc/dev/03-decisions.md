@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Wire HealthMonitor into the daemon + key alerts by job (PR #XX) [accepted]
+### 2026-06-10 — Wire HealthMonitor into the daemon + key alerts by job (PR #100) [accepted]
 - **Choice**: instantiate `HealthMonitor` in both daemon entry points — `cmd_start`
   (on the scheduler's bus) and the API lifespan (standalone `dccd ui` only, to avoid
   double-wiring). Key the consecutive-failure counter on the **job (spec id)**, not

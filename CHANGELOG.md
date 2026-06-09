@@ -26,14 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so webhook alerts never fired. Docker `HEALTHCHECK` on `/health`, commented
   systemd resource limits, and journald log-rotation guidance. Verified live on a
   server: a failing job past the threshold delivered a real webhook POST, and the
-  container reports `healthy`. (#XX)
+  container reports `healthy`. (#100)
 
 ### Fixed
 
 - `HealthMonitor` counted consecutive failures per `run_id`, but each backfill run
   has a unique id (`{spec}@{ts}`), so repeated failures never accumulated (only
   streams, with a stable `@stream` id, could alert). It now keys on the job
-  (spec id) so repeated backfill failures trip the alert. (#XX)
+  (spec id) so repeated backfill failures trip the alert. (#100)
 
 ### Changed
 
