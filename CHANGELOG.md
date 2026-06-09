@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RunsStore` (SQLite WAL) survives and appends, and the coverage manifest keeps the
   resume cursor (no gap). New `test_restart.py` guards RunsStore persistence across a
   reopen and scheduler interval re-arm from config. (#99)
+- Ops for unattended deploy: `HealthMonitor` is now wired into the daemon (CLI
+  `dccd start` and the standalone API) — it was implemented but never instantiated,
+  so webhook alerts never fired. Docker `HEALTHCHECK` on `/health`, commented
+  systemd resource limits, and journald log-rotation guidance. Verified live on a
+  server: a failing job past the threshold delivered a real webhook POST, and the
+  container reports `healthy`. (#100)
 
 ### Changed
 
@@ -40,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Verified a real system-wide install: `systemd-analyze verify` passes, the service
   is active, auto-restarts after SIGKILL, and a backfill writes correct OHLC under
   the hardened `/var/lib/dccd/data` (`ProtectSystem=strict`). (#98)
+- `HealthMonitor` counted consecutive failures per `run_id`, but each backfill run
+  has a unique id (`{spec}@{ts}`), so repeated failures never accumulated (only
+  streams, with a stable `@stream` id, could alert). It now keys on the job
+  (spec id) so repeated backfill failures trip the alert. (#100)
 
 ### Deprecated
 

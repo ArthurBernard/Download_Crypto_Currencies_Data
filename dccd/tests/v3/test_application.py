@@ -358,3 +358,65 @@ class TestOperationRegistry:
         """Each operation must be accessible from both CLI and API (parity test)."""
         required_ops = {"backfill", "stream", "read", "inventory"}
         assert required_ops.issubset(set(REGISTRY.operations))
+
+
+class TestHealthMonitor:
+    """HealthMonitor fires a webhook on N consecutive failures and resets on success."""
+
+    def test_alerts_after_threshold_and_resets(self, monkeypatch):
+        import urllib.request
+
+        from dccd.application.events import EventBus, StatusEvent
+        from dccd.application.monitor import HealthMonitor
+
+        calls: list[str] = []
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=0):
+            calls.append(getattr(req, "full_url", str(req)))
+            return _Resp()
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        bus = EventBus()
+        HealthMonitor(None, bus, webhook_url="http://hook.test", max_consecutive_errors=3)
+
+        # Distinct run ids that share one job (spec id) — each backfill run is
+        # unique (`{spec}@{ts}`), so the monitor must accumulate across runs.
+        job = "backfill:binance:BTC/USDT:ohlc:3600s"
+        # Below threshold: no alert.
+        bus.emit(StatusEvent(run_id=f"{job}@1", state="failed"))
+        bus.emit(StatusEvent(run_id=f"{job}@2", state="failed"))
+        assert calls == []
+
+        # Threshold reached (3rd failure, different run): one alert.
+        bus.emit(StatusEvent(run_id=f"{job}@3", state="failed"))
+        assert len(calls) == 1
+
+        # A success resets the counter; failures must re-accumulate.
+        bus.emit(StatusEvent(run_id=f"{job}@4", state="succeeded"))
+        bus.emit(StatusEvent(run_id=f"{job}@5", state="failed"))
+        bus.emit(StatusEvent(run_id=f"{job}@6", state="failed"))
+        assert len(calls) == 1
+        bus.emit(StatusEvent(run_id=f"{job}@7", state="failed"))
+        assert len(calls) == 2
+
+        # A different job keeps its own independent counter.
+        bus.emit(StatusEvent(run_id="backfill:kraken:BTC/USD:ohlc:3600s@1", state="failed"))
+        assert len(calls) == 2
+
+    def test_no_webhook_no_crash(self):
+        from dccd.application.events import EventBus, StatusEvent
+        from dccd.application.monitor import HealthMonitor
+
+        bus = EventBus()
+        HealthMonitor(None, bus, webhook_url=None, max_consecutive_errors=1)
+        # Must not raise even past threshold when no webhook is configured.
+        bus.emit(StatusEvent(run_id="r1", state="failed"))
+        bus.emit(StatusEvent(run_id="r1", state="failed"))
