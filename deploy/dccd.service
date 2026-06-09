@@ -28,6 +28,16 @@ WorkingDirectory=/var/lib/dccd
 Restart=on-failure
 RestartSec=5
 
+# Logs go to the journal: `journalctl -u dccd [-f]`. Rotation is handled by
+# journald (see /etc/systemd/journald.conf: SystemMaxUse=, MaxRetentionSec=) —
+# dccd writes no log files of its own.
+
+# Resource limits — uncomment and tune for your host (defaults sized for a small
+# box; too-low values can OOM-kill a busy daemon):
+#MemoryMax=1G
+#CPUQuota=200%
+#TasksMax=256
+
 # State dir: systemd creates/owns /var/lib/dccd for User=dccd.
 StateDirectory=dccd
 

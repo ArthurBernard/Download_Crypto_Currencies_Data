@@ -37,6 +37,7 @@ from pydantic import BaseModel
 from dccd.application.config import AppConfig, load_config, resolve_config_path
 from dccd.application.events import EventBus
 from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
+from dccd.application.monitor import HealthMonitor
 from dccd.application.registry import REGISTRY
 from dccd.application.scheduler import Scheduler
 from dccd.application.service_factory import (
@@ -179,7 +180,10 @@ def create_app(
         app.state.remote = build_remote(cfg)
 
         if scheduler is not None:
+            # `dccd start` owns the scheduler *and* its HealthMonitor (wired on the
+            # scheduler's bus in cmd_start) — don't double-wire here.
             app.state.scheduler = scheduler
+            app.state.monitor = None
         else:
             app.state.scheduler = Scheduler(
                 app.state.registry,
@@ -187,6 +191,14 @@ def create_app(
                 app.state.runs_store,
                 app.state.event_bus,
                 coverage_store=app.state.coverage_store,
+            )
+            # Standalone (`dccd ui`): wire alerts on this app's bus, which the
+            # standalone scheduler publishes to.
+            app.state.monitor = HealthMonitor(
+                app.state.runs_store,
+                app.state.event_bus,
+                webhook_url=cfg.alerts.webhook_url,
+                max_consecutive_errors=cfg.alerts.max_consecutive_errors,
             )
 
         # Register stream workers from config so they can be started/stopped

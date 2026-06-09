@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Wire HealthMonitor into the daemon + key alerts by job (PR #XX) [accepted]
+- **Choice**: instantiate `HealthMonitor` in both daemon entry points — `cmd_start`
+  (on the scheduler's bus) and the API lifespan (standalone `dccd ui` only, to avoid
+  double-wiring). Key the consecutive-failure counter on the **job (spec id)**, not
+  the unique per-run `run_id`. Healthcheck via Docker `HEALTHCHECK`/`systemd`; logs
+  via journald (no custom file logger); resource limits shipped commented.
+- **Why**: `HealthMonitor` was dead code — never instantiated — so alerts never
+  fired (same class as `RemoteStorage` pre-Epic-C). And its per-`run_id` keying could
+  never accumulate across backfill runs (each run id is `{spec}@{ts}`), so only
+  streams (stable `@stream` id) could ever alert. Verified live: a failing job past
+  the threshold delivered a real webhook POST to a sink; the container is `healthy`.
+- **Rejected alternatives**: wire it only in `cmd_start` (then `dccd ui` never
+  alerts); a custom file logger + logrotate (journald/docker already own rotation —
+  a second mechanism to maintain); `WatchdogSec` (needs `sd_notify` wiring dccd
+  doesn't have — would kill a healthy daemon); forced resource limits (can OOM-kill a
+  busy daemon — shipped commented with guidance instead).
+
 ### 2026-06-10 — Restart safety is reconstruction-from-config, verified by reboot (PR #99) [accepted]
 - **Choice**: keep restart safety as *stateless reconstruction* — the daemon holds
   no cross-process state; on boot it rebuilds everything from `config.yml` +

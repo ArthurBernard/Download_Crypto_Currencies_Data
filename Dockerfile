@@ -40,6 +40,10 @@ RUN pip install ".[daemon]" \
 VOLUME ["/data"]
 EXPOSE 8080
 
+# Orchestrator healthcheck on /health (no curl in the slim image — use Python).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=3).status==200 else 1)"
+
 # Config is mounted at /etc/dccd/config.yml (XDG_CONFIG_HOME=/etc).
 ENTRYPOINT ["dccd"]
 CMD ["start", "--host", "0.0.0.0", "--port", "8080"]
