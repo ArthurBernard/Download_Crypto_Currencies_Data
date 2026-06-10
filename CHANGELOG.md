@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.3.0] - 2026-06-10
+
+### Added
+
 - Threat-model section in `how-to/expose-remote` (trust boundaries: localhost / tailnet
   / public; what the token+cookie session protect and don't; residual risks; a
   recommended-postures table) — completing **Epic B** (view the UI remotely). (#110)
