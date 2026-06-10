@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Browser auth = opaque HttpOnly cookie session, gate pages, stop templating the token (PR #NN) [accepted]
+### 2026-06-10 — Browser auth = opaque HttpOnly cookie session, gate pages, stop templating the token (PR #107) [accepted]
 - **Choice**: when `ui_auth_token` is set, add a `/login` page that mints an opaque
   in-process session id stored as an `HttpOnly`/`SameSite=Lax` cookie (`Secure` derived
   from scheme/`X-Forwarded-Proto`); gate the page routes (unauth → 303 `/login`); the
