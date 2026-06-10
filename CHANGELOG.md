@@ -12,14 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+### Deprecated
+
+### Removed
+
+## [3.3.1] - 2026-06-10
+
+### Fixed
+
 - Kraken crypto/crypto OHLC pairs (e.g. `ETH/BTC`): `_kraken_pair` only mapped the
   *base* `BTC→XBT`, producing `XETHXBTC` which Kraken rejects with "Unknown asset
   pair"; it now maps the *quote* too (`XETHXXBT`). Verified against the live Kraken
   API (721 bars). (#113)
-
-### Deprecated
-
-### Removed
 
 ## [3.3.0] - 2026-06-10
 
