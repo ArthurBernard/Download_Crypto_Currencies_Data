@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Remote UI exposure = TLS reverse proxy or private overlay; app stays on loopback (PR #NN) [accepted]
+### 2026-06-10 — Remote UI exposure = TLS reverse proxy or private overlay; app stays on loopback (PR #106) [accepted]
 - **Choice**: document remote UI access (`how-to/expose-remote`) as either (a) a TLS
   reverse proxy (Caddy blessed; nginx / Cloudflare Tunnel alternatives) with dccd kept
   on `ui_host: 127.0.0.1`, or (b) a private Tailscale/WireGuard overlay where binding
