@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`min_interval` pushed down into the adapters; `0.0` keeps per-frame), and
   Kraken/Bybit book state is truncated to the subscribed depth (WS truncation
   contract). Verified live: Kraken 60 s at 10 s interval → exactly 6 snapshots,
-  ≤ 25 levels/side, never crossed; 3 live books for 2 min → **2.0 %** CPU. (#XX)
+  ≤ 25 levels/side, never crossed; 3 live books for 2 min → **2.0 %** CPU. (#120)
 - `ParquetStore` metadata (inventory, last timestamp, gap detection) no longer
   reads the full TS column of every file in the store — it reads parquet footer
   statistics with a per-file mtime cache (legacy files without statistics fall

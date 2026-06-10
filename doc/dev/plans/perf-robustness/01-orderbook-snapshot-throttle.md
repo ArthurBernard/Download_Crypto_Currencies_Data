@@ -6,7 +6,7 @@ complexity: medium
 depends: []
 parallel: true
 branch: fix/orderbook-snapshot-throttle
-pr: "#XX"
+pr: "#120"
 ---
 
 # Throttle order-book snapshot construction upstream (kills the 98 % CPU burn)

@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Order-book capture throttle lives in the adapter, not the consumer (PR #XX) [accepted]
+### 2026-06-10 — Order-book capture throttle lives in the adapter, not the consumer (PR #120) [accepted]
 - **Choice**: `OrderBookLive.stream_orderbook` takes a keyword-only
   `min_interval` (default `0.0` = per-frame, the legacy contract).
   Delta-maintained books (Kraken, Bybit) apply frames to plain dicts and only
