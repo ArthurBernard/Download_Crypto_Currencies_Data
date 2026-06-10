@@ -1,12 +1,12 @@
 ---
 plan: remote-ui-access/03-harden-api-exposure
 kind: leaf
-status: planned
+status: done
 complexity: high
 depends: [02]
 parallel: false
 branch: feat/harden-api-exposure
-pr: ""
+pr: "#NN"
 ---
 
 # Harden /api for a hostile network — rate limit, CORS proof, read-only role

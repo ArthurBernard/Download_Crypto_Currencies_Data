@@ -65,8 +65,9 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   documents TLS-fronted access (Caddy/nginx/Cloudflare Tunnel) and the Tailscale
   overlay; dccd stays on loopback behind a proxy. **Browser auth/session** shipped: a
   `/login` page + `HttpOnly` cookie gates the UI pages and the token is no longer
-  templated into pages (verified live over Tailscale). (Hardening, mobile pass, threat
-  model still open.)
+  templated into pages. **Hardening** shipped too: `ui_rate_limit` (429), `ui_readonly`
+  (403 on mutating), `ui_trusted_proxy`, and a CORS-never-wildcard regression test (all
+  verified live over Tailscale). (Mobile pass, threat model still open.)
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
   `dccd.application` daemon example).

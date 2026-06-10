@@ -156,6 +156,97 @@ class TestAuthSession:
         assert client.get("/", follow_redirects=False).status_code == 200
 
 
+class TestHardening:
+    """Rate limit, CORS-never-wildcard, read-only mode, mutating-routes-need-auth."""
+
+    def _cfg(self, tmp_data_path, **over):
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        for k, v in over.items():
+            setattr(cfg.settings, k, v)
+        return cfg
+
+    # --- CORS: never wildcard ---
+
+    def test_cors_no_origin_when_unconfigured(self, tmp_data_path):
+        cfg = self._cfg(tmp_data_path)  # ui_allow_origins=[]
+        with TestClient(create_app(config=cfg)) as c:
+            r = c.get("/api/inventory", headers={"Origin": "http://evil.test"})
+            assert "access-control-allow-origin" not in {k.lower() for k in r.headers}
+
+    def test_cors_echoes_allowed_origin_never_star(self, tmp_data_path):
+        cfg = self._cfg(tmp_data_path, ui_allow_origins=["http://good.test"])
+        with TestClient(create_app(config=cfg)) as c:
+            ok = c.get("/api/inventory", headers={"Origin": "http://good.test"})
+            assert ok.headers.get("access-control-allow-origin") == "http://good.test"
+            evil = c.get("/api/inventory", headers={"Origin": "http://evil.test"})
+            assert evil.headers.get("access-control-allow-origin") != "*"
+
+    # --- Rate limit ---
+
+    def test_rate_limit_trips_429(self, tmp_data_path):
+        cfg = self._cfg(tmp_data_path, ui_rate_limit=2)
+        with TestClient(create_app(config=cfg)) as c:
+            responses = [c.get("/api/inventory") for _ in range(8)]
+            codes = [r.status_code for r in responses]
+            assert 429 in codes
+            # every 429 must carry Retry-After
+            assert all("retry-after" in {k.lower() for k in r.headers}
+                       for r in responses if r.status_code == 429)
+
+    def test_rate_limit_off_never_429(self, tmp_data_path):
+        cfg = self._cfg(tmp_data_path, ui_rate_limit=0)
+        with TestClient(create_app(config=cfg)) as c:
+            assert all(c.get("/api/inventory").status_code == 200 for _ in range(12))
+
+    def test_xff_not_trusted_by_default(self, tmp_data_path):
+        # Forged X-Forwarded-For must not mint fresh buckets when proxy not trusted.
+        cfg = self._cfg(tmp_data_path, ui_rate_limit=2)
+        with TestClient(create_app(config=cfg)) as c:
+            codes = [c.get("/api/inventory", headers={"X-Forwarded-For": f"9.9.9.{i}"}).status_code
+                     for i in range(8)]
+            assert 429 in codes  # all share the real peer key despite forged XFF
+
+    def test_xff_trusted_gives_distinct_buckets(self, tmp_data_path):
+        cfg = self._cfg(tmp_data_path, ui_rate_limit=2, ui_trusted_proxy=True)
+        with TestClient(create_app(config=cfg)) as c:
+            codes = [c.get("/api/inventory", headers={"X-Forwarded-For": f"9.9.9.{i}"}).status_code
+                     for i in range(8)]
+            assert codes.count(200) == 8  # each distinct client has its own bucket
+
+    # --- Read-only ---
+
+    def test_readonly_blocks_mutating(self, tmp_data_path):
+        cfg = self._cfg(tmp_data_path, ui_readonly=True)
+        with TestClient(create_app(config=cfg)) as c:
+            assert c.post("/api/jobs/create", json={}).status_code == 403
+            assert c.get("/api/jobs").status_code == 200
+
+    def test_readonly_401_wins_for_unauth_mutating(self, tmp_data_path):
+        # token + readonly: an unauthenticated mutating call is 401, not 403.
+        cfg = self._cfg(tmp_data_path, ui_readonly=True, ui_auth_token="s3cret")
+        with TestClient(create_app(config=cfg)) as c:
+            assert c.post("/api/jobs/create", json={}).status_code == 401
+            # authenticated mutating call is then blocked by read-only (403).
+            r = c.post("/api/jobs/create", json={},
+                       headers={"Authorization": "Bearer s3cret"})
+            assert r.status_code == 403
+
+    # --- Mutating routes require auth ---
+
+    @pytest.mark.parametrize("method,path", [
+        ("post", "/api/jobs/create"), ("post", "/api/jobs/delete"),
+        ("post", "/api/jobs/update"), ("post", "/api/jobs/run"),
+        ("post", "/api/jobs/run-all"), ("post", "/api/streams/start"),
+        ("post", "/api/streams/stop"), ("delete", "/api/backfill/x"),
+    ])
+    def test_mutating_routes_require_token(self, tmp_data_path, method, path):
+        cfg = self._cfg(tmp_data_path, ui_auth_token="s3cret")
+        with TestClient(create_app(config=cfg)) as c:
+            assert getattr(c, method)(path).status_code == 401
+
+
 class _OkRemote:
     """In-test remote that reports success without invoking rclone."""
 
