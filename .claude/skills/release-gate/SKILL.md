@@ -45,7 +45,24 @@ the smoke against an isolated instance:
 python doc/dev/ui_smoke.py http://127.0.0.1:<port>
 ```
 
-## 5. Release hygiene checks
+## 5. Runtime resource gate (opt-in — needs network)
+
+A green suite can still ship a daemon that burns a core (v3.3: order-book
+snapshots built per WS delta → 97.7 % CPU on the production collector, remote
+UI unusable). On an isolated config with 2-3 real stream jobs:
+
+```bash
+# after ~2 min of `dccd start` warm-up:
+ps -o pcpu= -p <pid>     # steady-state must be < 10 %
+curl -s -o /dev/null -w '%{time_total}\n' http://127.0.0.1:<port>/api/inventory
+                         # must be < 0.5 s on a populated store
+```
+
+After upgrading a deployed server, also run `pip check` in its venv (a mixed
+`polars`/`polars-lts-cpu` install breaks imports — seen at the 3.3 deploy) and
+the same timed `curl` as a smoke test.
+
+## 6. Release hygiene checks
 
 - `git status` clean; no build artefacts / `pytest-of-*` / `doc/_build` tracked
   (they're gitignored — if any are staged, untrack them).
@@ -54,9 +71,9 @@ python doc/dev/ui_smoke.py http://127.0.0.1:<port>
   feature branch. `feat/refonte-v3` is the v3 integration branch.
 - If tagging: version in `pyproject.toml` matches the intended tag.
 
-## 6. Verdict
+## 7. Verdict
 
 Report a table: layer → PASS/FAIL/SKIPPED(reason). **GO** only if tests, ruff,
-mypy and docs are green and nothing in §5 is violated. Anything red ⇒ **NO-GO**,
+mypy and docs are green and nothing in §6 is violated. Anything red ⇒ **NO-GO**,
 name the blocker and the fix. Releasing (merge to master, tag, push) is the
 user's call — never tag or merge to a protected branch without explicit approval.
