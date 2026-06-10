@@ -1,12 +1,12 @@
 ---
 plan: perf-robustness/04-scheduler-monitor-hygiene
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: true
 branch: fix/scheduler-monitor-hygiene
-pr: ""
+pr: "#XX"
 ---
 
 # Scheduler backoff + startup jitter; HealthMonitor alert cooldown
