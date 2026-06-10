@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — Order-book depths declared per capability; invalid requests snap with a warning (PR #XX) [accepted]
+### 2026-06-10 — Order-book depths declared per capability; invalid requests snap with a warning (PR #122) [accepted]
 - **Choice**: `Capability.depths` lists the discrete depths a WS book channel
   accepts (Kraken verified live: {10, 25, 100, 500, 1000}; Bybit spot
   {1, 50, 200, 1000} per v5 docs; Binance {5, 10, 20}; OKX books5 = 5; BitMEX
