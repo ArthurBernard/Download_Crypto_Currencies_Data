@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ParquetStore` metadata (inventory, last timestamp, gap detection) no longer
+  reads the full TS column of every file in the store — it reads parquet footer
+  statistics with a per-file mtime cache (legacy files without statistics fall
+  back to the old path), and `/api/inventory` + `/api/storage/sync` now run it
+  off the event loop. Verified value-identical on real data; 13× faster warm on
+  a small store, and the gap grows with file size (production showed 100 s for
+  a 10 KB inventory response under load). (#XX)
 - Permanently failing scheduled jobs no longer hammer the exchange at full
   cadence: the interval loop applies exponential backoff (reset on success) and
   starts with a random jitter instead of firing every job at once on daemon
