@@ -120,6 +120,18 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Remote UI exposure = TLS reverse proxy or private overlay; app stays on loopback (PR #NN) [accepted]
+- **Choice**: document remote UI access (`how-to/expose-remote`) as either (a) a TLS
+  reverse proxy (Caddy blessed; nginx / Cloudflare Tunnel alternatives) with dccd kept
+  on `ui_host: 127.0.0.1`, or (b) a private Tailscale/WireGuard overlay where binding
+  `0.0.0.0` is acceptable because the tailnet is already encrypted+authenticated. The
+  `ui_auth_token` is defence-in-depth, not transport security. First leaf of Epic B.
+- **Why**: the API must never travel plaintext off-box; TLS termination belongs in a
+  proxy (auto Let's Encrypt) or is provided by the overlay, not baked into the app.
+- **Rejected alternatives**: binding `0.0.0.0` on a public IP with only the token (no
+  encryption); implementing TLS inside the app (proxies do it better, auto-renew);
+  documenting only one path (Tailscale-only would exclude public VPS users).
+
 ### 2026-06-10 — Blessed deploy path = systemd (venv), Docker as alternative (PR #102) [accepted]
 - **Choice**: `how-to/deploy` documents **systemd + a venv** as the recommended path
   for a long-lived server, with **Docker** as the containerised alternative (not the

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- How-to guide `how-to/expose-remote` for reaching the UI from a laptop/phone behind
+  TLS (Caddy/nginx/Cloudflare Tunnel) or a private Tailscale overlay — never the API
+  plaintext off-box. Verified on a real server (Tailscale path reached live; Caddy
+  installs + reverse-proxies). (#NN)
+
 ### Changed
 
 ### Fixed

@@ -1,12 +1,12 @@
 ---
 plan: remote-ui-access/01-deploy-tls-proxy
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: false
 branch: docs/tls-reverse-proxy
-pr: ""
+pr: "#NN"
 ---
 
 # TLS + reverse proxy — document a secure remote front

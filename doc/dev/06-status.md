@@ -61,6 +61,10 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   verified end-to-end on a real Ubuntu server (build/install, `/health`, **real
   reboot** survival, `HealthMonitor` webhook alerts, secret injection). Documented in
   `doc/source/how-to/deploy.rst`.
+- **Remote UI exposure (Epic B — in progress)**: `doc/source/how-to/expose-remote.rst`
+  documents TLS-fronted access (Caddy/nginx/Cloudflare Tunnel) and the Tailscale
+  overlay; dccd stays on loopback behind a proxy. Tailscale path verified live on the
+  testbox. (Browser auth/session, hardening, mobile pass, threat model still open.)
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
   `dccd.application` daemon example).
