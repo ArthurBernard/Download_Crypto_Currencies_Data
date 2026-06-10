@@ -449,14 +449,30 @@ async def stream(
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookLive):
                 raise NoCapability(target.exchange, "orderbook", "live")
-            # The throttle is now owned by the adapter: pass min_interval so that
+            # Snap the requested depth to the channel's declared discrete values
+            # (e.g. Kraken WS v2 only accepts {10,25,100,500,1000}): an undeclared
+            # depth is silently rejected by the exchange and the "live" stream
+            # would never write anything. Prefer the smallest valid depth that
+            # still covers the request; fall back to the largest available.
+            depth = params.depth or 50
+            ob_cap = adapter.capability_for(DataType.ORDERBOOK, "ws", "live")
+            if ob_cap is not None and ob_cap.depths and depth not in ob_cap.depths:
+                snapped = min((d for d in ob_cap.depths if d >= depth),
+                              default=max(ob_cap.depths))
+                if events:
+                    events.log(
+                        f"{target.exchange} order-book channel does not accept "
+                        f"depth={depth}; using {snapped} "
+                        f"(valid: {sorted(ob_cap.depths)})",
+                        level="warning",
+                    )
+                depth = snapped
+            # The throttle is owned by the adapter: pass min_interval so that
             # pydantic objects are only constructed for frames that will be saved.
             # The adapter yields one snapshot per interval, so every yielded
             # snapshot is saved immediately (no downstream throttle needed).
-            # ``last_save = 0`` / first-frame capture is implicit: the adapter
-            # starts with last_emit=0 so the first frame always passes.
             async for snap in adapter.stream_orderbook(
-                target.symbol, params.depth or 50, min_interval=snapshot_interval
+                target.symbol, depth, min_interval=snapshot_interval
             ):
                 if stop_event and stop_event.is_set():
                     break

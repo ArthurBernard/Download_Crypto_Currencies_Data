@@ -47,36 +47,12 @@ a pass of the `data-e2e` skill.
 
 ---
 
-## Epic D — Performance & robustness (from the 2026-06-10 production audit)
-
-A py-spy profile of the live collector (arthurserver, 3.3.1, 50 jobs) found the
-daemon pinned at ~98 % CPU: `kraken.stream_orderbook` rebuilds the full book as
-pydantic objects on **every** WS delta while `operations.stream` discards all but
-one frame per `snapshot_interval`. The starved event loop made `/api/inventory`
-take 100 s for 10 KB (store: 50 files / 32 MB). Full findings: memory
-`project-v33-perf-audit` + ADR journal.
-
-Ordered by impact; each line is one small PR:
-
-- [ ] **D1 — Order-book snapshot construction throttled upstream** — adapters keep
-  raw dict state and only build `OrderBookSnapshot`/`OrderBookLevel` at capture
-  time (`snapshot_interval`), not per delta; Kraken book truncated to the
-  subscribed depth (WS v2 contract). Kills the 98 % CPU burn.
-- [ ] **D2 — `inventory()` from parquet footer metadata + off-thread + cached** —
-  `num_rows` + TS min/max from `pyarrow` footer stats (no column read),
-  `asyncio.to_thread` in the API, process-level cache invalidated on write;
-  `GET /api/storage/sync` reuses it instead of re-scanning.
-- [ ] **D3 — Honest WS subscriptions** — validate `depth` per exchange capability
-  (Kraken v2 accepts only {10,25,100,500,1000}; config had 20/50), surface
-  subscription error/ACK frames instead of silently filtering them (a "live"
-  stream must never sit forever writing nothing).
-- [ ] **D4 — Scheduler/monitor hygiene** — exponential backoff for permanently
-  failing interval jobs, startup jitter (no thundering herd), HealthMonitor alert
-  cooldown (alert on threshold crossing, not every failure).
-- [ ] **D5 — HTTP/UI transport efficiency** — `GZipMiddleware`, dashboard fetches
-  in parallel, SSE-driven refresh instead of 8–10 s inventory polling,
-  `RunsStore` calls off-thread; stream ending on its own reports `failed`/ended,
-  not `cancelled`.
+_Epic D — Performance & robustness (2026-06-10 production audit): **done.**
+Order-book snapshots built only at capture time (97.7 % → 2 % CPU), inventory
+from parquet footer stats + cache + off-thread, honest WS subscriptions
+(declared depths, loud rejections), scheduler backoff/jitter + alert cooldown,
+gzip + saner UI polling. PRs #118–#121 + the last leaf; ADR journal has the
+rationale; see `06-status.md`._
 
 ## Deferred — M3 (post-3.0)
 

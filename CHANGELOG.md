@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Order-book stream jobs with a depth the exchange doesn't support (production
+  case: Kraken `depth: 20`/`50` — WS v2 only accepts {10, 25, 100, 500, 1000})
+  were silently rejected and sat "live" forever writing nothing. Valid depths
+  are now declared per capability (verified against the live APIs), requests
+  snap to the nearest valid value with a warning, and WS subscription
+  rejections raise — surfacing in runs as `failed` with the exchange's error —
+  instead of being filtered out. (#122)
 - A live stream whose WS generator ended on its own (no stop requested) was
   recorded `cancelled`; it is now `failed` with an explicit
   "stream ended unexpectedly" error, so Logs/Runs no longer claim someone

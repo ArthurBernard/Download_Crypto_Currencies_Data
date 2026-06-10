@@ -80,7 +80,7 @@ class OKXSource(
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=5),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=5, depths=[5]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -221,9 +221,19 @@ class _OKXWS(WebSocketBase):
             "args": [{"channel": self._channel, "instId": self._instId}],
         }))
 
+    def _check_sub_ack(self, data: dict[str, Any]) -> None:
+        """Raise on a rejected subscription instead of silently filtering it."""
+        if data.get("event") == "error":
+            raise RuntimeError(
+                f"okx {self._channel} subscription rejected for "
+                f"{self._instId}: {data.get('msg', 'unknown error')} "
+                f"(code {data.get('code', '?')})"
+            )
+
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
         """Parse a raw WebSocket frame into domain records."""
         data = json.loads(raw)
+        self._check_sub_ack(data)
         if "data" not in data:
             return
         if self._mode == "ohlc":
@@ -269,6 +279,9 @@ class _OKXWS(WebSocketBase):
         async for raw in self.stream_raw():
             now = time.monotonic()
             if now - last_emit < min_interval:
+                # Throttled frames are still checked for a subscription
+                # rejection — swallowing it here would leave a silent stream.
+                self._check_sub_ack(json.loads(raw))
                 continue
             async for record in self.parse_message(raw):
                 last_emit = time.monotonic()

@@ -125,7 +125,7 @@ class KrakenSource(
             Capability(data_type=DataType.ORDERBOOK, transport="rest", mode="historical", max_depth=500),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live"),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=1000, depths=[10, 25, 100, 500, 1000]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -280,10 +280,24 @@ class _KrakenWS(WebSocketBase):
             sub["params"]["depth"] = self._param
         await ws.send(json.dumps(sub))
 
+    def _check_sub_ack(self, data: dict[str, Any]) -> None:
+        """Raise on a rejected subscription instead of silently filtering it.
+
+        Kraken v2 answers ``{"method": "subscribe", "success": false,
+        "error": …}``; dropping that frame left a "live" stream that never
+        produced anything (e.g. an unsupported book depth).
+        """
+        if data.get("method") == "subscribe" and data.get("success") is False:
+            raise RuntimeError(
+                f"kraken {self._channel} subscription rejected for "
+                f"{self._pair}: {data.get('error', 'unknown error')}"
+            )
+
     async def stream_ohlc(self) -> AsyncIterator[OHLCBar]:
         """Stream live OHLC bars over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
+            self._check_sub_ack(data)
             if data.get("channel") != "ohlc":
                 continue
             for ohlc in data.get("data", []):
@@ -310,6 +324,7 @@ class _KrakenWS(WebSocketBase):
         """Stream live trades over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
+            self._check_sub_ack(data)
             if data.get("channel") != "trade":
                 continue
             for t in data.get("data", []):
@@ -342,6 +357,7 @@ class _KrakenWS(WebSocketBase):
         depth = self._param  # subscribed depth
         async for raw in self.stream_raw():
             data = json.loads(raw)
+            self._check_sub_ack(data)
             if data.get("channel") != "book":
                 continue
             for snap in data.get("data", []):
