@@ -449,19 +449,17 @@ async def stream(
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookLive):
                 raise NoCapability(target.exchange, "orderbook", "live")
-            # The WS pushes the book continuously, but we only *capture* a
-            # snapshot every ``snapshot_interval`` seconds. Emit the liveness
-            # sample only when we actually save, so the liveness reflects the
-            # real capture cadence (matching the "Δ Ns" shown in the UI) instead
-            # of flickering every second on data we discard. ``last_save = 0``
-            # captures the first frame immediately.
-            last_save = 0.0
-            async for snap in adapter.stream_orderbook(target.symbol, params.depth or 50):
+            # The throttle is now owned by the adapter: pass min_interval so that
+            # pydantic objects are only constructed for frames that will be saved.
+            # The adapter yields one snapshot per interval, so every yielded
+            # snapshot is saved immediately (no downstream throttle needed).
+            # ``last_save = 0`` / first-frame capture is implicit: the adapter
+            # starts with last_emit=0 so the first frame always passes.
+            async for snap in adapter.stream_orderbook(
+                target.symbol, params.depth or 50, min_interval=snapshot_interval
+            ):
                 if stop_event and stop_event.is_set():
                     break
-                if time.time() - last_save < snapshot_interval:
-                    continue
-                last_save = time.time()
                 await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
                 # Best bid = highest bid price, best ask = lowest ask price.
                 # Compute rather than trust ordering so a momentarily unsorted

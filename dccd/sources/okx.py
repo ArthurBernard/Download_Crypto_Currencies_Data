@@ -190,7 +190,13 @@ class OKXSource(
         ws = _OKXWS(self.render_symbol(symbol), "trades", "trades")
         return ws.stream()
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots over WebSocket.
 
         Uses the ``books5`` channel — a full sorted top-5 snapshot pushed every
@@ -198,7 +204,7 @@ class OKXSource(
         meaningless/crossed best bid-ask.
         """
         ws = _OKXWS(self.render_symbol(symbol), "books5", "books")
-        return ws.stream()
+        return ws.stream(min_interval=min_interval)
 
 
 class _OKXWS(WebSocketBase):
@@ -245,3 +251,25 @@ class _OKXWS(WebSocketBase):
                 asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in snap.get("asks", [])]
                 ts_ms = int(snap.get("ts", int(time.time() * 1000)))
                 yield OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks)
+
+    async def stream(self, min_interval: float = 0.0) -> AsyncIterator[Any]:
+        """Yield parsed records, with order-book frames throttled by *min_interval*.
+
+        For order-book mode the throttle is applied on the raw frame **before**
+        ``parse_message`` so no pydantic objects are constructed for frames that
+        will be discarded.  For other modes behaves identically to the base
+        ``stream()`` (min_interval is ignored).
+        """
+        if self._mode != "books" or min_interval == 0.0:
+            # Non-books modes and the legacy zero-interval path use the base loop.
+            async for record in super().stream():
+                yield record
+            return
+        last_emit: float = -float("inf")  # first frame always emits
+        async for raw in self.stream_raw():
+            now = time.monotonic()
+            if now - last_emit < min_interval:
+                continue
+            async for record in self.parse_message(raw):
+                last_emit = time.monotonic()
+                yield record
