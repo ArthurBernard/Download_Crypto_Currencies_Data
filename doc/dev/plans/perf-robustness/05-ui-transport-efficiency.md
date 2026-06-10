@@ -6,7 +6,7 @@ complexity: medium
 depends: [02]
 parallel: false
 branch: feat/ui-transport-efficiency
-pr: "#XX"
+pr: "#121"
 ---
 
 # HTTP/UI transport efficiency: gzip, parallel fetches, saner polling, off-thread SQLite

@@ -16,14 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parallelised (3×RTT → 1×RTT), Live re-fetches the inventory only on load and
   stream-status changes instead of every 8 s, dashboard/storage poll cadences
   relaxed (15 s / 30 s), and runs-store SQLite reads moved off the event loop.
-  UI smoke: 27/27 steps clean. (#XX)
+  UI smoke: 27/27 steps clean. (#121)
 
 ### Fixed
 
 - A live stream whose WS generator ended on its own (no stop requested) was
   recorded `cancelled`; it is now `failed` with an explicit
   "stream ended unexpectedly" error, so Logs/Runs no longer claim someone
-  stopped a stream nobody touched. (#XX)
+  stopped a stream nobody touched. (#121)
 - Order-book WS adapters built the full book as pydantic objects on **every**
   delta while the stream operation kept only one frame per `snapshot_interval` —
   97.7 % CPU on the production collector, starving the event loop and making
