@@ -29,17 +29,29 @@ session cookie instead.
 ## Files to change
 - `dccd/interfaces/api/app.py`
   - Add a small session layer. On successful token submit, mint a random opaque
-    session id (`secrets.token_urlsafe(32)`), store it in an in-process set/dict
-    `app.state.sessions` (value = creation ns; optional TTL), and set it as cookie
-    `dccd_session` with `HttpOnly`, `SameSite=Lax`, `Secure` **derived from the
-    request scheme** (`request.url.scheme == "https"` or `X-Forwarded-Proto: https`
-    so it works behind the leaf-01 proxy), `Path=/`.
+    session id (`secrets.token_urlsafe(32)`), store it in an in-process dict
+    `app.state.sessions` (value = creation-ns) with an **absolute TTL** (default 7
+    days; prune expired ids on each check so the dict can't grow unbounded), and set
+    it as cookie `dccd_session` with `HttpOnly`, `SameSite=Lax`, `Secure` **derived
+    from the request scheme** (`request.url.scheme == "https"` or
+    `X-Forwarded-Proto: https` so it works behind the leaf-01 proxy), `Path=/`,
+    and `Max-Age` matching the TTL.
+  - **CSRF** — because the API guard will accept the cookie, mutating calls become
+    CSRF-reachable. `SameSite=Lax` is the mitigation: it withholds the cookie on
+    **cross-site POST/DELETE** (all mutating routes are POST/DELETE), while still
+    allowing top-level GET navigation. Do **not** use `SameSite=None`. Document this
+    in a code comment and assert it in tests (below). (`Strict` would also work but
+    breaks following an external link into an authed page; `Lax` is the right balance.)
   - Routes:
     - `GET /login` → render `login.html` (a tiny token-prompt form posting to
       `/login`). If already authed, redirect to `/`.
     - `POST /login` → compare submitted token to `ui_auth_token` with
-      `secrets.compare_digest`; on match set cookie + redirect to `next` (sanitised to
-      a local path) or `/`; on mismatch re-render with an error (HTTP 401).
+      `secrets.compare_digest` (timing-safe); on match set cookie + redirect to `next`
+      or `/`; on mismatch re-render with an error (HTTP 401).
+      **Open-redirect guard**: only accept `next` if it is a **local path** —
+      `next.startswith("/")` **and not** `next.startswith("//")` (and no scheme/`\`);
+      otherwise fall back to `/`. A helper `_safe_next(next)` + a unit test for
+      `//evil.com`, `https://evil`, `/data` cases.
     - `POST /logout` → drop the session, clear the cookie, redirect to `/login`.
   - **Page-route gate**: a helper `_page_authed(request)` (no token configured → always
     True; else cookie present in `app.state.sessions`). Wrap the page routes so an
@@ -90,6 +102,12 @@ session cookie instead.
     the leak): fetch `/` authed and assert the configured token value is absent from
     the HTML body.
   - Bearer header and `?token=` continue to authorise `/api/*` (back-compat).
+  - **CSRF**: a cross-site-style POST (cookie present but `Sec-Fetch-Site`/`Origin`
+    cross-site — or simply: the cookie is `SameSite=Lax` so a real cross-site POST
+    wouldn't carry it) must not succeed on cookie alone. Assert `Set-Cookie` contains
+    `SameSite=Lax` and `HttpOnly`; assert no route sets `SameSite=None`.
+  - **Open redirect**: `_safe_next("//evil.com")` and `_safe_next("https://evil")`
+    fall back to `/`; `_safe_next("/data")` is preserved.
 
 ## Verification on real data
 On the testbox behind the leaf-01 TLS proxy (or Tailscale), with a token set:

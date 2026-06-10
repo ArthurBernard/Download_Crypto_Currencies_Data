@@ -18,17 +18,24 @@ that CORS is never wildcard, proof that every mutating route is refused without 
 and an opt-in **read-only** mode that blocks mutating methods (read-only vs control).
 
 ## Files to change
-- `dccd/application/config.py` `SettingsConfig` — add `ui_readonly: bool = False` and
+- `dccd/application/config.py` `SettingsConfig` — add `ui_readonly: bool = False`,
   `ui_rate_limit: int = 0` (requests/sec per client IP on `/api/*`; `0` = disabled,
-  the localhost default). Document both in the model docstring.
+  the localhost default), and `ui_trusted_proxy: bool = False` (whether to trust
+  `X-Forwarded-For` for the client key — see the spoofing note below). Validate
+  `ui_rate_limit >= 0`. Document all three in the model docstring.
 - `dccd/interfaces/api/app.py`
   - **Rate limiter**: a tiny in-process token-bucket per client key, applied in a
     middleware ordered **before** `_auth_guard`, only when `ui_rate_limit > 0` and the
-    path starts with `/api/`. Client key = `X-Forwarded-For` first hop (behind the
-    leaf-01 proxy) else `request.client.host`. Over-limit → `429` JSON
-    `{"detail":"rate limited"}` with a `Retry-After` header. Reuse the existing
-    `transport/ratelimit.py` token-bucket if it's import-safe here; otherwise a
-    minimal local bucket (keep it dependency-free).
+    path starts with `/api/`. Over-limit → `429` JSON `{"detail":"rate limited"}` with
+    a `Retry-After` header. Reuse the existing `transport/ratelimit.py` token-bucket if
+    it's import-safe here; otherwise a minimal local bucket (keep it dependency-free).
+  - **Client key / XFF spoofing guard** (important): `X-Forwarded-For` is
+    attacker-controlled when the app is reachable directly, so trusting it blindly lets
+    a single client forge unlimited keys and bypass the limit. Therefore: use
+    `request.client.host` **by default**; honour `X-Forwarded-For` (first hop) **only
+    when `ui_trusted_proxy=True`** — i.e. the operator asserts the app is reachable
+    *only* through the leaf-01 reverse proxy. Document that `ui_trusted_proxy` must be
+    set **only** behind a proxy that overwrites XFF.
   - **Read-only mode**: when `settings.ui_readonly` is True, refuse mutating requests
     to `/api/*` — block `POST/PUT/PATCH/DELETE` (the mutating verbs; all job CRUD,
     backfill run/cancel, stream start/stop are POST/DELETE) with `403`
@@ -52,6 +59,10 @@ and an opt-in **read-only** mode that blocks mutating methods (read-only vs cont
   - **Rate limit**: app with `ui_rate_limit=2`; a burst of N>bucket GET `/api/jobs`
     from the same client returns at least one `429` with `Retry-After`; a different
     client key is unaffected; with `ui_rate_limit=0` no 429 ever.
+  - **XFF trust**: with `ui_trusted_proxy=False` (default), a forged `X-Forwarded-For`
+    header does **not** create a fresh bucket (keying ignores XFF → same
+    `request.client.host` still rate-limited). With `ui_trusted_proxy=True`, distinct
+    XFF values get distinct buckets.
   - **Read-only**: app with `ui_readonly=True` + valid auth → `POST /api/jobs/create`
     → 403 `read-only`; `GET /api/jobs` → 200. With `ui_readonly=False` the POST works
     (existing behaviour). Confirm read-only is enforced **after** auth (a 401 still

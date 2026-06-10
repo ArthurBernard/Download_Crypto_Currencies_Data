@@ -26,10 +26,16 @@ nginx and Cloudflare Tunnel are alternatives. Docs-only — no code changes.
   - *Caddy (recommended)* — minimal `Caddyfile` reverse-proxying `your.host` →
     `127.0.0.1:8080`, automatic Let's Encrypt TLS. Keep `ui_host: 127.0.0.1` so only
     Caddy talks to dccd; set `ui_auth_token`. Note the SSE `?token=` only travels over
-    TLS now.
+    TLS now. **Forwarding headers**: Caddy sets `X-Forwarded-Proto` and overwrites
+    `X-Forwarded-For` by default — leaves 02/03 rely on these (Secure-cookie
+    derivation + the rate-limit client key). When trusting XFF for rate-limiting, set
+    `ui_trusted_proxy: true` (leaf 03) **only** because the proxy overwrites XFF.
   - *nginx (alternative)* — equivalent `server {}` block with `proxy_pass`,
     `proxy_set_header` for SSE (`proxy_buffering off;` + `Connection ''` so
-    `text/event-stream` streams), TLS via certbot.
+    `text/event-stream` streams), TLS via certbot. **Must explicitly set**
+    `proxy_set_header X-Forwarded-Proto $scheme;` and
+    `proxy_set_header X-Forwarded-For $remote_addr;` (overwrite, not append, so a
+    client can't inject a forged hop) — 02/03 depend on these.
   - *Cloudflare Tunnel (no public port)* — `cloudflared` tunnel to
     `http://127.0.0.1:8080`; no inbound port opened; TLS terminated at the edge.
   - *Tailscale (private, no public TLS needed)* — bind `ui_host: 0.0.0.0`, reach via

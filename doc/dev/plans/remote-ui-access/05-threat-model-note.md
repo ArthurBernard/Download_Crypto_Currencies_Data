@@ -32,7 +32,10 @@ is and isn't protected. Docs-only; depends on 01–03 because it must describe t
   - *Residual risks & mitigations*: `?token=` in SSE URLs can appear in proxy logs —
     prefer the cookie path for browsers (default after 02); set `ui_readonly` for
     view-only shares; bound `ui_rate_limit`; keep `data_path` under the service's
-    `StateDirectory`.
+    `StateDirectory`. **CSRF**: mutating routes are protected by the `SameSite=Lax`
+    cookie (cross-site POST/DELETE don't carry it) — state this explicitly. **XFF
+    spoofing**: `ui_trusted_proxy` must be enabled *only* behind a proxy that
+    overwrites `X-Forwarded-For`, else the rate-limit key is forgeable.
   - *Recommended postures table*: LAN-only / Tailnet / Public — for each: bind, TLS,
     token, read-only suggestion.
 - `doc/source/how-to/deploy.rst` — ensure its "Reaching the UI remotely" pointer (set

@@ -69,7 +69,9 @@ note (05) can describe a true posture.
   token-bearing page; after authenticating, the SPA drives the API via the cookie.
 - `/api/*` is rate-limited (a burst past the limit returns 429); a test proves CORS is
   never wildcard and that mutating routes are 401 without a token; `ui_readonly: true`
-  refuses mutating calls.
+  refuses mutating calls. The session cookie is `HttpOnly`+`SameSite=Lax` (CSRF-safe
+  for mutating POST/DELETE), the login `next` cannot open-redirect off-site, and the
+  rate-limit client key does not trust `X-Forwarded-For` unless `ui_trusted_proxy`.
 - The UI is usable at a 390-px viewport; `ui_smoke.py` passes a mobile-viewport run.
 - The deploy how-to carries a threat-model section consistent with the above.
 - Every leaf shipped as its own small PR; roadmap line removed on the last leaf.
