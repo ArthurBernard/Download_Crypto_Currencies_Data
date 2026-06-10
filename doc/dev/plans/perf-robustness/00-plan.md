@@ -46,7 +46,7 @@ auto-memory `project-v33-perf-audit`.
 - [x] 02 inventory-footer-metadata — fix/inventory-footer-metadata — medium
 - [ ] 03 ws-subscription-honesty — fix/ws-subscription-honesty — medium (depends on 01)
 - [x] 04 scheduler-monitor-hygiene — fix/scheduler-monitor-hygiene — medium
-- [ ] 05 ui-transport-efficiency — feat/ui-transport-efficiency — medium (depends on 02)
+- [x] 05 ui-transport-efficiency — feat/ui-transport-efficiency — medium (depends on 02)
 
 ## Dependencies
 

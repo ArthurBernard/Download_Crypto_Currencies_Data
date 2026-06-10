@@ -479,10 +479,21 @@ async def stream(
     if batch:
         await asyncio.to_thread(store.save, ds, batch, Provenance(source=prov_src))
 
-    if events:
-        events.status("cancelled")
-    if runs_store:
-        runs_store.finish_run(run_id, "cancelled")
+    # `cancelled` only when a stop was actually requested. A WS generator that
+    # ends on its own (exhausted without stop) is a failure — recording it as
+    # `cancelled` made Logs/Runs claim someone stopped a stream nobody touched.
+    if stop_event and stop_event.is_set():
+        if events:
+            events.status("cancelled")
+        if runs_store:
+            runs_store.finish_run(run_id, "cancelled")
+    else:
+        msg = "stream ended unexpectedly"
+        if events:
+            events.log(msg, level="error")
+            events.status("failed")
+        if runs_store:
+            runs_store.finish_run(run_id, "failed", error=msg)
 
 
 def read(

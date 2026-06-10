@@ -103,6 +103,7 @@ async function loadInventory() {
 
 loadSync();
 loadInventory();
-setInterval(loadSync, 10000);
+// Status view: 30 s is plenty ("Sync now" already polls itself after a trigger).
+setInterval(loadSync, 30000);
 </script>
 {% endblock %}
