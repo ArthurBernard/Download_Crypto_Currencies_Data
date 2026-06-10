@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Threat-model section in `how-to/expose-remote` (trust boundaries: localhost / tailnet
   / public; what the token+cookie session protect and don't; residual risks; a
-  recommended-postures table) — completing **Epic B** (view the UI remotely). (#NN)
+  recommended-postures table) — completing **Epic B** (view the UI remotely). (#110)
 - API hardening for remote exposure (all opt-in, off by default): `ui_rate_limit`
   (token-bucket per client on `/api/*`, over budget → `429` + `Retry-After`),
   `ui_readonly` (block mutating methods → `403`, view-only share), and
