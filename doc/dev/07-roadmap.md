@@ -21,27 +21,11 @@ _Epic A — Run the app on a remote server: **done.** Container image (digest-pi
 a real server; restart/reboot safety, `HealthMonitor` alerts + `/health` healthcheck,
 secret injection, and the `how-to/deploy` guide all shipped. See `06-status.md`._
 
-## Epic B — View the UI remotely (PC + mobile)
-
-Goal: open the dashboard securely from a laptop or phone, not just `localhost`.
-
-- [~] **Bind & auth building blocks** — `ui_host=0.0.0.0`, `ui_auth_token`
-  (Bearer), `ui_allow_origins` (CORS) already exist. The default stays
-  `127.0.0.1`; remote exposure must be a conscious, documented opt-in.
-- [ ] **TLS + reverse proxy** — document a Caddy/nginx (or Cloudflare Tunnel)
-  front with HTTPS; the API must never be exposed plaintext off-box. The token in
-  `?token=` for SSE only travels over TLS.
-- [ ] **Auth UX for browsers** — today the token is injected server-side into the
-  template. For true remote access decide the login story: a simple token prompt
-  page / cookie session, so a phone can authenticate without editing config.
-- [ ] **Mobile responsiveness pass** — audit Data/Historical/Live/Dashboard on a
-  narrow viewport (tables → stacked/cards, tap targets, the nav dropdowns). Extend
-  `ui_smoke.py` with a mobile viewport run.
-- [ ] **Harden for exposure** — rate-limit `/api/*`, confirm no wildcard CORS,
-  consider read-only vs control roles, audit that mutating routes require the
-  token (they do via the `/api/*` guard — verify under proxy).
-- [ ] **Threat model note** — write down the assumptions (LAN vs internet, tunnel
-  vs public) in the deploy how-to.
+_Epic B — View the UI remotely (PC + mobile): **done.** TLS/overlay exposure guide
+(`how-to/expose-remote`), browser `/login` + `HttpOnly` cookie session (token no longer
+templated into pages), API hardening (`ui_rate_limit`/`ui_readonly`/`ui_trusted_proxy` +
+CORS-never-wildcard test), mobile-responsive pass, and a threat model — all verified
+live over Tailscale. See `06-status.md`._
 
 _Epic C — Sync data to a remote space: **done.** Scheduled rclone sync + UI,
 coverage manifest, free-space purge, read-through restore, and the
@@ -53,7 +37,10 @@ coverage manifest, free-space purge, read-through restore, and the
 
 1. ~~**C (sync)**~~ — done.
 2. ~~**A (remote run)**~~ — done.
-3. **B (remote access)** — expose the UI, behind TLS + auth.
+3. ~~**B (remote access)**~~ — done.
+
+The three "runs unattended on a remote server, reachable from anywhere, backed up
+off-box" epics are complete. Next axes live under **Deferred — M3** below.
 
 Each epic should ship with a `doc/source/` how-to and, where it touches data,
 a pass of the `data-e2e` skill.
