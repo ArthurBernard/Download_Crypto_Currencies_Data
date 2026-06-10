@@ -1,12 +1,12 @@
 ---
 plan: remote-ui-access/04-mobile-responsive
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: false
 branch: feat/ui-mobile-responsive
-pr: ""
+pr: "#NN"
 ---
 
 # Mobile responsiveness pass + ui_smoke mobile-viewport run

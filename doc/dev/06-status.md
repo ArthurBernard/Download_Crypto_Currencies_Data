@@ -67,7 +67,9 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   `/login` page + `HttpOnly` cookie gates the UI pages and the token is no longer
   templated into pages. **Hardening** shipped too: `ui_rate_limit` (429), `ui_readonly`
   (403 on mutating), `ui_trusted_proxy`, and a CORS-never-wildcard regression test (all
-  verified live over Tailscale). (Mobile pass, threat model still open.)
+  verified live over Tailscale). **Mobile-responsive** pass shipped (table-scroll
+  wrappers, tap targets, `@media`; `ui_smoke.py` 390px overflow check). (Threat model
+  still open.)
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
   `dccd.application` daemon example).

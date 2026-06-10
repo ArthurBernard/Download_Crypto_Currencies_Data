@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Responsive layout for the web UI on narrow (mobile) viewports: wide/dense tables
+  scroll inside their own box (a `MutationObserver` wraps tables built after fetch),
+  bigger tap targets, and tighter nav/chrome under 640px — desktop layout unchanged.
+  `ui_smoke.py` gains a 390px mobile pass asserting no page-wide horizontal overflow.
+  Verified: 27/27 smoke steps, Δ=0px overflow on every page. (#NN)
+
 ### Fixed
 
 - The web UI no longer injects the raw `ui_auth_token` into served pages (it was
