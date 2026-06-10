@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Order-book WS adapters built the full book as pydantic objects on **every**
+  delta while the stream operation kept only one frame per `snapshot_interval` —
+  97.7 % CPU on the production collector, starving the event loop and making
+  the remote UI unusable. Snapshots are now constructed only at capture time
+  (`min_interval` pushed down into the adapters; `0.0` keeps per-frame), and
+  Kraken/Bybit book state is truncated to the subscribed depth (WS truncation
+  contract). Verified live: Kraken 60 s at 10 s interval → exactly 6 snapshots,
+  ≤ 25 levels/side, never crossed; 3 live books for 2 min → **2.0 %** CPU. (#XX)
 - `ParquetStore` metadata (inventory, last timestamp, gap detection) no longer
   reads the full TS column of every file in the store — it reads parquet footer
   statistics with a per-file mtime cache (legacy files without statistics fall

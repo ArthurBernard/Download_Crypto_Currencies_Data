@@ -1,12 +1,12 @@
 ---
 plan: perf-robustness/01-orderbook-snapshot-throttle
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: true
 branch: fix/orderbook-snapshot-throttle
-pr: ""
+pr: "#XX"
 ---
 
 # Throttle order-book snapshot construction upstream (kills the 98 % CPU burn)

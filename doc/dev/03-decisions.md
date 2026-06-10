@@ -120,6 +120,25 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Order-book capture throttle lives in the adapter, not the consumer (PR #XX) [accepted]
+- **Choice**: `OrderBookLive.stream_orderbook` takes a keyword-only
+  `min_interval` (default `0.0` = per-frame, the legacy contract).
+  Delta-maintained books (Kraken, Bybit) apply frames to plain dicts and only
+  sort/construct pydantic objects when a capture is due, truncating snapshot
+  *and* state to the subscribed depth; push-snapshot channels (Binance, OKX,
+  BitMEX) drop frames before parsing. `operations.stream()` passes
+  `snapshot_interval` down and saves every yielded snapshot.
+- **Why**: the cost to kill was the *construction* (pydantic `__init__` was
+  ~96 % of daemon CPU samples in production), and only the adapter can skip
+  it — a downstream throttle (the previous design) pays full price for frames
+  it then discards. Default `0.0` keeps the protocol honest for any consumer
+  that genuinely wants every frame.
+- **Rejected alternatives**: throttle in `operations.stream()` only (where it
+  was — provably insufficient, 97.7 % CPU with 20 book jobs); yielding raw
+  dict state and building snapshots in the consumer (leaks adapter
+  representation across the protocol boundary); plain-dataclass order-book
+  records (still O(levels) per frame, and gives up validation everywhere else).
+
 ### 2026-06-10 — Store metadata = parquet footer statistics + per-file mtime cache (PR #119) [accepted]
 - **Choice**: `ParquetStore` derives rows/min/max TS from parquet **footer
   metadata** (row-group statistics) instead of reading the TS column, cached per

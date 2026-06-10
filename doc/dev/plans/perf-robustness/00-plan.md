@@ -42,7 +42,7 @@ auto-memory `project-v33-perf-audit`.
 
 ## Leaf checklist
 
-- [ ] 01 orderbook-snapshot-throttle — fix/orderbook-snapshot-throttle — medium
+- [x] 01 orderbook-snapshot-throttle — fix/orderbook-snapshot-throttle — medium
 - [x] 02 inventory-footer-metadata — fix/inventory-footer-metadata — medium
 - [ ] 03 ws-subscription-honesty — fix/ws-subscription-honesty — medium (depends on 01)
 - [x] 04 scheduler-monitor-hygiene — fix/scheduler-monitor-hygiene — medium
