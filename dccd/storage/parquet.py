@@ -118,6 +118,11 @@ class ParquetStore:
         # (datasets/periods) fully parallel.
         self._file_locks: dict[str, threading.Lock] = {}
         self._file_locks_guard = threading.Lock()
+        # Per-file metadata cache: path str → (mtime_ns, size, rows, min_ts, max_ts).
+        # Keyed by (mtime_ns, size) so any write (atomic rename → new inode + mtime)
+        # automatically invalidates. The daemon holds one ParquetStore instance
+        # for its lifetime; CLI processes are short-lived so stale cache is fine.
+        self._stats_cache: dict[str, tuple[int, int, int, int | None, int | None]] = {}
 
     @property
     def root(self) -> pathlib.Path:
@@ -132,6 +137,107 @@ class ParquetStore:
                 lock = threading.Lock()
                 self._file_locks[key] = lock
             return lock
+
+    def _file_stats(
+        self, f: pathlib.Path
+    ) -> tuple[int, int | None, int | None]:
+        """Return ``(rows, min_ts, max_ts)`` for a parquet file.
+
+        Uses pyarrow footer metadata and row-group TS statistics to avoid
+        materialising the TS column.  A per-file mtime/size cache means warm
+        calls cost only one ``stat()`` syscall.  Falls back to
+        ``pl.read_parquet`` when a row group has no TS statistics (legacy
+        writer that didn't record min/max).
+
+        Parameters
+        ----------
+        f:
+            Path to an existing ``.parquet`` file.
+
+        Returns
+        -------
+        tuple[int, int | None, int | None]
+            ``(rows, min_ts, max_ts)`` where *min_ts* / *max_ts* are the
+            nanosecond TS bounds across all row groups, or ``None`` when the
+            file is empty.
+        """
+        try:
+            st = f.stat()
+        except OSError:
+            return 0, None, None
+
+        key = str(f)
+        cached = self._stats_cache.get(key)
+        if cached is not None:
+            c_mtime, c_size, c_rows, c_min, c_max = cached
+            if c_mtime == st.st_mtime_ns and c_size == st.st_size:
+                return c_rows, c_min, c_max
+
+        # Cache miss — read from parquet footer (no column materialisation).
+        try:
+            import pyarrow.parquet as pq  # lazy import, matching existing style
+
+            meta = pq.ParquetFile(f).metadata
+            total_rows: int = meta.num_rows
+            if total_rows == 0:
+                self._stats_cache[key] = (st.st_mtime_ns, st.st_size, 0, None, None)
+                return 0, None, None
+
+            # Find the TS column index (name may differ by file; scan once).
+            ts_col_idx: int | None = None
+            for col_idx in range(meta.row_group(0).num_columns):
+                if meta.row_group(0).column(col_idx).path_in_schema == "TS":
+                    ts_col_idx = col_idx
+                    break
+
+            if ts_col_idx is None:
+                # TS column not found — read full file as fallback.
+                raise ValueError("TS column not found in schema")
+
+            min_ts: int | None = None
+            max_ts: int | None = None
+            needs_fallback = False
+            for rg_idx in range(meta.num_row_groups):
+                rg = meta.row_group(rg_idx)
+                col_meta = rg.column(ts_col_idx)
+                stats = col_meta.statistics
+                if stats is None or not stats.has_min_max:
+                    needs_fallback = True
+                    break
+                rg_min = int(stats.min)
+                rg_max = int(stats.max)
+                if min_ts is None or rg_min < min_ts:
+                    min_ts = rg_min
+                if max_ts is None or rg_max > max_ts:
+                    max_ts = rg_max
+
+            if needs_fallback:
+                # Legacy writer: fall back to reading the TS column.
+                df = pl.read_parquet(f, columns=["TS"])
+                n = len(df)
+                if n == 0:
+                    self._stats_cache[key] = (st.st_mtime_ns, st.st_size, 0, None, None)
+                    return 0, None, None
+                min_ts = int(df["TS"].min())  # type: ignore[arg-type]
+                max_ts = int(df["TS"].max())  # type: ignore[arg-type]
+                total_rows = n
+
+        except Exception:
+            # Any error (corrupt file, missing dep) → try reading the column.
+            try:
+                df = pl.read_parquet(f, columns=["TS"])
+                n = len(df)
+                if n == 0:
+                    self._stats_cache[key] = (st.st_mtime_ns, st.st_size, 0, None, None)
+                    return 0, None, None
+                min_ts = int(df["TS"].min())  # type: ignore[arg-type]
+                max_ts = int(df["TS"].max())  # type: ignore[arg-type]
+                total_rows = n
+            except Exception:
+                return 0, None, None
+
+        self._stats_cache[key] = (st.st_mtime_ns, st.st_size, total_rows, min_ts, max_ts)
+        return total_rows, min_ts, max_ts
 
     def directory(self, ds: DatasetId) -> pathlib.Path:
         """Return the directory for *ds*, creating it if needed."""
@@ -236,12 +342,9 @@ class ParquetStore:
         directory = self.directory(ds)
         files = sorted(directory.glob("*.parquet"), reverse=True)
         for f in files:
-            try:
-                df = pl.read_parquet(f, columns=["TS"])
-                if len(df) > 0:
-                    return int(df["TS"].max())  # type: ignore[arg-type]
-            except Exception:
-                pass
+            _, _, max_ts = self._file_stats(f)
+            if max_ts is not None:
+                return max_ts
         return None
 
     def missing_intervals(
@@ -271,19 +374,14 @@ class ParquetStore:
             if file_path.exists():
                 if year < current_year and self._is_year_complete(ds, year):
                     continue
-                try:
-                    df = pl.read_parquet(file_path, columns=["TS"])
-                    if len(df) > 0:
-                        file_min = int(df["TS"].min())  # type: ignore[arg-type]
-                        file_max = int(df["TS"].max())  # type: ignore[arg-type]
-                        if ivl_start < file_min:
-                            intervals.append((ivl_start, file_min))
-                        trailing = file_max + span_ns
-                        if trailing < ivl_end:
-                            intervals.append((trailing, ivl_end))
-                        continue
-                except Exception:
-                    pass
+                rows, file_min, file_max = self._file_stats(file_path)
+                if rows > 0 and file_min is not None and file_max is not None:
+                    if ivl_start < file_min:
+                        intervals.append((ivl_start, file_min))
+                    trailing = file_max + span_ns
+                    if trailing < ivl_end:
+                        intervals.append((trailing, ivl_end))
+                    continue
 
             intervals.append((ivl_start, ivl_end))
 
@@ -384,20 +482,14 @@ class ParquetStore:
         max_ts: int | None = None
         total_rows = 0
         for f in files:
-            try:
-                df = pl.read_parquet(f, columns=["TS"])
-                n = len(df)
-                if n == 0:
-                    continue
-                total_rows += n
-                fmin = int(df["TS"].min())  # type: ignore[arg-type]
-                fmax = int(df["TS"].max())  # type: ignore[arg-type]
-                if min_ts is None or fmin < min_ts:
-                    min_ts = fmin
-                if max_ts is None or fmax > max_ts:
-                    max_ts = fmax
-            except Exception:
-                pass
+            n, fmin, fmax = self._file_stats(f)
+            if n == 0:
+                continue
+            total_rows += n
+            if fmin is not None and (min_ts is None or fmin < min_ts):
+                min_ts = fmin
+            if fmax is not None and (max_ts is None or fmax > max_ts):
+                max_ts = fmax
         return min_ts, max_ts, total_rows
 
     def _is_year_complete(self, ds: DatasetId, year: int) -> bool:
@@ -407,11 +499,11 @@ class ParquetStore:
         if not file_path.exists():
             return False
         try:
-            df = pl.read_parquet(file_path, columns=["TS"])
+            rows, _, _ = self._file_stats(file_path)
             year_start = datetime(year, 1, 1, tzinfo=timezone.utc)
             year_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
             expected = int((year_end - year_start).total_seconds()) // ds.span
-            return len(df) >= expected
+            return rows >= expected
         except Exception:
             return False
 

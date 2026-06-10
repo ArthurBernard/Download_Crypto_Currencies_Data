@@ -47,6 +47,13 @@ a pass of the `data-e2e` skill.
 
 ---
 
+_Epic D — Performance & robustness (2026-06-10 production audit): **done.**
+Order-book snapshots built only at capture time (97.7 % → 2 % CPU), inventory
+from parquet footer stats + cache + off-thread, honest WS subscriptions
+(declared depths, loud rejections), scheduler backoff/jitter + alert cooldown,
+gzip + saner UI polling. PRs #118–#121 + the last leaf; ADR journal has the
+rationale; see `06-status.md`._
+
 ## Deferred — M3 (post-3.0)
 
 Larger axes intentionally parked until after the 3.0 release. Not started; do not

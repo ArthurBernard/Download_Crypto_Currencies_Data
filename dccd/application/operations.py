@@ -449,19 +449,33 @@ async def stream(
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookLive):
                 raise NoCapability(target.exchange, "orderbook", "live")
-            # The WS pushes the book continuously, but we only *capture* a
-            # snapshot every ``snapshot_interval`` seconds. Emit the liveness
-            # sample only when we actually save, so the liveness reflects the
-            # real capture cadence (matching the "Δ Ns" shown in the UI) instead
-            # of flickering every second on data we discard. ``last_save = 0``
-            # captures the first frame immediately.
-            last_save = 0.0
-            async for snap in adapter.stream_orderbook(target.symbol, params.depth or 50):
+            # Snap the requested depth to the channel's declared discrete values
+            # (e.g. Kraken WS v2 only accepts {10,25,100,500,1000}): an undeclared
+            # depth is silently rejected by the exchange and the "live" stream
+            # would never write anything. Prefer the smallest valid depth that
+            # still covers the request; fall back to the largest available.
+            depth = params.depth or 50
+            ob_cap = adapter.capability_for(DataType.ORDERBOOK, "ws", "live")
+            if ob_cap is not None and ob_cap.depths and depth not in ob_cap.depths:
+                snapped = min((d for d in ob_cap.depths if d >= depth),
+                              default=max(ob_cap.depths))
+                if events:
+                    events.log(
+                        f"{target.exchange} order-book channel does not accept "
+                        f"depth={depth}; using {snapped} "
+                        f"(valid: {sorted(ob_cap.depths)})",
+                        level="warning",
+                    )
+                depth = snapped
+            # The throttle is owned by the adapter: pass min_interval so that
+            # pydantic objects are only constructed for frames that will be saved.
+            # The adapter yields one snapshot per interval, so every yielded
+            # snapshot is saved immediately (no downstream throttle needed).
+            async for snap in adapter.stream_orderbook(
+                target.symbol, depth, min_interval=snapshot_interval
+            ):
                 if stop_event and stop_event.is_set():
                     break
-                if time.time() - last_save < snapshot_interval:
-                    continue
-                last_save = time.time()
                 await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
                 # Best bid = highest bid price, best ask = lowest ask price.
                 # Compute rather than trust ordering so a momentarily unsorted
@@ -481,10 +495,21 @@ async def stream(
     if batch:
         await asyncio.to_thread(store.save, ds, batch, Provenance(source=prov_src))
 
-    if events:
-        events.status("cancelled")
-    if runs_store:
-        runs_store.finish_run(run_id, "cancelled")
+    # `cancelled` only when a stop was actually requested. A WS generator that
+    # ends on its own (exhausted without stop) is a failure — recording it as
+    # `cancelled` made Logs/Runs claim someone stopped a stream nobody touched.
+    if stop_event and stop_event.is_set():
+        if events:
+            events.status("cancelled")
+        if runs_store:
+            runs_store.finish_run(run_id, "cancelled")
+    else:
+        msg = "stream ended unexpectedly"
+        if events:
+            events.log(msg, level="error")
+            events.status("failed")
+        if runs_store:
+            runs_store.finish_run(run_id, "failed", error=msg)
 
 
 def read(

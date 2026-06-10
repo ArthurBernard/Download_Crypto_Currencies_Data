@@ -16,6 +16,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.4.0] - 2026-06-10
+
+### Added
+
+### Changed
+
+- Remote-friendly UI transport: gzip on API/page responses (`/api/inventory`
+  measured 12 450 B → 460 B, 27×; SSE excluded and flushed immediately so
+  EventSource connects without waiting for the first event), dashboard fetches
+  parallelised (3×RTT → 1×RTT), Live re-fetches the inventory only on load and
+  stream-status changes instead of every 8 s, dashboard/storage poll cadences
+  relaxed (15 s / 30 s), and runs-store SQLite reads moved off the event loop.
+  UI smoke: 27/27 steps clean. (#121)
+
+### Fixed
+
+- Order-book stream jobs with a depth the exchange doesn't support (production
+  case: Kraken `depth: 20`/`50` — WS v2 only accepts {10, 25, 100, 500, 1000})
+  were silently rejected and sat "live" forever writing nothing. Valid depths
+  are now declared per capability (verified against the live APIs), requests
+  snap to the nearest valid value with a warning, and WS subscription
+  rejections raise — surfacing in runs as `failed` with the exchange's error —
+  instead of being filtered out. (#122)
+- A live stream whose WS generator ended on its own (no stop requested) was
+  recorded `cancelled`; it is now `failed` with an explicit
+  "stream ended unexpectedly" error, so Logs/Runs no longer claim someone
+  stopped a stream nobody touched. (#121)
+- Order-book WS adapters built the full book as pydantic objects on **every**
+  delta while the stream operation kept only one frame per `snapshot_interval` —
+  97.7 % CPU on the production collector, starving the event loop and making
+  the remote UI unusable. Snapshots are now constructed only at capture time
+  (`min_interval` pushed down into the adapters; `0.0` keeps per-frame), and
+  Kraken/Bybit book state is truncated to the subscribed depth (WS truncation
+  contract). Verified live: Kraken 60 s at 10 s interval → exactly 6 snapshots,
+  ≤ 25 levels/side, never crossed; 3 live books for 2 min → **2.0 %** CPU. (#120)
+- `ParquetStore` metadata (inventory, last timestamp, gap detection) no longer
+  reads the full TS column of every file in the store — it reads parquet footer
+  statistics with a per-file mtime cache (legacy files without statistics fall
+  back to the old path), and `/api/inventory` + `/api/storage/sync` now run it
+  off the event loop. Verified value-identical on real data; 13× faster warm on
+  a small store, and the gap grows with file size (production showed 100 s for
+  a 10 KB inventory response under load). (#119)
+- Permanently failing scheduled jobs no longer hammer the exchange at full
+  cadence: the interval loop applies exponential backoff (reset on success) and
+  starts with a random jitter instead of firing every job at once on daemon
+  start. `HealthMonitor` alerts once when the failure threshold is crossed,
+  then at most hourly — instead of on every failure (a broken job used to spam
+  the webhook every ~20 s). (#118)
+
+### Deprecated
+
+### Removed
+
 ## [3.3.1] - 2026-06-10
 
 ### Fixed

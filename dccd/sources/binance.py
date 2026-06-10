@@ -87,7 +87,7 @@ class BinanceSource(
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=20),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=20, depths=[5, 10, 20]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -205,7 +205,13 @@ class BinanceSource(
         ws = _BinanceTradeWS(pair)
         return ws.stream()
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots over WebSocket.
 
         Uses Binance's *partial book depth* stream, which pushes a fully sorted
@@ -214,7 +220,7 @@ class BinanceSource(
         pair = self.render_symbol(symbol).lower()
         levels = 5 if depth <= 5 else 10 if depth <= 10 else 20
         ws = _BinanceDepthWS(pair, levels)
-        return ws.stream()
+        return ws.stream(min_interval=min_interval)
 
 
 class _BinanceKlineWS(WebSocketBase):
@@ -279,3 +285,22 @@ class _BinanceDepthWS(WebSocketBase):
             asks=asks,
             is_snapshot=True,
         )
+
+    async def stream(self, min_interval: float = 0.0) -> AsyncIterator[OrderBookSnapshot]:
+        """Yield parsed order-book snapshots, throttled to *min_interval* seconds.
+
+        The throttle check is applied on the raw frame **before** calling
+        ``parse_message`` so no pydantic objects are constructed for frames that
+        will be discarded.  ``min_interval=0.0`` preserves the legacy per-frame
+        behaviour.
+        """
+        import time as _time
+        last_emit: float = -float("inf")  # first frame always emits
+        async for raw in self.stream_raw():
+            # Fast path: do a cheap JSON sniff before committing to parse_message.
+            now = _time.monotonic()
+            if now - last_emit < min_interval:
+                continue
+            async for record in self.parse_message(raw):
+                last_emit = _time.monotonic()
+                yield record

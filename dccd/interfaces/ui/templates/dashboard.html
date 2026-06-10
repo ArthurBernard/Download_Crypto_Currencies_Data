@@ -45,11 +45,13 @@ function kpi(label, value) {
 }
 
 async function load() {
-  // Fetch everything we need once.
-  let runs = [], streams = [], datasets = [];
-  try { runs = (await api('GET','/api/runs?limit=50')).runs || []; } catch (_) {}
-  try { streams = (await api('GET','/api/streams')).streams || []; } catch (_) {}
-  try { datasets = (await api('GET','/api/inventory')).datasets || []; } catch (_) {}
+  // Fetch everything we need once — in parallel: serial awaits cost 3×RTT,
+  // which is what a remote (Tailscale/TLS) client actually feels.
+  const [runsR, streamsR, invR] = await Promise.allSettled([
+    api('GET','/api/runs?limit=50'), api('GET','/api/streams'), api('GET','/api/inventory')]);
+  const runs = runsR.status === 'fulfilled' ? (runsR.value.runs || []) : [];
+  const streams = streamsR.status === 'fulfilled' ? (streamsR.value.streams || []) : [];
+  const datasets = invR.status === 'fulfilled' ? (invR.value.datasets || []) : [];
 
   const liveStreams = streams.filter(s => s.running);
   const activeRuns = runs.filter(r => r.state === 'running' || r.state === 'reconnecting');
@@ -118,6 +120,6 @@ async function load() {
 }
 
 load();
-setInterval(load, 8000);
+setInterval(load, 15000);
 </script>
 {% endblock %}

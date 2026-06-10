@@ -71,20 +71,39 @@ the cursor advances and stops (`next_cursor is None`) at the window edge.
 One snapshot has many levels sharing one TS. After `save`, stored rows must equal
 the number of levels (TS-only dedup would collapse them to 1).
 
-## 5. Per-exchange sweep
+## 5. Streams — capture cadence AND resource sanity
+
+The class of bug: per-frame work whose output the consumer throws away. The
+v3.3 production case: order-book snapshots built as pydantic objects on every
+WS delta while `operations.stream` kept one per `snapshot_interval` → 97.7 %
+CPU, starved event loop, remote UI unusable — and every unit test green.
+After touching a WS adapter, `operations.stream` or the scheduler:
+
+```bash
+# drive 2-3 REAL order-book/trade streams on the isolated store for ~2 min:
+ps -o pcpu=,rss= -p <daemon-pid>      # steady-state CPU must be < 10 %
+```
+
+Also challenge the capture cadence on disk: with `snapshot_interval=10`, about
+6 snapshots (±2) per minute must land in Parquet, each truncated to the
+subscribed depth, levels uncrossed (max bid < min ask), ts monotonic. A stream
+that is "live" but writes nothing is a failure, not a wait state (rejected WS
+subscriptions must surface as errors).
+
+## 6. Per-exchange sweep
 
 Smoke each of the 7 adapters for the type it supports (OHLC for all; trades for
 binance/kraken/okx/bitfinex/bitmex; bybit spot has no trade history). Watch for
 **silent 0-row** results (e.g. a wrong symbol mapping like Bitfinex USDT→UST that
 returns HTTP 200 + `[]`).
 
-## 6. Migration (only with a backup)
+## 7. Migration (only with a backup)
 
 Before `dccd migrate --no-dry-run` on real data: `cp -a <data> <data>.backup-…`,
 run `--dry-run`, apply, then verify **row-for-row no loss** vs the backup and that
 `needs_migration` is now False (idempotent).
 
-## 7. Report
+## 8. Report
 
 For each dataset: requested vs stored (count, time range), pagination pages,
 dedup integrity, OHLC sanity, and any silent-zero or coverage gap. Clean up the

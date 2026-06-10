@@ -205,7 +205,13 @@ class CoinbaseSource(
         """Stream live OHLC bars over WebSocket."""
         raise NotImplementedError("Coinbase live OHLC stream is not implemented")
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots/deltas over WebSocket."""
         raise NotImplementedError("Coinbase live order book stream is not implemented")
 

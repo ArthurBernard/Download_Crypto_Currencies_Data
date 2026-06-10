@@ -27,7 +27,31 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
 
 ## Pending
 
-_(nothing release-blocking — see the roadmap for the next epics)_
+_(nothing release-blocking — the Epic D fixes are merged on `develop` and ready
+to `/release`; the production collector runs 3.3.1 and should be upgraded once
+that release ships)_
+
+## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
+
+A production audit (arthurserver, 50 jobs) found the daemon at 97.7 % CPU and
+the remote UI unusable. All five fixes shipped the same day (PRs #118–#121 +
+ws-subscription-honesty):
+
+- **Order-book snapshots built only at capture time** — adapters keep dict
+  state per WS delta, pydantic only when a capture is due; Kraken/Bybit books
+  truncated to the subscribed depth. Measured: 3 live books at **2 % CPU**
+  (was: one Kraken stream saturated a core).
+- **Store metadata from parquet footer stats** (+ per-file mtime cache,
+  off-thread API) — `/api/inventory` value-identical, ms instead of (under
+  load) minutes.
+- **Honest WS subscriptions** — valid depths declared per capability (Kraken
+  verified live: {10,25,100,500,1000}), invalid requests snap with a warning,
+  rejections raise and surface as `failed` runs.
+- **Scheduler/monitor hygiene** — failure backoff, startup jitter, alert
+  cooldown (a broken job used to alert every ~20 s).
+- **Remote-friendly transport** — gzip (inventory 27× smaller), parallel
+  dashboard fetches, saner polling, runs-store reads off-thread, honest stream
+  end-states.
 
 ## Known gaps / sharp edges (by design or deferred)
 

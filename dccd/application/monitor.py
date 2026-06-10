@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections import defaultdict
 
 from dccd.application.events import Event, EventBus, StatusEvent
@@ -12,9 +13,18 @@ __all__ = ["HealthMonitor"]
 
 logger = logging.getLogger(__name__)
 
+# Minimum seconds between repeated alerts for the same job while it keeps failing.
+_ALERT_COOLDOWN_S = 3600
+
 
 class HealthMonitor:
     """Monitors job runs and fires webhook alerts on repeated failures.
+
+    An alert fires when the consecutive-failure count first **crosses**
+    ``max_consecutive_errors``.  While the job keeps failing, a follow-up alert
+    fires at most once per ``_ALERT_COOLDOWN_S`` (1 hour) so a permanently-broken
+    job does not flood a webhook.  The count (and cooldown) reset on the first
+    success.
 
     Parameters
     ----------
@@ -36,6 +46,10 @@ class HealthMonitor:
         self._webhook = webhook_url
         self._max_errors = max_consecutive_errors
         self._consecutive: dict[str, int] = defaultdict(int)
+        # Last monotonic timestamp at which an alert was sent per job key.
+        self._last_alert_ts: dict[str, float] = {}
+        # Last monotonic timestamp at which a webhook-send failure was logged per key.
+        self._last_webhook_err_ts: dict[str, float] = {}
         event_bus.subscribe(self._on_event)
 
     def _on_event(self, event: Event) -> None:
@@ -49,14 +63,24 @@ class HealthMonitor:
         if event.state == "failed":
             self._consecutive[key] += 1
             count = self._consecutive[key]
-            if count >= self._max_errors:
+            if count == self._max_errors:
+                # First crossing: always alert.
                 self._alert(key, count)
+            elif count > self._max_errors:
+                # Still failing: re-alert only once per cooldown window.
+                last = self._last_alert_ts.get(key, 0.0)
+                if time.monotonic() - last >= _ALERT_COOLDOWN_S:
+                    self._alert(key, count)
         elif event.state == "succeeded":
             self._consecutive[key] = 0
+            # Reset cooldown so the next failure streak starts fresh.
+            self._last_alert_ts.pop(key, None)
+            self._last_webhook_err_ts.pop(key, None)
 
     def _alert(self, run_id: str, count: int) -> None:
         msg = f"dccd alert: {run_id} failed {count} times consecutively."
         logger.error(msg)
+        self._last_alert_ts[run_id] = time.monotonic()
         if self._webhook:
             try:
                 import json
@@ -70,4 +94,8 @@ class HealthMonitor:
                 with urllib.request.urlopen(req, timeout=5):
                     pass
             except Exception as exc:
-                logger.warning("Webhook alert failed: %s", exc)
+                # Log webhook-send failures at most once per cooldown window.
+                last_err = self._last_webhook_err_ts.get(run_id, 0.0)
+                if time.monotonic() - last_err >= _ALERT_COOLDOWN_S:
+                    logger.warning("Webhook alert failed: %s", exc)
+                    self._last_webhook_err_ts[run_id] = time.monotonic()

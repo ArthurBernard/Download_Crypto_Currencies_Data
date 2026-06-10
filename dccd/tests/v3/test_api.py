@@ -487,3 +487,31 @@ class TestMigrateEndpoint:
         # The v2→v3 migrate feature has been removed entirely.
         resp = client.post("/api/migrate", json={"dry_run": True})
         assert resp.status_code == 404
+
+
+class TestGzip:
+    def test_large_json_is_gzipped(self, client, app):
+        """API JSON above minimum_size is compressed when the client accepts gzip."""
+        from dccd.domain.dataset import DatasetId, Provenance
+        from dccd.domain.records import OHLCBar
+        from dccd.domain.symbol import Symbol
+        from dccd.domain.timeutils import NS
+        from dccd.domain.types import DataType
+
+        store = app.state.store
+        # Enough datasets that the inventory JSON exceeds minimum_size (1024 B).
+        for i in range(12):
+            ds = DatasetId(exchange="binance", symbol=Symbol.parse(f"T{i:02d}/USDT"),
+                           data_type=DataType.OHLC, span=3600)
+            bars = [OHLCBar(ts=(1_700_000_000 + j * 3600) * NS, open=1, high=2,
+                            low=0.5, close=1.5, volume=1.0) for j in range(5)]
+            store.save(ds, bars, Provenance(source="test"))
+        resp = client.get("/api/inventory", headers={"Accept-Encoding": "gzip"})
+        assert resp.status_code == 200
+        assert resp.headers.get("content-encoding") == "gzip"
+        assert len(resp.json()["datasets"]) == 12  # transparently decompressed
+
+    def test_small_json_not_gzipped(self, client):
+        resp = client.get("/health", headers={"Accept-Encoding": "gzip"})
+        assert resp.status_code == 200
+        assert resp.headers.get("content-encoding") != "gzip"

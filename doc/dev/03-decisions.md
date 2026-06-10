@@ -120,6 +120,61 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Order-book depths declared per capability; invalid requests snap with a warning (PR #122) [accepted]
+- **Choice**: `Capability.depths` lists the discrete depths a WS book channel
+  accepts (Kraken verified live: {10, 25, 100, 500, 1000}; Bybit spot
+  {1, 50, 200, 1000} per v5 docs; Binance {5, 10, 20}; OKX books5 = 5; BitMEX
+  orderBook10 = 10). `operations.stream` snaps an undeclared request to the
+  smallest valid depth ≥ requested (else the largest) and logs a warning.
+  WS subscription rejections now raise from the adapters instead of being
+  filtered with the other non-data frames.
+- **Why**: the production config had Kraken jobs at depth 20/50 — silently
+  rejected, leaving "live" streams that never wrote a row. Honesty needs both
+  halves: the engine must know what's valid (capability) *and* the adapter must
+  scream when the exchange says no (a raise reaches `_StreamWorker`, the run is
+  recorded `failed` with the exchange's own error text).
+- **Rejected alternatives**: hard-fail on an invalid depth (existing deployed
+  configs — including the production one — must keep collecting after upgrade;
+  the warning preserves honesty); validating depth in `AppConfig` (the config
+  layer doesn't know per-exchange capabilities — that knowledge lives in
+  `sources/`, mirroring how spans are checked at run time).
+
+### 2026-06-10 — Order-book capture throttle lives in the adapter, not the consumer (PR #120) [accepted]
+- **Choice**: `OrderBookLive.stream_orderbook` takes a keyword-only
+  `min_interval` (default `0.0` = per-frame, the legacy contract).
+  Delta-maintained books (Kraken, Bybit) apply frames to plain dicts and only
+  sort/construct pydantic objects when a capture is due, truncating snapshot
+  *and* state to the subscribed depth; push-snapshot channels (Binance, OKX,
+  BitMEX) drop frames before parsing. `operations.stream()` passes
+  `snapshot_interval` down and saves every yielded snapshot.
+- **Why**: the cost to kill was the *construction* (pydantic `__init__` was
+  ~96 % of daemon CPU samples in production), and only the adapter can skip
+  it — a downstream throttle (the previous design) pays full price for frames
+  it then discards. Default `0.0` keeps the protocol honest for any consumer
+  that genuinely wants every frame.
+- **Rejected alternatives**: throttle in `operations.stream()` only (where it
+  was — provably insufficient, 97.7 % CPU with 20 book jobs); yielding raw
+  dict state and building snapshots in the consumer (leaks adapter
+  representation across the protocol boundary); plain-dataclass order-book
+  records (still O(levels) per frame, and gives up validation everywhere else).
+
+### 2026-06-10 — Store metadata = parquet footer statistics + per-file mtime cache (PR #119) [accepted]
+- **Choice**: `ParquetStore` derives rows/min/max TS from parquet **footer
+  metadata** (row-group statistics) instead of reading the TS column, cached per
+  file on `(mtime_ns, size)`; files without TS statistics fall back to the column
+  read. API endpoints call `inventory()` via `asyncio.to_thread`.
+- **Why**: inventory was O(total rows) and ran *in the event loop* — the
+  production collector served `/api/inventory` in 100 s for 10 KB while WS
+  collection shared the same starved loop. Footer stats are O(files), exact for
+  int64, and the atomic-rename write path makes mtime+size a sound invalidation
+  key. No new state to keep consistent.
+- **Rejected alternatives**: a write-through cache updated by `save()` (a second
+  source of truth that desyncs on out-of-band writes — purge, rclone restore);
+  a manifest DB (CoverageStore already exists for *extent*, duplicating rows/
+  bounds there couples two stores for one read path); keeping the column read
+  but only off-thread (still O(rows) per call — 365 daily trades files/year/pair
+  keeps growing).
+
 ### 2026-06-10 — API hardening = in-process rate limit + read-only verb gate, both opt-in (PR #108) [accepted]
 - **Choice**: harden `/api/*` for exposure with an in-process, non-blocking per-client
   token bucket (`ui_rate_limit`, over budget → `429`+`Retry-After`) and a read-only

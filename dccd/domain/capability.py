@@ -31,6 +31,12 @@ class Capability(BaseModel, frozen=True):
         Supported OHLC spans in seconds. ``None`` = span list not constrained.
     max_depth : int or None
         Maximum order book depth.
+    depths : list[int] or None
+        Discrete order-book depths the channel accepts (e.g. Kraken WS v2:
+        ``[10, 25, 100, 500, 1000]``). ``None`` = not constrained. The stream
+        operation snaps a requested depth to the nearest declared value — an
+        undeclared depth would be silently rejected by the exchange and leave
+        a "live" stream that never writes anything.
     auth_required : bool
         Whether this capability requires authentication.
 
@@ -50,4 +56,5 @@ class Capability(BaseModel, frozen=True):
     page_direction: Literal["forward", "backward"] | None = None
     spans: list[int] | None = None
     max_depth: int | None = None
+    depths: list[int] | None = None
     auth_required: bool = False

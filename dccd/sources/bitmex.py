@@ -77,7 +77,7 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
             Capability(data_type=DataType.ORDERBOOK, transport="rest", mode="historical"),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=10),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=10, depths=[10]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -211,7 +211,13 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
         ws = _BitMEXWS(self.render_symbol(symbol), "trade", "trades")
         return ws.stream()
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots over WebSocket.
 
         Uses the ``orderBook10`` topic — a full top-10 snapshot on every update —
@@ -219,7 +225,7 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
         carry no price on updates and can't yield a correct best bid-ask.
         """
         ws = _BitMEXWS(self.render_symbol(symbol), "orderBook10", "book")
-        return ws.stream()
+        return ws.stream(min_interval=min_interval)
 
 
 class _BitMEXWS(WebSocketBase):
@@ -233,10 +239,23 @@ class _BitMEXWS(WebSocketBase):
         """Send the subscription message after each (re)connect."""
         await ws.send(json.dumps({"op": "subscribe", "args": [f"{self._topic}:{self._symbol}"]}))
 
+    def _check_sub_ack(self, data: dict[str, Any]) -> None:
+        """Raise on a rejected subscription instead of silently filtering it."""
+        if "error" in data:
+            raise RuntimeError(
+                f"bitmex {self._topic} subscription rejected for "
+                f"{self._symbol}: {data.get('error', 'unknown error')}"
+            )
+        if data.get("subscribe") and data.get("success") is False:
+            raise RuntimeError(
+                f"bitmex {self._topic} subscription rejected for {self._symbol}"
+            )
+
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
         """Parse a raw WebSocket frame into domain records."""
         from datetime import datetime
         data = json.loads(raw)
+        self._check_sub_ack(data)
         if "data" not in data:
             return
 
@@ -281,3 +300,27 @@ class _BitMEXWS(WebSocketBase):
                 asks = [OrderBookLevel(price=float(a[0]), amount=float(a[1])) for a in e.get("asks", [])]
                 if bids or asks:
                     yield OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks, is_snapshot=True)
+
+    async def stream(self, min_interval: float = 0.0) -> AsyncIterator[Any]:
+        """Yield parsed records, with order-book frames throttled by *min_interval*.
+
+        For order-book mode the throttle is applied on the raw frame **before**
+        ``parse_message`` so no pydantic objects are constructed for frames that
+        will be discarded.  For other modes behaves identically to the base
+        ``stream()`` (min_interval is ignored).
+        """
+        if self._mode != "book" or min_interval == 0.0:
+            async for record in super().stream():
+                yield record
+            return
+        last_emit: float = -float("inf")  # first frame always emits
+        async for raw in self.stream_raw():
+            now = time.monotonic()
+            if now - last_emit < min_interval:
+                # Throttled frames are still checked for a subscription
+                # rejection — swallowing it here would leave a silent stream.
+                self._check_sub_ack(json.loads(raw))
+                continue
+            async for record in self.parse_message(raw):
+                last_emit = time.monotonic()
+                yield record
