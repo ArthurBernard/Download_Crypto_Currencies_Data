@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Store metadata = parquet footer statistics + per-file mtime cache (PR #119) [accepted]
+- **Choice**: `ParquetStore` derives rows/min/max TS from parquet **footer
+  metadata** (row-group statistics) instead of reading the TS column, cached per
+  file on `(mtime_ns, size)`; files without TS statistics fall back to the column
+  read. API endpoints call `inventory()` via `asyncio.to_thread`.
+- **Why**: inventory was O(total rows) and ran *in the event loop* — the
+  production collector served `/api/inventory` in 100 s for 10 KB while WS
+  collection shared the same starved loop. Footer stats are O(files), exact for
+  int64, and the atomic-rename write path makes mtime+size a sound invalidation
+  key. No new state to keep consistent.
+- **Rejected alternatives**: a write-through cache updated by `save()` (a second
+  source of truth that desyncs on out-of-band writes — purge, rclone restore);
+  a manifest DB (CoverageStore already exists for *extent*, duplicating rows/
+  bounds there couples two stores for one read path); keeping the column read
+  but only off-thread (still O(rows) per call — 365 daily trades files/year/pair
+  keeps growing).
+
 ### 2026-06-10 — API hardening = in-process rate limit + read-only verb gate, both opt-in (PR #108) [accepted]
 - **Choice**: harden `/api/*` for exposure with an in-process, non-blocking per-client
   token bucket (`ui_rate_limit`, over budget → `429`+`Retry-After`) and a read-only

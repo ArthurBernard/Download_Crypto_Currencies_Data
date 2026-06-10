@@ -1,12 +1,12 @@
 ---
 plan: perf-robustness/02-inventory-footer-metadata
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: true
 branch: fix/inventory-footer-metadata
-pr: ""
+pr: "#119"
 ---
 
 # `ParquetStore` metadata from parquet footers + cache + off-thread API
