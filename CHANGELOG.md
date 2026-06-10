@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.4.0] - 2026-06-10
+
+### Added
+
+### Changed
+
 - Remote-friendly UI transport: gzip on API/page responses (`/api/inventory`
   measured 12 450 B → 460 B, 27×; SSE excluded and flushed immediately so
   EventSource connects without waiting for the first event), dashboard fetches
