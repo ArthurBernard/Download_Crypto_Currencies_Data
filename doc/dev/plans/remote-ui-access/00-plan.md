@@ -49,7 +49,7 @@ note (05) can describe a true posture.
    final posture from 01–03.
 
 ## Leaf checklist
-- [ ] 01 deploy-tls-proxy — docs/tls-reverse-proxy — medium
+- [x] 01 deploy-tls-proxy — docs/tls-reverse-proxy — medium
 - [ ] 02 ui-auth-session — feat/ui-auth-session — high
 - [ ] 03 harden-api-exposure — feat/harden-api-exposure — high (depends on 02)
 - [ ] 04 mobile-responsive — feat/ui-mobile-responsive — medium
