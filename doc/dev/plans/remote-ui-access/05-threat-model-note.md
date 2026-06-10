@@ -1,12 +1,12 @@
 ---
 plan: remote-ui-access/05-threat-model-note
 kind: leaf
-status: planned
+status: done
 complexity: low
 depends: [01, 02, 03]
 parallel: false
 branch: docs/threat-model
-pr: ""
+pr: "#NN"
 ---
 
 # Threat-model note in the deploy how-to

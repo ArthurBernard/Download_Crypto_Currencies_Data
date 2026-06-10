@@ -1,7 +1,7 @@
 ---
 plan: remote-ui-access
 kind: global
-status: planning
+status: done
 roadmap: "## Epic B — View the UI remotely (PC + mobile)"
 release_on_done: true
 ---
@@ -53,7 +53,7 @@ note (05) can describe a true posture.
 - [x] 02 ui-auth-session — feat/ui-auth-session — high
 - [x] 03 harden-api-exposure — feat/harden-api-exposure — high (depends on 02)
 - [x] 04 mobile-responsive — feat/ui-mobile-responsive — medium
-- [ ] 05 threat-model-note — docs/threat-model — low (depends on 01, 02, 03)
+- [x] 05 threat-model-note — docs/threat-model — low (depends on 01, 02, 03)
 
 ## Dependencies
 - 03 depends on 02 (roles/hardening build on the session auth).

@@ -103,4 +103,5 @@ Reaching the UI from another machine
 The default bind is ``127.0.0.1``. To reach the UI from a laptop or phone, put it
 behind a private network (e.g. Tailscale) or a TLS reverse proxy — never expose the
 API plaintext on the public internet. The full procedure (Caddy, nginx, Cloudflare
-Tunnel, Tailscale) is in :doc:`expose-remote`.
+Tunnel, Tailscale), the hardening settings, and a threat model are in
+:doc:`expose-remote`.

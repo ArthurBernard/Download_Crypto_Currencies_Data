@@ -160,5 +160,72 @@ Checklist
 - The proxy sets ``X-Forwarded-Proto`` and overwrites ``X-Forwarded-For``.
 - SSE (``/api/events``) streams through the proxy (buffering off).
 
+Threat model
+============
+
+Know what this setup does and does not protect, so you pick a posture that matches
+your exposure.
+
+**Trust boundaries**
+
+- *Localhost only* (the default ``127.0.0.1`` bind) — no remote attacker; no token
+  needed. This is the safe default.
+- *Private overlay* (Tailscale/WireGuard) — the tailnet provides transport encryption
+  **and** device identity. Binding to it is acceptable; the token is defence-in-depth.
+- *Public internet* — only behind a TLS reverse proxy. The API must never be reachable
+  in plaintext.
+
+**What the token / session protects**
+
+- It is API authorisation for a **single shared secret** — not per-user identity, not
+  multi-tenant. The browser session is an opaque, ``HttpOnly`` cookie; the raw token is
+  never embedded in a served page. ``SameSite=Lax`` means a cross-site ``POST``/
+  ``DELETE`` does not carry the cookie, so the mutating routes are CSRF-protected.
+
+**What it does NOT protect**
+
+- It is **not** a substitute for TLS — use a proxy or a private overlay for encryption.
+- A shared token has no per-user revocation beyond **rotating** it (change
+  ``ui_auth_token`` and restart).
+- Rate-limit and session state live in-process and **reset on restart** (fine for a
+  single-node daemon).
+
+**Residual risks & mitigations**
+
+- ``?token=`` in an SSE URL can land in proxy/access logs — browsers use the cookie
+  path by default, so prefer it; reserve ``?token=`` for non-browser clients.
+- Enable ``ui_trusted_proxy`` **only** behind a proxy that overwrites
+  ``X-Forwarded-For`` — otherwise the rate-limit key is forgeable.
+- Use ``ui_readonly: true`` for a view-only share; bound ``ui_rate_limit``; keep
+  ``data_path`` under the service's ``StateDirectory`` (see :doc:`deploy`).
+
+**Recommended postures**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 16 14 14 38
+
+   * - Exposure
+     - Bind
+     - TLS
+     - Token
+     - Notes
+   * - LAN / localhost
+     - ``127.0.0.1``
+     - n/a
+     - optional
+     - Default; nothing reachable off-box.
+   * - Tailnet
+     - ``0.0.0.0``
+     - overlay
+     - **yes**
+     - Tailscale encrypts + authenticates; token is defence-in-depth.
+   * - Public
+     - ``127.0.0.1``
+     - **proxy**
+     - **yes**
+     - Behind Caddy/nginx/Tunnel; set ``ui_trusted_proxy``, consider
+       ``ui_readonly`` and a bounded ``ui_rate_limit``.
+
 See also :doc:`protect-ui` (token handling), :doc:`deploy` (run it unattended), and
 :doc:`sync-remote` (off-box backups).
