@@ -464,7 +464,9 @@ def create_app(
     @app.get("/api/inventory")
     async def get_inventory(request: Request) -> dict[str, Any]:
         """Return all stored datasets."""
-        return {"datasets": _store(request).inventory()}
+        store = _store(request)
+        datasets = await asyncio.to_thread(store.inventory)
+        return {"datasets": datasets}
 
     # -----------------------------------------------------------------------
     # Remote sync
@@ -496,7 +498,9 @@ def create_app(
             }
             if configured and r["ended_at"]:
                 next_eta = r["ended_at"] + interval * NS
-        total_bytes = sum(d.get("bytes", 0) for d in _store(request).inventory())
+        store = _store(request)
+        inventory = await asyncio.to_thread(store.inventory)
+        total_bytes = sum(d.get("bytes", 0) for d in inventory)
         return {
             "configured": configured,
             "remotes": remotes,
