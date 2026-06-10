@@ -1,13 +1,18 @@
 # systemd unit for the dccd v3 daemon (scheduler + streams + web UI).
 #
-# Install:
-#   sudo cp deploy/dccd.service /etc/systemd/system/dccd.service
-#   sudo useradd --system --home /var/lib/dccd --create-home dccd   # if absent
+# Install (venv — the blessed path on Ubuntu/PEP 668):
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin dccd  # if absent
+#   sudo python3 -m venv /opt/dccd/venv
+#   sudo /opt/dccd/venv/bin/pip install "dccd[daemon]"
+#   # CPU without AVX2 (older servers)? the default polars wheel crashes (SIGILL):
+#   #   sudo /opt/dccd/venv/bin/pip uninstall -y polars && \
+#   #   sudo /opt/dccd/venv/bin/pip install polars-lts-cpu
 #   # place your config at /etc/dccd/config.yml (data_path: /var/lib/dccd/data)
+#   sudo cp deploy/dccd.service /etc/systemd/system/dccd.service
 #   sudo systemctl daemon-reload && sudo systemctl enable --now dccd
 #
-# Adjust ExecStart to the absolute path of the dccd entry point in your venv
-# (e.g. /opt/dccd/venv/bin/dccd) if not installed system-wide.
+# StateDirectory=dccd auto-creates /var/lib/dccd (0750, owned by dccd) — no manual
+# mkdir/chown needed. Adjust ExecStart if your venv lives elsewhere.
 [Unit]
 Description=dccd v3 — crypto data daemon (scheduler + streams + web UI)
 After=network-online.target
@@ -18,9 +23,23 @@ Type=simple
 User=dccd
 Group=dccd
 Environment=XDG_CONFIG_HOME=/etc
-ExecStart=/usr/local/bin/dccd start
+ExecStart=/opt/dccd/venv/bin/dccd start
+WorkingDirectory=/var/lib/dccd
 Restart=on-failure
 RestartSec=5
+
+# Logs go to the journal: `journalctl -u dccd [-f]`. Rotation is handled by
+# journald (see /etc/systemd/journald.conf: SystemMaxUse=, MaxRetentionSec=) —
+# dccd writes no log files of its own.
+
+# Resource limits — uncomment and tune for your host (defaults sized for a small
+# box; too-low values can OOM-kill a busy daemon):
+#MemoryMax=1G
+#CPUQuota=200%
+#TasksMax=256
+
+# State dir: systemd creates/owns /var/lib/dccd for User=dccd.
+StateDirectory=dccd
 
 # Hardening
 NoNewPrivileges=true

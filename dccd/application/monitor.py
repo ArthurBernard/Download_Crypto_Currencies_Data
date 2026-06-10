@@ -41,13 +41,18 @@ class HealthMonitor:
     def _on_event(self, event: Event) -> None:
         if not isinstance(event, StatusEvent):
             return
+        # Count failures per *job*, not per run: a run_id is `{spec_id}@{run}` and
+        # each backfill run is unique, so keying on run_id would never accumulate
+        # across runs (only streams reuse `{spec_id}@stream`). Key on the spec_id
+        # prefix so repeated failures of the same job trip the alert.
+        key = event.run_id.split("@", 1)[0]
         if event.state == "failed":
-            self._consecutive[event.run_id] += 1
-            count = self._consecutive[event.run_id]
+            self._consecutive[key] += 1
+            count = self._consecutive[key]
             if count >= self._max_errors:
-                self._alert(event.run_id, count)
+                self._alert(key, count)
         elif event.state == "succeeded":
-            self._consecutive[event.run_id] = 0
+            self._consecutive[key] = 0
 
     def _alert(self, run_id: str, count: int) -> None:
         msg = f"dccd alert: {run_id} failed {count} times consecutively."

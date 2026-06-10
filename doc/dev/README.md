@@ -32,11 +32,17 @@ rules live in the repo-root `CLAUDE.md`.
 
 - [`ui_smoke.py`](ui_smoke.py) — runnable headless-browser UI audit
   (`python doc/dev/ui_smoke.py http://127.0.0.1:8137`). See `05-testing.md`.
+- [`plans/`](plans/) — **active plan trees** (durable, hierarchical task plans;
+  tracked in git). Each roadmap item being worked on expands into a
+  `plans/<epic>/` tree of a global map + precise leaf specs that drive
+  `/plan` → `/execute-leaf` → `/finish-task`. Finished trees move to
+  `_archive/plans/` (gitignored). See [`plans/README.md`](plans/README.md).
 
 ## Conventions for keeping this current
 
 - This is descriptive, not aspirational: write what the repo **is**, not what it
-  should become (put plans in [`07-roadmap.md`](07-roadmap.md) — the single source
-  of open work — and history in git/CHANGELOG).
+  should become. Open work goes in [`07-roadmap.md`](07-roadmap.md) — the single
+  source *index* — and its detailed, executable expansion (while being worked) in
+  [`plans/`](plans/); history stays in git/CHANGELOG.
 - A prior snapshot of these docs (the v3 planning/retrospective set) is archived
   under `doc/dev/_archive/` — **gitignored**, kept locally for reference only.

@@ -112,13 +112,111 @@ Conventions:
 
 Template:
 ```
-### YYYY-MM-DD — <short title> (PR #NN)  [accepted|rejected|tombstone]
+### YYYY-MM-DD — <short title> (PR #94)  [accepted|rejected|tombstone]
 - **Choice**: …
 - **Why**: …
 - **Rejected alternatives**: …
 ```
 
 <!-- new entries below, newest first -->
+
+### 2026-06-10 — Blessed deploy path = systemd (venv), Docker as alternative (PR #102) [accepted]
+- **Choice**: `how-to/deploy` documents **systemd + a venv** as the recommended path
+  for a long-lived server, with **Docker** as the containerised alternative (not the
+  default). Closes Epic A.
+- **Why**: a home/VPS box that runs dccd 24/7 wants the lightest persistent setup —
+  no container runtime, native journald logs, clean `Restart=`/reboot semantics, a
+  stable data dir via `StateDirectory`. Docker suits ephemeral/orchestrated hosts but
+  adds an engine + volume indirection for the common single-box case. Both paths were
+  executed and verified on a real Ubuntu 24.04 server (build/install, `/health`,
+  reboot survival, alerts, healthcheck).
+- **Rejected alternatives**: Docker-first (heavier for the common case); documenting
+  both as equal (no guidance — readers want one blessed path); a compose stack
+  (over-engineered for a single service).
+
+### 2026-06-10 — Wire HealthMonitor into the daemon + key alerts by job (PR #100) [accepted]
+- **Choice**: instantiate `HealthMonitor` in both daemon entry points — `cmd_start`
+  (on the scheduler's bus) and the API lifespan (standalone `dccd ui` only, to avoid
+  double-wiring). Key the consecutive-failure counter on the **job (spec id)**, not
+  the unique per-run `run_id`. Healthcheck via Docker `HEALTHCHECK`/`systemd`; logs
+  via journald (no custom file logger); resource limits shipped commented.
+- **Why**: `HealthMonitor` was dead code — never instantiated — so alerts never
+  fired (same class as `RemoteStorage` pre-Epic-C). And its per-`run_id` keying could
+  never accumulate across backfill runs (each run id is `{spec}@{ts}`), so only
+  streams (stable `@stream` id) could ever alert. Verified live: a failing job past
+  the threshold delivered a real webhook POST to a sink; the container is `healthy`.
+- **Rejected alternatives**: wire it only in `cmd_start` (then `dccd ui` never
+  alerts); a custom file logger + logrotate (journald/docker already own rotation —
+  a second mechanism to maintain); `WatchdogSec` (needs `sd_notify` wiring dccd
+  doesn't have — would kill a healthy daemon); forced resource limits (can OOM-kill a
+  busy daemon — shipped commented with guidance instead).
+
+### 2026-06-10 — Restart safety is reconstruction-from-config, verified by reboot (PR #99) [accepted]
+- **Choice**: keep restart safety as *stateless reconstruction* — the daemon holds
+  no cross-process state; on boot it rebuilds everything from `config.yml` +
+  on-disk stores (`cmd_start` → `scheduler.start(cfg.all_job_specs())`) and resumes
+  from the coverage manifest / `store.last_timestamp`. No checkpoint/PID file. A real
+  `systemctl reboot` is the acceptance test, plus `test_restart.py` as the guard.
+- **Why**: config + the SQLite WAL stores (`runs.db`, `coverage.db`) are already the
+  durable truth; a separate restart-state file would be a second source to keep in
+  sync. The real reboot confirmed: service auto-active, stream reconnected (trades
+  2000→3000 contiguous), interval re-armed, `runs` 6→12 (append), coverage intact.
+- **Rejected alternatives**: a checkpoint/resume file (duplicates config + stores,
+  drifts); relying on systemd to re-run a one-shot (loses the live stream). No code
+  change was needed — this records *why* and adds the regression guard.
+
+### 2026-06-10 — systemd deploy: venv `ExecStart` + `StateDirectory` (PR #98) [accepted]
+- **Choice**: `deploy/dccd.service` runs dccd from a venv at `/opt/dccd/venv` and
+  uses `StateDirectory=dccd` (systemd creates/owns `/var/lib/dccd` for `User=dccd`),
+  rather than a system-wide `pip install` at `/usr/local/bin/dccd` + a manual
+  `useradd --create-home`.
+- **Why**: Ubuntu 24.04 is PEP 668 (externally-managed) — a system pip install needs
+  `--break-system-packages`; a venv is clean and isolated. The old hard-coded
+  `ExecStart=/usr/local/bin/dccd` failed `systemd-analyze verify` on a real host.
+  `StateDirectory` removes the manual mkdir/chown and guarantees correct ownership
+  under `ProtectSystem=strict`. Verified live (install, auto-restart, hardened write).
+- **Rejected alternatives**: system-wide pip (`--break-system-packages`, pollutes the
+  system env); `DynamicUser=yes` (loses a stable uid for the data dir across
+  restarts); manual `useradd --create-home` + mkdir (more steps, easy to get perms
+  wrong). Also fixed: `.[daemon,ui]` referenced a non-existent `ui` extra → `.[daemon]`.
+
+### 2026-06-09 — Old-CPU support via a `POLARS_VARIANT` build arg + digest-pinned base (PR #97) [accepted]
+- **Choice**: the `Dockerfile` pins the base image to a `python:3.12-slim` digest
+  and exposes `ARG POLARS_VARIANT=polars`. Modern hosts build unchanged; hosts
+  whose CPU lacks AVX2 build with `--build-arg POLARS_VARIANT=polars-lts-cpu`,
+  which uninstalls `polars` and installs the LTS-CPU wheel **unpinned** (it lags the
+  latest `polars`, so pinning to polars's version fails to resolve).
+- **Why**: discovered on the real Epic A test box — an Intel i3-2367M (Sandy Bridge,
+  no AVX2/FMA/BMI). The default `polars` wheel crashes the daemon at import with
+  SIGILL (exit 132). dccd depends on polars, so the whole app is unusable on such
+  CPUs (common for recycled home servers). Real-host verification caught this; unit
+  tests never would.
+- **Rejected alternatives**: make `polars-lts-cpu` the default everywhere (penalises
+  the common modern-CPU case with no AVX2 fast paths); doc-only (the image still
+  breaks out-of-the-box on those hosts); pin the variant to polars's exact version
+  (unresolvable — lts-cpu trails). The same variable applies to the systemd venv
+  install (leaf 02) and is documented in the deploy how-to (leaf 06).
+
+### 2026-06-09 — Hierarchical file-based plan trees + complexity-derived agent execution (PR #94) [accepted]
+- **Choice**: plans become durable, hierarchical **files in the repo**
+  (`doc/dev/plans/<epic>/`: a global `00-plan.md` + precise leaf specs, adaptive
+  depth). Each leaf declares a `complexity` that derives the execution model
+  (`low→haiku`/`medium→sonnet`/`high→opus`). The tree lands on `develop` via a
+  **"plan PR" first**, then `/execute-leaf` spawns an agent per leaf that must
+  **verify on real data**; `/finish-task` archives the leaf and ticks the global,
+  the last leaf triggers `/release`. Gated on a `plans_dir` descriptor key (absent
+  ⇒ the legacy plan-mode loop — backward compatible).
+- **Why**: `plan mode` plans live in `~/.claude/plans/` (lost on `/compact`), and
+  the old loop never materialised *whether we were planning one slice or the whole
+  set*. Files in the repo are durable, reviewable, and visible to every leaf
+  branch; an explicit global+leaf hierarchy fixes the granularity ambiguity; the
+  precise leaf level is what makes safe agent handoff possible.
+- **Rejected alternatives**: keep ephemeral plan-mode only (the status quo — fails
+  durability); one flat plan file per epic (doesn't separate the map from the
+  executable detail, and can't express per-leaf model/deps). Note: `~/.claude`
+  isn't a git repo, so the skill bodies themselves are applied directly, not via
+  this PR — only the repo-tracked parts (descriptor, `doc/dev/plans/`, `CLAUDE.md`)
+  ship here.
 
 ### 2026-06-09 — Read-through restore in operations.read, whole-dir copy (PR #90) [accepted]
 - **Choice**: when `operations.read` finds no local Parquet for a dataset and a

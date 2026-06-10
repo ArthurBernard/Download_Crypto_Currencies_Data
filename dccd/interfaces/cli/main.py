@@ -146,6 +146,7 @@ def cmd_start(
     import uvicorn
 
     from dccd.application.events import EventBus
+    from dccd.application.monitor import HealthMonitor
     from dccd.application.scheduler import Scheduler
     from dccd.application.service_factory import (
         build_coverage_store,
@@ -162,6 +163,14 @@ def cmd_start(
     coverage_store = build_coverage_store(cfg.settings.data_path)
     registry = build_registry()
     bus = EventBus()
+    # Fire webhook alerts on repeated job failures. Subscribes to the same bus the
+    # scheduler publishes to; kept referenced for the daemon's lifetime (it was
+    # never instantiated before, so alerts never fired).
+    monitor = HealthMonitor(
+        runs_store, bus,
+        webhook_url=cfg.alerts.webhook_url,
+        max_consecutive_errors=cfg.alerts.max_consecutive_errors,
+    )
     remote = build_remote(cfg)
     scheduler = Scheduler(
         registry, store, runs_store, bus,
@@ -185,7 +194,7 @@ def cmd_start(
     ui_host = host or cfg.settings.ui_host
     ui_port = port or cfg.settings.ui_port
 
-    async def _run():
+    async def _run(_monitor: object = monitor):  # keep the HealthMonitor alive
         await scheduler.start(all_specs)
         typer.echo(f"Daemon running — UI at http://{ui_host}:{ui_port}")
         server = uvicorn.Server(uvicorn.Config(fastapi_app, host=ui_host, port=ui_port, log_level="warning"))

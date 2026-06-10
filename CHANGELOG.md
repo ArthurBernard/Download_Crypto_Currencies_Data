@@ -16,6 +16,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.2.0] - 2026-06-10
+
+### Added
+
+- Dev workflow: hierarchical, file-based **plan trees** under `doc/dev/plans/`
+  (committed) with a `<plans_dir>` descriptor key. A roadmap item expands into a
+  global `00-plan.md` + precise leaf specs (adaptive depth); each leaf declares a
+  `complexity` that derives its execution model (`low→haiku`/`medium→sonnet`/
+  `high→opus`). New `/plan` (build the tree + open the plan PR first) and
+  `/execute-leaf` (spawn an agent per leaf, verify on real data) skills; `/pick-task`,
+  `/finish-task`, `/abandon-task`, `/release` and `CLAUDE.md` updated to chain
+  through it. Backward-compatible: no `plans_dir` ⇒ the old plan-mode loop. (#94)
+- Restart/reboot safety verified on a real server `systemctl reboot`: the daemon
+  auto-starts, the trades stream reconnects, the interval backfill re-arms, the
+  `RunsStore` (SQLite WAL) survives and appends, and the coverage manifest keeps the
+  resume cursor (no gap). New `test_restart.py` guards RunsStore persistence across a
+  reopen and scheduler interval re-arm from config. (#99)
+- Ops for unattended deploy: `HealthMonitor` is now wired into the daemon (CLI
+  `dccd start` and the standalone API) — it was implemented but never instantiated,
+  so webhook alerts never fired. Docker `HEALTHCHECK` on `/health`, commented
+  systemd resource limits, and journald log-rotation guidance. Verified live on a
+  server: a failing job past the threshold delivered a real webhook POST, and the
+  container reports `healthy`. (#100)
+- Docs: new `how-to/deploy` guide — a blessed, host-validated path to run dccd
+  unattended on a server (systemd + venv recommended, Docker alternative), covering
+  install, secret injection, `/health`, restart/reboot safety, logs, alerts and the
+  old-CPU caveat. Completes **Epic A** (run on a remote server). (#102)
+
+### Changed
+
+- `Dockerfile`: pin the base image to a digest (reproducible builds) and add a
+  `POLARS_VARIANT` build arg — on CPUs without AVX2 (older servers) the default
+  `polars` wheel crashes with SIGILL, so
+  `docker build --build-arg POLARS_VARIANT=polars-lts-cpu` installs the LTS-CPU
+  build instead. Verified end-to-end on a real host (build, run, `/health`, Bearer
+  auth, a backfill writing correct OHLC to the `/data` volume). (#97)
+- Docs: `how-to/protect-ui` now covers deploy-time secret injection — the token and
+  `rclone.conf` are mounted at run time, never baked into the image (verified on the
+  built image: `docker history`/filesystem show no config); the YAML loader does not
+  expand `${ENV}` placeholders, so the mounted-file pattern is the blessed one. (#101)
+
+### Fixed
+
+- `deploy/dccd.service`: `ExecStart` pointed at `/usr/local/bin/dccd` and failed
+  `systemd-analyze verify`; it now uses a venv path (`/opt/dccd/venv/bin/dccd`) with
+  `StateDirectory=dccd` (systemd owns `/var/lib/dccd`). The install spec dropped the
+  non-existent `ui` extra (`.[daemon,ui]` → `.[daemon]`, also in the `Dockerfile`).
+  Verified a real system-wide install: `systemd-analyze verify` passes, the service
+  is active, auto-restarts after SIGKILL, and a backfill writes correct OHLC under
+  the hardened `/var/lib/dccd/data` (`ProtectSystem=strict`). (#98)
+- `HealthMonitor` counted consecutive failures per `run_id`, but each backfill run
+  has a unique id (`{spec}@{ts}`), so repeated failures never accumulated (only
+  streams, with a stable `@stream` id, could alert). It now keys on the job
+  (spec id) so repeated backfill failures trip the alert. (#100)
+
+### Deprecated
+
+### Removed
+
 ## [3.1.0] - 2026-06-09
 
 ### Added

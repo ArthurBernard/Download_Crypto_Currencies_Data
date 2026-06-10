@@ -79,22 +79,38 @@ away without losing unrelated good work is too big: split it. This is what makes
 
 ### Dev loop & docs of record
 
-The iterative loop is tooled by skills, with three tracked docs as the sources of
+The iterative loop is tooled by skills, with four tracked docs as the sources of
 truth:
 
 | Doc | Holds | Updated by |
 |-----|-------|-----------|
-| `doc/dev/07-roadmap.md` | open work (single source) | `/pick-task` reads · `/finish-task`, `/abandon-task` update |
+| `doc/dev/07-roadmap.md` | open work — single source *index* | `/pick-task` reads · `/finish-task`, `/abandon-task` update |
+| `doc/dev/plans/<epic>/` | open work *detail* — durable hierarchical plan trees (global + leaf specs) | `/plan` writes · `/execute-leaf` reads · `/finish-task`/`/abandon-task` archive |
 | `doc/dev/03-decisions.md` | the *why* — ADR journal (+ settled rationale) | `/finish-task` (accepted), `/abandon-task` (rejected/tombstone) |
 | `doc/dev/06-status.md` | where things stand | `/finish-task`, `/groom-docs` |
 
 `CHANGELOG.md` + git log stay authoritative for *what* shipped. The loop:
-`/pick-task` (smallest slice → branch) → plan (split big plans into small PRs) →
-`/finish-task` (tests, ADR entry, status, PR) **or** `/abandon-task` (salvage the
-lesson + close the PR); `/groom-docs` periodically keeps `doc/dev/` lean and true.
 
-**Model per task** (advisory — you set it via `/model`, or a skill spawns a
-subagent with an explicit `model`; subagents otherwise *inherit* the parent):
+`/pick-task` (smallest coherent slice; **no branch yet**) →
+`/plan` (decompose into a `doc/dev/plans/<epic>/` tree — adaptive depth: a single
+leaf for a trivial task, a global `00-plan.md` + leaves otherwise — and open the
+**plan PR** that lands the tree on `develop` first) →
+`/execute-leaf <epic> next` (cut the leaf branch, **spawn an agent at the model
+derived from the leaf's `complexity`**, which implements + tests + **verifies on
+real data**, then reports) →
+`/finish-task` (tests, ADR, CHANGELOG, leaf PR, archive the leaf, tick the global
+checklist) → … per leaf … → last leaf removes the roadmap line → `/release`.
+
+`/abandon-task` salvages the lesson + closes a bad PR (tombstones the leaf);
+`/groom-docs` periodically keeps `doc/dev/` lean and true. The full format lives in
+[`doc/dev/plans/README.md`](doc/dev/plans/README.md). The workflow is
+backward-compatible: a repo whose `.claude/workflow.json` has **no `plans_dir`**
+falls back to the older `/pick-task → plan mode → /finish-task` loop.
+
+**Model per task** (advisory — you set it via `/model`, a skill spawns a subagent
+with an explicit `model`, or a plan **leaf's `complexity` derives it**:
+`low→haiku`, `medium→sonnet`, `high→opus`; subagents otherwise *inherit* the
+parent):
 
 | Model | For |
 |-------|-----|

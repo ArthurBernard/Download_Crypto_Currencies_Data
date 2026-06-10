@@ -16,25 +16,10 @@ shipped; `03-decisions.md` for *why*). Keep it short and true.
 
 ---
 
-## Epic A — Run the app on a remote server
-
-Goal: `dccd start` (scheduler + streams + UI) running 24/7 on a VPS/home server,
-surviving reboots and crashes.
-
-- [~] **Container image** — `Dockerfile` exists. Verify a clean `docker build` +
-  `docker run` with a mounted config + `/data` volume; pin/refresh base image.
-- [~] **systemd unit** — `deploy/dccd.service` exists. Verify install path,
-  `Restart=on-failure`, `User=dccd`, `/etc/dccd/config.yml`, data dir perms.
-- [ ] **Decide the deployment target** (bare systemd vs Docker vs compose) and
-  document one blessed path end-to-end in `doc/source/` (how-to: deploy).
-- [ ] **Persistence & restart safety** — confirm streams resume and the scheduler
-  re-arms after a restart; `RunsStore` (SQLite WAL) survives; data volume is
-  durable.
-- [ ] **Resource/ops** — log rotation, healthcheck (`/health`) wired into the
-  orchestrator, basic resource limits, alerting via the existing `HealthMonitor`
-  webhook.
-- [ ] **Secrets/config** — keep `config.yml` out of the image; document env/volume
-  injection of `ui_auth_token`.
+_Epic A — Run the app on a remote server: **done.** Container image (digest-pinned,
+`POLARS_VARIANT` for old CPUs) and systemd unit (venv + `StateDirectory`) verified on
+a real server; restart/reboot safety, `HealthMonitor` alerts + `/health` healthcheck,
+secret injection, and the `how-to/deploy` guide all shipped. See `06-status.md`._
 
 ## Epic B — View the UI remotely (PC + mobile)
 
@@ -67,8 +52,8 @@ coverage manifest, free-space purge, read-through restore, and the
 ## Suggested sequence
 
 1. ~~**C (sync)**~~ — done.
-2. **A (remote run)** — get it running unattended with restart safety.
-3. **B (remote access)** — only then expose the UI, behind TLS + auth.
+2. ~~**A (remote run)**~~ — done.
+3. **B (remote access)** — expose the UI, behind TLS + auth.
 
 Each epic should ship with a `doc/source/` how-to and, where it touches data,
 a pass of the `data-e2e` skill.
