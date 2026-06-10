@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-10 — API hardening = in-process rate limit + read-only verb gate, both opt-in (PR #NN) [accepted]
+### 2026-06-10 — API hardening = in-process rate limit + read-only verb gate, both opt-in (PR #108) [accepted]
 - **Choice**: harden `/api/*` for exposure with an in-process, non-blocking per-client
   token bucket (`ui_rate_limit`, over budget → `429`+`Retry-After`) and a read-only
   mode (`ui_readonly`) that blocks mutating verbs (`403`). The rate-limit client key is
