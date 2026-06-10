@@ -219,7 +219,13 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         ws = _BitfinexWS(_bfx_symbol(symbol), "trades")
         return ws.stream()
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots/deltas over WebSocket."""
         raise NotImplementedError("Bitfinex live order book stream is not implemented")
 

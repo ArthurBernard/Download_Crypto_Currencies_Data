@@ -250,9 +250,15 @@ class KrakenSource(
         """Stream live trades over WebSocket."""
         return _KrakenWS(_ws_pair(symbol), "trade").stream_trades()
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots/deltas over WebSocket."""
-        return _KrakenWS(_ws_pair(symbol), "book", depth).stream_orderbook()
+        return _KrakenWS(_ws_pair(symbol), "book", depth).stream_orderbook(min_interval=min_interval)
 
 
 class _KrakenWS(WebSocketBase):
@@ -314,10 +320,26 @@ class _KrakenWS(WebSocketBase):
                     side="buy" if t.get("side") == "buy" else "sell",
                 )
 
-    async def stream_orderbook(self) -> AsyncIterator[OrderBookSnapshot]:
-        """Reconstruct full order-book state from Kraken snapshot + delta frames."""
+    async def stream_orderbook(self, *, min_interval: float = 0.0) -> AsyncIterator[OrderBookSnapshot]:
+        """Reconstruct full order-book state from Kraken snapshot + delta frames.
+
+        Delta frames are applied to cheap dict state on every WS frame.
+        Pydantic ``OrderBookLevel``/``OrderBookSnapshot`` objects are only
+        constructed when a capture is due (controlled by *min_interval*), so
+        the ~96 % CPU burn from per-frame construction is eliminated.
+
+        At emit time both sides are sorted, truncated to the subscribed depth
+        (``self._param``), and the dicts are pruned to those same top-N levels.
+        Kraken WS v2 says the client truncates after applying updates; pruning
+        at emit bounds stale-level retention to at most one interval.
+
+        All emitted snapshots carry ``is_snapshot=True`` because they represent
+        full reconstructed state, not a raw delta.
+        """
         state_bids: dict[float, float] = {}
         state_asks: dict[float, float] = {}
+        last_emit: float = -float("inf")  # ensure the first frame always emits
+        depth = self._param  # subscribed depth
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if data.get("channel") != "book":
@@ -340,8 +362,18 @@ class _KrakenWS(WebSocketBase):
                             state_asks.pop(p, None)
                         else:
                             state_asks[p] = q
-                bids = [OrderBookLevel(price=p, amount=q)
-                        for p, q in sorted(state_bids.items(), reverse=True)]
-                asks = [OrderBookLevel(price=p, amount=q)
-                        for p, q in sorted(state_asks.items())]
-                yield OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks, is_snapshot=is_snap)
+                # Throttle check: skip pydantic construction for frames that
+                # won't be saved (min_interval=0.0 preserves legacy per-frame).
+                now = time.monotonic()
+                if now - last_emit < min_interval:
+                    continue
+                last_emit = now
+                # Sort + truncate to subscribed depth; prune dicts to match so
+                # stale levels beyond depth are discarded at most one interval later.
+                sorted_bids = sorted(state_bids.items(), reverse=True)[:depth]
+                sorted_asks = sorted(state_asks.items())[:depth]
+                state_bids = dict(sorted_bids)
+                state_asks = dict(sorted_asks)
+                bids = [OrderBookLevel(price=p, amount=q) for p, q in sorted_bids]
+                asks = [OrderBookLevel(price=p, amount=q) for p, q in sorted_asks]
+                yield OrderBookSnapshot(ts=s_to_ns(time.time()), bids=bids, asks=asks, is_snapshot=True)

@@ -130,6 +130,25 @@ class TradesLive(Source):
 class OrderBookLive(Source):
     """Protocol: can stream live order book snapshots/deltas via WebSocket."""
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
-        """Yield live order-book snapshots/deltas over WebSocket."""
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
+        """Yield live order-book snapshots over WebSocket.
+
+        Parameters
+        ----------
+        symbol : Symbol
+        depth : int
+            Maximum number of levels per side to include in each snapshot.
+        min_interval : float, optional
+            Minimum seconds between emitted snapshots.  ``0.0`` (default)
+            preserves the legacy per-frame behaviour — every WS frame yields a
+            snapshot.  Pass ``snapshot_interval`` from the job spec to move the
+            throttle *upstream* so pydantic objects are only constructed for
+            frames that will actually be saved.
+        """
         raise NotImplementedError

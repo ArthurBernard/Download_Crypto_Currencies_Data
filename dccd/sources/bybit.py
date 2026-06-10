@@ -142,10 +142,16 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
         ws = _BybitWS(self.render_symbol(symbol), "publicTrade")
         return ws.stream_trades()
 
-    def stream_orderbook(self, symbol: Symbol, depth: int) -> AsyncIterator[OrderBookSnapshot]:
+    def stream_orderbook(
+        self,
+        symbol: Symbol,
+        depth: int,
+        *,
+        min_interval: float = 0.0,
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream live order-book snapshots/deltas over WebSocket."""
         ws = _BybitWS(self.render_symbol(symbol), "orderbook", str(depth))
-        return ws.stream_orderbook()
+        return ws.stream_orderbook(depth=depth, min_interval=min_interval)
 
 
 class _BybitWS(WebSocketBase):
@@ -196,16 +202,26 @@ class _BybitWS(WebSocketBase):
                     tid=t.get("i"),
                 )
 
-    async def stream_orderbook(self) -> AsyncIterator[OrderBookSnapshot]:
+    async def stream_orderbook(
+        self, *, depth: int = 50, min_interval: float = 0.0
+    ) -> AsyncIterator[OrderBookSnapshot]:
         """Stream the order book, reconstructing full state from snapshot + deltas.
 
         Bybit sends one ``snapshot`` then ``delta`` frames (a level with size 0
-        is a removal). Yielding the raw delta levels would surface a
-        meaningless/crossed best bid-ask, so we keep the full book and emit it
-        sorted on every frame.
+        is a removal). Delta frames are applied to cheap dict state on every WS
+        frame; pydantic objects are only constructed when a capture is due
+        (controlled by *min_interval*), eliminating per-frame CPU burn.
+
+        At emit time both sides are sorted, truncated to *depth*, and the dicts
+        are pruned to those same top-N levels. Bybit WS says the client truncates
+        after applying updates; pruning at emit bounds stale-level retention to
+        at most one interval.
+
+        All emitted snapshots carry ``is_snapshot=True`` (full reconstructed state).
         """
         state_bids: dict[float, float] = {}
         state_asks: dict[float, float] = {}
+        last_emit: float = -float("inf")  # ensure the first frame always emits
         async for raw in self.stream_raw():
             data = json.loads(raw)
             if "data" not in data:
@@ -228,7 +244,19 @@ class _BybitWS(WebSocketBase):
                         state_asks.pop(price, None)
                     else:
                         state_asks[price] = qty
-            bids = [OrderBookLevel(price=p, amount=q) for p, q in sorted(state_bids.items(), reverse=True)]
-            asks = [OrderBookLevel(price=p, amount=q) for p, q in sorted(state_asks.items())]
+            # Throttle check: skip pydantic construction for frames that
+            # won't be saved (min_interval=0.0 preserves legacy per-frame).
+            now = time.monotonic()
+            if now - last_emit < min_interval:
+                continue
+            last_emit = now
+            # Sort + truncate to subscribed depth; prune dicts to match so
+            # stale levels beyond depth are discarded at most one interval later.
+            sorted_bids = sorted(state_bids.items(), reverse=True)[:depth]
+            sorted_asks = sorted(state_asks.items())[:depth]
+            state_bids = dict(sorted_bids)
+            state_asks = dict(sorted_asks)
+            bids = [OrderBookLevel(price=p, amount=q) for p, q in sorted_bids]
+            asks = [OrderBookLevel(price=p, amount=q) for p, q in sorted_asks]
             ts_ms = d.get("ts", int(time.time() * 1000))
-            yield OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks, is_snapshot=is_snap)
+            yield OrderBookSnapshot(ts=ts_ms * 1_000_000, bids=bids, asks=asks, is_snapshot=True)
