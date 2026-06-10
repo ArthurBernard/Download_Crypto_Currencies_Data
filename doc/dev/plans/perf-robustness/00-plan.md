@@ -1,7 +1,7 @@
 ---
 plan: perf-robustness
 kind: global
-status: planning
+status: executing
 roadmap: "## Epic D — Performance & robustness (from the 2026-06-10 production audit)"
 release_on_done: true
 ---
@@ -45,7 +45,7 @@ auto-memory `project-v33-perf-audit`.
 - [ ] 01 orderbook-snapshot-throttle — fix/orderbook-snapshot-throttle — medium
 - [ ] 02 inventory-footer-metadata — fix/inventory-footer-metadata — medium
 - [ ] 03 ws-subscription-honesty — fix/ws-subscription-honesty — medium (depends on 01)
-- [ ] 04 scheduler-monitor-hygiene — fix/scheduler-monitor-hygiene — medium
+- [x] 04 scheduler-monitor-hygiene — fix/scheduler-monitor-hygiene — medium
 - [ ] 05 ui-transport-efficiency — feat/ui-transport-efficiency — medium (depends on 02)
 
 ## Dependencies

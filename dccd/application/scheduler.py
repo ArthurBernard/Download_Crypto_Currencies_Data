@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 
 from dccd.application.events import EventBus, RunEvents
@@ -197,9 +198,13 @@ class Scheduler:
                     self._interval_of(spec),
                 )
 
+    async def _run_once_void(self, spec: JobSpec) -> None:
+        """Thin void wrapper around :meth:`_run_once` for use with ``create_task``."""
+        await self._run_once(spec)
+
     async def run_now(self, spec: JobSpec) -> None:
         """Trigger a one-shot backfill for *spec* immediately."""
-        self._track(asyncio.create_task(self._run_once(spec)))
+        self._track(asyncio.create_task(self._run_once_void(spec)))
 
     async def start(self, specs: list[JobSpec]) -> None:
         """Start all enabled specs (full daemon mode)."""
@@ -222,7 +227,7 @@ class Scheduler:
             elif spec.trigger.kind == "once":
                 # Track the task so stop() can cancel it and the event loop
                 # cannot silently GC it before it finishes.
-                self._track(asyncio.create_task(self._run_once(spec)))
+                self._track(asyncio.create_task(self._run_once_void(spec)))
 
     async def stop(self) -> None:
         """Stop all running jobs."""
@@ -303,15 +308,32 @@ class Scheduler:
 
     async def _interval_loop(self, spec: JobSpec) -> None:
         every = spec.trigger.every or spec.target.span or 3600
+        # Startup jitter: spread simultaneous daemon starts over [0, min(every, 60)].
+        jitter = random.uniform(0, min(every, 60))
+        await asyncio.sleep(jitter)
+        consecutive_failures = 0
         while self._running:
-            await self._run_once(spec)
-            await asyncio.sleep(every)
+            success = await self._run_once(spec)
+            if success:
+                consecutive_failures = 0
+                delay = every
+            else:
+                # Cap the exponent at 11 to avoid overflow (2**11 = 2048).
+                k = min(consecutive_failures, 11)
+                delay = min(every * (2 ** k), max(every, 6 * 3600))
+                consecutive_failures += 1
+                logger.warning(
+                    "Scheduled job %s failed (consecutive=%d) — backing off %ds",
+                    spec.id, consecutive_failures, int(delay),
+                )
+            await asyncio.sleep(delay)
 
-    async def _run_once(self, spec: JobSpec) -> None:
+    async def _run_once(self, spec: JobSpec) -> bool:
+        """Run *spec* once; return True on success, False on error."""
         from dccd.application.operations import backfill
         try:
             run_events = self._events.for_run(f"{spec.id}@{int(time.time())}")
-            await backfill(
+            result = await backfill(
                 spec,
                 registry=self._registry,
                 store=self._store,
@@ -319,8 +341,10 @@ class Scheduler:
                 coverage_store=self._coverage_store,
                 events=run_events,
             )
+            return not (isinstance(result, dict) and "error" in result)
         except Exception as exc:
             logger.error("Scheduled job %s failed: %s", spec.id, exc)
+            return False
 
     def start_stream(self, spec_id: str) -> bool:
         """Start one registered stream by spec id; return whether it existed."""
