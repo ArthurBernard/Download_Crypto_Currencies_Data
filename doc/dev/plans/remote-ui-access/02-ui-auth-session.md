@@ -1,12 +1,12 @@
 ---
 plan: remote-ui-access/02-ui-auth-session
 kind: leaf
-status: planned
+status: done
 complexity: high
 depends: []
 parallel: false
 branch: feat/ui-auth-session
-pr: ""
+pr: "#NN"
 ---
 
 # Browser auth — login page + cookie session (stop leaking the token into pages)

@@ -63,8 +63,10 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   `doc/source/how-to/deploy.rst`.
 - **Remote UI exposure (Epic B — in progress)**: `doc/source/how-to/expose-remote.rst`
   documents TLS-fronted access (Caddy/nginx/Cloudflare Tunnel) and the Tailscale
-  overlay; dccd stays on loopback behind a proxy. Tailscale path verified live on the
-  testbox. (Browser auth/session, hardening, mobile pass, threat model still open.)
+  overlay; dccd stays on loopback behind a proxy. **Browser auth/session** shipped: a
+  `/login` page + `HttpOnly` cookie gates the UI pages and the token is no longer
+  templated into pages (verified live over Tailscale). (Hardening, mobile pass, threat
+  model still open.)
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
   `dccd.application` daemon example).

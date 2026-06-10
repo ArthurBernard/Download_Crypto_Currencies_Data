@@ -27,6 +27,7 @@
     nav a:hover { background:var(--border); color:var(--fg); }
     nav a.active { color:var(--accent); background:rgba(74,158,255,.12);
             font-weight:600; }
+    nav .nav-logout { margin:0; margin-left:auto; }
     nav .nav-menu { position:relative; }
     nav .nav-menu-btn { color:var(--muted); background:transparent; border:0;
             padding:.4rem .8rem; border-radius:6px; cursor:pointer; font:inherit; }
@@ -159,6 +160,11 @@
         {% endfor %}
       </div>
     </div>
+    {% if authed %}
+    <form method="post" action="/logout" class="nav-logout">
+      <button type="submit" class="nav-menu-btn" title="Sign out">Logout</button>
+    </form>
+    {% endif %}
   </nav>
   <main>
     {% block content %}{% endblock %}
@@ -305,10 +311,10 @@
       root.appendChild(el);
       setTimeout(function () { el.remove(); }, kind === 'err' ? 6000 : 3500);
     }
-    const DCCD_TOKEN = "{{ auth_token }}";
+    // Auth is carried by the HttpOnly `dccd_session` cookie (set at /login); the
+    // raw token is never exposed to JS. `same-origin` ensures the cookie is sent.
     async function api(method, url, body) {
-      const opts = { method, headers: {} };
-      if (DCCD_TOKEN) opts.headers['Authorization'] = 'Bearer ' + DCCD_TOKEN;
+      const opts = { method, headers: {}, credentials: 'same-origin' };
       if (body !== undefined) {
         opts.headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(body);

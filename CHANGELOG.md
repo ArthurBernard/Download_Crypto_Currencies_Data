@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Browser login + session: when `ui_auth_token` is set, the web UI now serves a
+  `/login` page and an `HttpOnly`, `SameSite=Lax` session cookie (marked `Secure`
+  behind an HTTPS proxy), with a Logout control. Page routes are gated (an
+  unauthenticated load is redirected to `/login`, no longer served), and the API
+  accepts the cookie alongside `Bearer`/`?token=`. Verified live over Tailscale. (#NN)
 - How-to guide `how-to/expose-remote` for reaching the UI from a laptop/phone behind
   TLS (Caddy/nginx/Cloudflare Tunnel) or a private Tailscale overlay — never the API
   plaintext off-box. Verified on a real server (Tailscale path reached live; Caddy
@@ -16,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 ### Fixed
+
+- The web UI no longer injects the raw `ui_auth_token` into served pages (it was
+  templated into `base.html`); a remotely reachable UI could leak the token to anyone
+  who loaded a page. The browser now holds only an opaque session cookie. (#NN)
 
 ### Deprecated
 

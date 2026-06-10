@@ -120,6 +120,21 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — Browser auth = opaque HttpOnly cookie session, gate pages, stop templating the token (PR #NN) [accepted]
+- **Choice**: when `ui_auth_token` is set, add a `/login` page that mints an opaque
+  in-process session id stored as an `HttpOnly`/`SameSite=Lax` cookie (`Secure` derived
+  from scheme/`X-Forwarded-Proto`); gate the page routes (unauth → 303 `/login`); the
+  API guard accepts the cookie as well as `Bearer`/`?token=`; and the raw token is no
+  longer injected into any served page. Open-redirect guard on `next`; the urlencoded
+  login form is parsed by hand to avoid a `python-multipart` dependency.
+- **Why**: exposing the UI remotely made the server-templated token a leak (anyone who
+  loaded a page got it). Cookies are the browser-native auth, work with header-less SSE
+  (`EventSource` sends same-origin cookies), and `SameSite=Lax` protects the mutating
+  POST/DELETE routes from CSRF. Linchpin of Epic B.
+- **Rejected alternatives**: signed/stateless JWT (overkill for one shared secret);
+  keeping the templated token (the leak); HTTP Basic (no logout, worse UX);
+  `SameSite=None` (re-opens CSRF); adding `python-multipart` just to read one field.
+
 ### 2026-06-10 — Remote UI exposure = TLS reverse proxy or private overlay; app stays on loopback (PR #106) [accepted]
 - **Choice**: document remote UI access (`how-to/expose-remote`) as either (a) a TLS
   reverse proxy (Caddy blessed; nginx / Cloudflare Tunnel alternatives) with dccd kept

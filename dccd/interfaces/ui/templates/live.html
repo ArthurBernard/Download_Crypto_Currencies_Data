@@ -278,7 +278,7 @@ async function createNew() {
 let es;
 function connectSSE() {
   if (es) es.close();
-  es = new EventSource('/api/events' + (DCCD_TOKEN ? '?token='+encodeURIComponent(DCCD_TOKEN) : ''));
+  es = new EventSource('/api/events');
   const st = document.getElementById('sse-status');
   es.onopen = () => { st.innerHTML = '<span class="ok">● connected</span>'; };
   es.onmessage = (e) => {
