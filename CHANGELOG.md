@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.2.0] - 2026-06-10
+
+### Added
+
 - Dev workflow: hierarchical, file-based **plan trees** under `doc/dev/plans/`
   (committed) with a `<plans_dir>` descriptor key. A roadmap item expands into a
   global `00-plan.md` + precise leaf specs (adaptive depth); each leaf declares a
