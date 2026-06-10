@@ -45,13 +45,19 @@ def _kraken_pair(symbol: Symbol) -> str:
     >>> from dccd.domain.symbol import Symbol
     >>> _kraken_pair(Symbol(base='BTC', quote='USD'))
     'XXBTZUSD'
+    >>> _kraken_pair(Symbol(base='ETH', quote='BTC'))
+    'XETHXXBT'
     """
+    # Kraken names BTC as XBT — for the quote too, not just the base, so a
+    # crypto/crypto pair like ETH/BTC must become XETHXXBT (not XETHXBTC,
+    # which Kraken rejects with "Unknown asset pair").
     base = "XBT" if symbol.base == "BTC" else symbol.base
+    quote = "XBT" if symbol.quote == "BTC" else symbol.quote
     if base in ("BCH", "DASH"):
-        return f"{base}{symbol.quote}"
-    if symbol.quote in ("EUR", "USD", "CAD", "JPY", "GBP"):
-        return f"X{base}Z{symbol.quote}"
-    return f"X{base}X{symbol.quote}"
+        return f"{base}{quote}"
+    if quote in ("EUR", "USD", "CAD", "JPY", "GBP"):
+        return f"X{base}Z{quote}"
+    return f"X{base}X{quote}"
 
 
 def _ws_pair(symbol: Symbol) -> str:

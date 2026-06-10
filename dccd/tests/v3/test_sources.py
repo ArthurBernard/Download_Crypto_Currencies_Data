@@ -115,6 +115,10 @@ class TestKrakenCapabilities:
     def test_render_symbol(self):
         assert self.src.render_symbol(BTC_USD) == "XXBTZUSD"
 
+    def test_render_symbol_crypto_quote_btc(self):
+        # ETH/BTC: BTC→XBT for the *quote* too, else Kraken rejects "XETHXBTC".
+        assert self.src.render_symbol(Symbol(base="ETH", quote="BTC")) == "XETHXXBT"
+
     def test_ohlc_cap_history_recent(self):
         cap = self.src.capability_for(DataType.OHLC, "rest", "historical")
         assert cap is not None
