@@ -6,7 +6,7 @@ complexity: medium
 depends: []
 parallel: true
 branch: fix/inventory-footer-metadata
-pr: "#XX"
+pr: "#119"
 ---
 
 # `ParquetStore` metadata from parquet footers + cache + off-thread API
