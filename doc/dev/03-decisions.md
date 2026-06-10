@@ -120,6 +120,19 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — API hardening = in-process rate limit + read-only verb gate, both opt-in (PR #108) [accepted]
+- **Choice**: harden `/api/*` for exposure with an in-process, non-blocking per-client
+  token bucket (`ui_rate_limit`, over budget → `429`+`Retry-After`) and a read-only
+  mode (`ui_readonly`) that blocks mutating verbs (`403`). The rate-limit client key is
+  the socket peer unless `ui_trusted_proxy` is set (then `X-Forwarded-For` first hop).
+  Layered before/after auth so a `401` still wins over `403` for unauth mutating calls.
+- **Why**: a remotely reachable API needs abuse resistance and a safe view-only share
+  without standing up Redis/an external WAF. Trusting `X-Forwarded-For` blindly would
+  let a direct client forge the key, so it is gated behind an explicit proxy-trust flag.
+- **Rejected alternatives**: the blocking `transport.ratelimit` bucket (it sleeps — for
+  outbound calls, not inbound rejection); an external rate-limiter dependency; per-route
+  role decorators (a verb gate is enough for a single shared token).
+
 ### 2026-06-10 — Browser auth = opaque HttpOnly cookie session, gate pages, stop templating the token (PR #107) [accepted]
 - **Choice**: when `ui_auth_token` is set, add a `/login` page that mints an opaque
   in-process session id stored as an `HttpOnly`/`SameSite=Lax` cookie (`Secure` derived

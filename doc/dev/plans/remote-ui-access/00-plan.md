@@ -51,7 +51,7 @@ note (05) can describe a true posture.
 ## Leaf checklist
 - [x] 01 deploy-tls-proxy — docs/tls-reverse-proxy — medium
 - [x] 02 ui-auth-session — feat/ui-auth-session — high
-- [ ] 03 harden-api-exposure — feat/harden-api-exposure — high (depends on 02)
+- [x] 03 harden-api-exposure — feat/harden-api-exposure — high (depends on 02)
 - [ ] 04 mobile-responsive — feat/ui-mobile-responsive — medium
 - [ ] 05 threat-model-note — docs/threat-model — low (depends on 01, 02, 03)
 

@@ -128,6 +128,29 @@ loopback:
 
    curl --max-time 3 http://<box-ip>:8080/health        # should refuse / time out
 
+Hardening
+=========
+
+For a deployment reachable beyond your own machine, three opt-in settings (all off
+by default) reduce the blast radius:
+
+.. code-block:: yaml
+
+   settings:
+     ui_rate_limit: 10        # max requests/sec per client on /api/* (0 = off)
+     ui_readonly: false       # true = block POST/PUT/PATCH/DELETE on /api/*
+     ui_trusted_proxy: true   # trust X-Forwarded-For for the rate-limit client key
+
+- ``ui_rate_limit`` token-buckets ``/api/*`` per client; over budget returns ``429``
+  with ``Retry-After``. Tune to taste (browsing the UI issues a handful of calls).
+- ``ui_readonly`` turns the instance into a safe, view-only share: every mutating
+  route (job CRUD, backfill run/cancel, stream start/stop) returns ``403`` while
+  ``GET`` views keep working.
+- ``ui_trusted_proxy`` decides the rate-limit client key. **Leave it off** unless the
+  app is reachable *only* through a reverse proxy that overwrites ``X-Forwarded-For``
+  — otherwise a direct client can forge the header and bypass the limit. With it off,
+  the key is the socket peer (the proxy's address if you're behind one).
+
 Checklist
 =========
 

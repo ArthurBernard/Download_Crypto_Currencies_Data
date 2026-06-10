@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- API hardening for remote exposure (all opt-in, off by default): `ui_rate_limit`
+  (token-bucket per client on `/api/*`, over budget → `429` + `Retry-After`),
+  `ui_readonly` (block mutating methods → `403`, view-only share), and
+  `ui_trusted_proxy` (trust `X-Forwarded-For` as the rate-limit key only behind a
+  vetted proxy). Regression tests prove CORS is never wildcard and every mutating
+  route is `401` without a token. Verified live over Tailscale. (#108)
 - Browser login + session: when `ui_auth_token` is set, the web UI now serves a
   `/login` page and an `HttpOnly`, `SameSite=Lax` session cookie (marked `Secure`
   behind an HTTPS proxy), with a Logout control. Page routes are gated (an

@@ -270,6 +270,33 @@ def create_app(
             return nxt
         return "/"
 
+    # --- hardening helpers (rate limit + read-only) ---
+
+    # key -> (tokens, last monotonic). Non-blocking token bucket: over budget ->
+    # 429 immediately (unlike transport.ratelimit which sleeps for outbound calls).
+    app.state.rate_buckets = {}
+
+    def _client_key(request: Request, settings: Any) -> str:
+        """Rate-limit key. Trust X-Forwarded-For only behind a vetted proxy, else
+        a direct client could forge it and mint unlimited keys."""
+        if getattr(settings, "ui_trusted_proxy", False):
+            xff = request.headers.get("x-forwarded-for", "")
+            if xff:
+                return xff.split(",", 1)[0].strip()
+        client = request.client
+        return client.host if client else "unknown"
+
+    def _rate_allow(key: str, limit: int) -> bool:
+        buckets = app.state.rate_buckets
+        now = time.monotonic()
+        tokens, last = buckets.get(key, (float(limit), now))
+        tokens = min(float(limit), tokens + (now - last) * limit)
+        if tokens < 1.0:
+            buckets[key] = (tokens, now)
+            return False
+        buckets[key] = (tokens - 1.0, now)
+        return True
+
     # CORS: no wildcard. The UI is served same-origin, so it needs no CORS at
     # all; allowing every origin let any website's JS drive the local API
     # (reachable on 127.0.0.1 from the user's browser). Cross-origin access is
@@ -285,31 +312,51 @@ def create_app(
 
     @app.middleware("http")
     async def _auth_guard(request: Request, call_next):
-        """Gate the API and the page routes when ``ui_auth_token`` is set.
+        """Rate-limit, authenticate and (optionally) read-only-gate requests.
 
-        ``/api/*`` accepts a Bearer header, a ``?token=`` query (for non-browser
-        SSE) **or** a valid session cookie. Page routes accept only the session
-        cookie (browsers can't send Bearer on navigation) and otherwise redirect
-        to ``/login`` — so an unauthenticated load never receives a token-bearing
-        page. With no token configured (localhost default) everything passes.
+        Order matters: rate limit ``/api/*`` first (cheap rejection, before any
+        auth work), then authenticate, then enforce read-only — so an
+        unauthenticated mutating call still gets ``401`` (auth wins) rather than
+        ``403``. ``/api/*`` accepts a Bearer header, a ``?token=`` query (non-browser
+        SSE) or the session cookie; page routes accept only the cookie and otherwise
+        redirect to ``/login``. With no token configured everything authenticates,
+        but rate-limit and read-only still apply if enabled.
         """
-        token = _configured_token()
-        if not token or request.method == "OPTIONS":
-            return await call_next(request)
+        settings = getattr(getattr(app.state, "config", None), "settings", None)
         path = request.url.path
-        if path.startswith("/api/"):
-            bearer = request.headers.get("Authorization") == f"Bearer {token}"
-            query = request.query_params.get("token") == token
-            if not (bearer or query or _valid_session(request)):
-                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-            return await call_next(request)
-        # Non-API: the login flow, static assets and health stay open; everything
-        # else is a page route requiring a session cookie. Skip when there is no
-        # UI (API-only deployments have no page routes to gate).
-        if templates is None or path.startswith(_OPEN_PREFIXES):
-            return await call_next(request)
-        if not _valid_session(request):
-            return RedirectResponse(f"/login?next={path}", status_code=303)
+        method = request.method
+        is_api = path.startswith("/api/")
+
+        # 1) Rate limit /api/* (independent of auth), opt-in via ui_rate_limit.
+        limit = int(getattr(settings, "ui_rate_limit", 0) or 0)
+        if is_api and method != "OPTIONS" and limit > 0:
+            if not _rate_allow(_client_key(request, settings), limit):
+                return JSONResponse(
+                    {"detail": "rate limited"}, status_code=429,
+                    headers={"Retry-After": "1"},
+                )
+
+        # 2) Authenticate (when a token is configured).
+        token = _configured_token()
+        if token and method != "OPTIONS":
+            if is_api:
+                bearer = request.headers.get("Authorization") == f"Bearer {token}"
+                query = request.query_params.get("token") == token
+                if not (bearer or query or _valid_session(request)):
+                    return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            elif templates is not None and not path.startswith(_OPEN_PREFIXES):
+                # Page route: only the session cookie authenticates a browser.
+                if not _valid_session(request):
+                    return RedirectResponse(f"/login?next={path}", status_code=303)
+
+        # 3) Read-only gate (after auth): block mutating /api/* when ui_readonly.
+        if (
+            is_api
+            and getattr(settings, "ui_readonly", False)
+            and method in ("POST", "PUT", "PATCH", "DELETE")
+        ):
+            return JSONResponse({"detail": "read-only"}, status_code=403)
+
         return await call_next(request)
 
     if _STATIC_DIR.exists():
