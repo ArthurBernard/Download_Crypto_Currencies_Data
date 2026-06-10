@@ -1,12 +1,12 @@
 ---
 plan: perf-robustness/05-ui-transport-efficiency
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: [02]
 parallel: false
 branch: feat/ui-transport-efficiency
-pr: ""
+pr: "#XX"
 ---
 
 # HTTP/UI transport efficiency: gzip, parallel fetches, saner polling, off-thread SQLite

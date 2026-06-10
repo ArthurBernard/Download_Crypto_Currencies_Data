@@ -32,6 +32,7 @@ from urllib.parse import parse_qs
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -301,6 +302,11 @@ def create_app(
     # all; allowing every origin let any website's JS drive the local API
     # (reachable on 127.0.0.1 from the user's browser). Cross-origin access is
     # opt-in via settings.ui_allow_origins.
+    # Compress API/page responses for remote (Tailscale/TLS) clients — inventory
+    # and runs JSON shrink ~10×. Starlette excludes `text/event-stream` from
+    # compression by default, so the SSE stream at /api/events is untouched.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
     allow_origins = list(getattr(getattr(config, "settings", None), "ui_allow_origins", []) or [])
     if allow_origins:
         app.add_middleware(
@@ -485,7 +491,9 @@ def create_app(
         remotes = [r.remote for r in cfg.storage.remotes]
         configured = bool(remotes)
         interval = cfg.storage.sync_interval
-        runs = _runs(request).list_runs(spec_id="remote-sync", limit=1)
+        runs = await asyncio.to_thread(
+            lambda: _runs(request).list_runs(spec_id="remote-sync", limit=1)
+        )
         last = None
         next_eta = None
         if runs:
@@ -570,7 +578,7 @@ def create_app(
     @app.get("/api/backfill/{run_id}")
     async def get_backfill_status(run_id: str, request: Request) -> dict[str, Any]:
         """Get the status of a backfill run by ``run_id``."""
-        run = _runs(request).get_run(run_id)
+        run = await asyncio.to_thread(_runs(request).get_run, run_id)
         if not run:
             raise HTTPException(404, f"Run {run_id!r} not found")
         return _parse_run(run)
@@ -587,7 +595,8 @@ def create_app(
     @app.get("/api/runs")
     async def list_runs(request: Request, limit: int = 50) -> dict[str, Any]:
         """List recent job runs."""
-        return {"runs": [_parse_run(r) for r in _runs(request).list_runs(limit=limit)]}
+        runs = await asyncio.to_thread(lambda: _runs(request).list_runs(limit=limit))
+        return {"runs": [_parse_run(r) for r in runs]}
 
     # -----------------------------------------------------------------------
     # Stream control
@@ -789,6 +798,12 @@ def create_app(
 
         async def _generator():
             try:
+                # Flush an immediate comment: GZipMiddleware (even though it
+                # excludes text/event-stream from compression) buffers the
+                # response *start* until the first body chunk — without this,
+                # EventSource sits in "connecting" until the first event or
+                # the 30 s heartbeat.
+                yield ": connected\n\n"
                 while True:
                     if await request.is_disconnected():
                         break

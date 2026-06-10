@@ -40,17 +40,22 @@ function invFor(j) {
   return INV.find(d => d.exchange===j.exchange && d.pair===pair && d.data_type===j.data_type);
 }
 
-async function loadAll() {
+async function loadAll(withInventory) {
   try {
-    const [jr, sr, ir] = await Promise.all([
-      api('GET','/api/jobs'), api('GET','/api/streams'), api('GET','/api/inventory')]);
+    // Inventory only seeds liveness from disk — fetch it on initial load and
+    // on SSE status changes (a stream stopped/failed wrote its last point),
+    // not on every 8 s poll: it is the heaviest endpoint and live samples
+    // arrive over SSE anyway.
+    const reqs = [api('GET','/api/jobs'), api('GET','/api/streams')];
+    if (withInventory) reqs.push(api('GET','/api/inventory'));
+    const [jr, sr, ir] = await Promise.all(reqs);
     JOBS = (jr.jobs||[]).filter(j => j.operation === 'stream');
     RUNNING = {};
     for (const s of (sr.streams||[])) RUNNING[s.id] = s.running;
     // Seed liveness from what's on disk so a page refresh immediately reflects
     // the last stored data point (and its freshness) instead of "waiting…".
     // Real-time SSE samples (`live`) always win and are never overwritten here.
-    INV = ir.datasets || [];
+    if (ir) INV = ir.datasets || [];
     for (const j of JOBS) {
       if (samples[j.id] && samples[j.id].live) continue;
       const inv = invFor(j);
@@ -187,7 +192,7 @@ async function toggleStream(jobId) {
     await api('POST', running?'/api/streams/stop':'/api/streams/start', { spec_id: jobId });
     toast(running?'Stream stopped':'Stream started','ok');
     if (running) delete samples[jobId];
-    setTimeout(loadAll, 400);
+    setTimeout(() => loadAll(true), 400);
   } catch (e) { toast(e.message,'err'); btn.disabled = false; }
 }
 
@@ -290,7 +295,7 @@ function connectSSE() {
       samples[specId] = { value: ev.value, bid: ev.bid, ask: ev.ask, ts: ev.ts, live: true };
     } else if (ev.kind === 'status') {
       // a stream stopping/failing → refresh state soon
-      setTimeout(loadAll, 300);
+      setTimeout(() => loadAll(true), 300);
     }
   };
   es.onerror = () => {
@@ -300,7 +305,7 @@ function connectSSE() {
 }
 
 initTabs('#live-tabs');
-loadAll();
+loadAll(true);
 connectSSE();
 setInterval(refreshLiveness, 1000);
 setInterval(loadAll, 8000);
