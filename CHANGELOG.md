@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   starts with a random jitter instead of firing every job at once on daemon
   start. `HealthMonitor` alerts once when the failure threshold is crossed,
   then at most hourly — instead of on every failure (a broken job used to spam
-  the webhook every ~20 s). (#XX)
+  the webhook every ~20 s). (#118)
 
 ### Deprecated
 

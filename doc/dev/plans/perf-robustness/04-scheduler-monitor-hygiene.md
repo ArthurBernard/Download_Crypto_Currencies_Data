@@ -6,7 +6,7 @@ complexity: medium
 depends: []
 parallel: true
 branch: fix/scheduler-monitor-hygiene
-pr: "#XX"
+pr: "#118"
 ---
 
 # Scheduler backoff + startup jitter; HealthMonitor alert cooldown
