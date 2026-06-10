@@ -73,7 +73,7 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=200),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=1000, depths=[1, 50, 200, 1000]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -166,6 +166,14 @@ class _BybitWS(WebSocketBase):
         full_topic = f"{self._topic}.{self._param}.{self._symbol}" if self._param else f"{self._topic}.{self._symbol}"
         await ws.send(json.dumps({"op": "subscribe", "args": [full_topic]}))
 
+    def _check_sub_ack(self, data: dict[str, Any]) -> None:
+        """Raise on a rejected subscription instead of silently filtering it."""
+        if data.get("op") == "subscribe" and data.get("success") is False:
+            raise RuntimeError(
+                f"bybit {self._topic} subscription rejected for "
+                f"{self._symbol}: {data.get('ret_msg', 'unknown error')}"
+            )
+
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
         """Parse a raw WebSocket frame into domain records."""
         return
@@ -175,6 +183,7 @@ class _BybitWS(WebSocketBase):
         """Stream live OHLC bars over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
+            self._check_sub_ack(data)
             if "data" not in data:
                 continue
             for k in data["data"]:
@@ -191,6 +200,7 @@ class _BybitWS(WebSocketBase):
         """Stream live trades over WebSocket."""
         async for raw in self.stream_raw():
             data = json.loads(raw)
+            self._check_sub_ack(data)
             if "data" not in data:
                 continue
             for t in data["data"]:
@@ -224,6 +234,7 @@ class _BybitWS(WebSocketBase):
         last_emit: float = -float("inf")  # ensure the first frame always emits
         async for raw in self.stream_raw():
             data = json.loads(raw)
+            self._check_sub_ack(data)
             if "data" not in data:
                 continue
             d = data["data"]

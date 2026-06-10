@@ -87,7 +87,7 @@ class BinanceSource(
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=20),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=20, depths=[5, 10, 20]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:

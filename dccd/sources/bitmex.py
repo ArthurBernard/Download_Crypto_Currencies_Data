@@ -77,7 +77,7 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
             Capability(data_type=DataType.ORDERBOOK, transport="rest", mode="historical"),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
-            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=10),
+            Capability(data_type=DataType.ORDERBOOK, transport="ws", mode="live", max_depth=10, depths=[10]),
         ]
 
     def render_symbol(self, s: Symbol) -> str:
@@ -239,10 +239,23 @@ class _BitMEXWS(WebSocketBase):
         """Send the subscription message after each (re)connect."""
         await ws.send(json.dumps({"op": "subscribe", "args": [f"{self._topic}:{self._symbol}"]}))
 
+    def _check_sub_ack(self, data: dict[str, Any]) -> None:
+        """Raise on a rejected subscription instead of silently filtering it."""
+        if "error" in data:
+            raise RuntimeError(
+                f"bitmex {self._topic} subscription rejected for "
+                f"{self._symbol}: {data.get('error', 'unknown error')}"
+            )
+        if data.get("subscribe") and data.get("success") is False:
+            raise RuntimeError(
+                f"bitmex {self._topic} subscription rejected for {self._symbol}"
+            )
+
     async def parse_message(self, raw: str | bytes) -> AsyncIterator[Any]:
         """Parse a raw WebSocket frame into domain records."""
         from datetime import datetime
         data = json.loads(raw)
+        self._check_sub_ack(data)
         if "data" not in data:
             return
 
@@ -304,6 +317,9 @@ class _BitMEXWS(WebSocketBase):
         async for raw in self.stream_raw():
             now = time.monotonic()
             if now - last_emit < min_interval:
+                # Throttled frames are still checked for a subscription
+                # rejection — swallowing it here would leave a silent stream.
+                self._check_sub_ack(json.loads(raw))
                 continue
             async for record in self.parse_message(raw):
                 last_emit = time.monotonic()
