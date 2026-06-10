@@ -61,6 +61,14 @@ _(nothing release-blocking — see the roadmap for the next epics)_
   verified end-to-end on a real Ubuntu server (build/install, `/health`, **real
   reboot** survival, `HealthMonitor` webhook alerts, secret injection). Documented in
   `doc/source/how-to/deploy.rst`.
+- **Remote UI exposure (Epic B — done)**: `doc/source/how-to/expose-remote.rst`
+  documents TLS-fronted access (Caddy/nginx/Cloudflare Tunnel), the Tailscale overlay,
+  the hardening settings and a threat model; dccd stays on loopback behind a proxy.
+  Browser `/login` + `HttpOnly` cookie session gates the UI pages and the token is no
+  longer templated into pages; API hardening (`ui_rate_limit` → 429, `ui_readonly` →
+  403, `ui_trusted_proxy`, CORS-never-wildcard test); mobile-responsive pass
+  (table-scroll wrappers, tap targets, `@media`; `ui_smoke.py` 390px overflow check).
+  All verified live over Tailscale / a headless mobile viewport.
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a
   `dccd.application` daemon example).
@@ -83,6 +91,7 @@ expected after the 3.0 release.
 
 ## What's next
 
-See [`07-roadmap.md`](07-roadmap.md): Epic A (remote server) and Epic C (sync) are
-done; **Epic B** (reach the UI remotely from a PC/mobile, behind TLS + auth) is the
-next axis.
+See [`07-roadmap.md`](07-roadmap.md): Epics A (remote run), B (remote access) and C
+(sync) are all done — dccd now runs unattended on a server, is reachable securely from
+anywhere, and backs up off-box. The remaining axes are the **Deferred — M3** items
+(MCP interface, Kraken deep OHLC from trades, derivative markets, private endpoints).

@@ -100,7 +100,8 @@ declares a ``HEALTHCHECK`` against ``/health``. Set ``settings.data_path: /data`
 Reaching the UI from another machine
 ====================================
 
-The default bind is ``127.0.0.1``. To reach the UI remotely, set
-``ui_host: 0.0.0.0`` **and** a token (:doc:`protect-ui`), and put it behind a
-private network (e.g. Tailscale) or a TLS reverse proxy — never expose the API
-plaintext on the public internet.
+The default bind is ``127.0.0.1``. To reach the UI from a laptop or phone, put it
+behind a private network (e.g. Tailscale) or a TLS reverse proxy — never expose the
+API plaintext on the public internet. The full procedure (Caddy, nginx, Cloudflare
+Tunnel, Tailscale), the hardening settings, and a threat model are in
+:doc:`expose-remote`.

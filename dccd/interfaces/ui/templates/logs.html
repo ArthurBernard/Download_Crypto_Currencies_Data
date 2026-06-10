@@ -50,7 +50,7 @@ function clearLive() { logEl.textContent = 'Waiting for events…\n'; eventCount
 
 function connect() {
   if (es) es.close();
-  es = new EventSource('/api/events' + (DCCD_TOKEN ? '?token=' + encodeURIComponent(DCCD_TOKEN) : ''));
+  es = new EventSource('/api/events');
   es.onopen = () => { statusEl.innerHTML = '<span class="ok">● connected</span>'; };
   es.onmessage = (e) => {
     if (e.data.startsWith(':')) return;

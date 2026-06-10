@@ -173,6 +173,7 @@ cursor-paginated and drain the full requested window.
    how-to/sync-remote
    how-to/protect-ui
    how-to/deploy
+   how-to/expose-remote
    how-to/add-exchange
 
 .. toctree::

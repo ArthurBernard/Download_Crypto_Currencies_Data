@@ -120,6 +120,46 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-10 — API hardening = in-process rate limit + read-only verb gate, both opt-in (PR #108) [accepted]
+- **Choice**: harden `/api/*` for exposure with an in-process, non-blocking per-client
+  token bucket (`ui_rate_limit`, over budget → `429`+`Retry-After`) and a read-only
+  mode (`ui_readonly`) that blocks mutating verbs (`403`). The rate-limit client key is
+  the socket peer unless `ui_trusted_proxy` is set (then `X-Forwarded-For` first hop).
+  Layered before/after auth so a `401` still wins over `403` for unauth mutating calls.
+- **Why**: a remotely reachable API needs abuse resistance and a safe view-only share
+  without standing up Redis/an external WAF. Trusting `X-Forwarded-For` blindly would
+  let a direct client forge the key, so it is gated behind an explicit proxy-trust flag.
+- **Rejected alternatives**: the blocking `transport.ratelimit` bucket (it sleeps — for
+  outbound calls, not inbound rejection); an external rate-limiter dependency; per-route
+  role decorators (a verb gate is enough for a single shared token).
+
+### 2026-06-10 — Browser auth = opaque HttpOnly cookie session, gate pages, stop templating the token (PR #107) [accepted]
+- **Choice**: when `ui_auth_token` is set, add a `/login` page that mints an opaque
+  in-process session id stored as an `HttpOnly`/`SameSite=Lax` cookie (`Secure` derived
+  from scheme/`X-Forwarded-Proto`); gate the page routes (unauth → 303 `/login`); the
+  API guard accepts the cookie as well as `Bearer`/`?token=`; and the raw token is no
+  longer injected into any served page. Open-redirect guard on `next`; the urlencoded
+  login form is parsed by hand to avoid a `python-multipart` dependency.
+- **Why**: exposing the UI remotely made the server-templated token a leak (anyone who
+  loaded a page got it). Cookies are the browser-native auth, work with header-less SSE
+  (`EventSource` sends same-origin cookies), and `SameSite=Lax` protects the mutating
+  POST/DELETE routes from CSRF. Linchpin of Epic B.
+- **Rejected alternatives**: signed/stateless JWT (overkill for one shared secret);
+  keeping the templated token (the leak); HTTP Basic (no logout, worse UX);
+  `SameSite=None` (re-opens CSRF); adding `python-multipart` just to read one field.
+
+### 2026-06-10 — Remote UI exposure = TLS reverse proxy or private overlay; app stays on loopback (PR #106) [accepted]
+- **Choice**: document remote UI access (`how-to/expose-remote`) as either (a) a TLS
+  reverse proxy (Caddy blessed; nginx / Cloudflare Tunnel alternatives) with dccd kept
+  on `ui_host: 127.0.0.1`, or (b) a private Tailscale/WireGuard overlay where binding
+  `0.0.0.0` is acceptable because the tailnet is already encrypted+authenticated. The
+  `ui_auth_token` is defence-in-depth, not transport security. First leaf of Epic B.
+- **Why**: the API must never travel plaintext off-box; TLS termination belongs in a
+  proxy (auto Let's Encrypt) or is provided by the overlay, not baked into the app.
+- **Rejected alternatives**: binding `0.0.0.0` on a public IP with only the token (no
+  encryption); implementing TLS inside the app (proxies do it better, auto-renew);
+  documenting only one path (Tailscale-only would exclude public VPS users).
+
 ### 2026-06-10 — Blessed deploy path = systemd (venv), Docker as alternative (PR #102) [accepted]
 - **Choice**: `how-to/deploy` documents **systemd + a venv** as the recommended path
   for a long-lived server, with **Docker** as the containerised alternative (not the

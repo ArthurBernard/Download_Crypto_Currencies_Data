@@ -143,6 +143,24 @@ async def main() -> int:
                 await page.wait_for_timeout(1000)
         step(True, "live stream deleted")
 
+        # 4. Mobile viewport pass: no page-wide horizontal overflow; nav usable.
+        await page.set_viewport_size({"width": 390, "height": 844})
+        for path in ["/", "/data", "/historical", "/live", "/config", "/logs", "/storage"]:
+            await page.goto(BASE + path, wait_until="domcontentloaded")
+            await page.wait_for_timeout(1400)
+            overflow = await page.evaluate(
+                "() => document.documentElement.scrollWidth - window.innerWidth"
+            )
+            step(overflow <= 1, f"no horizontal overflow @390px on {path} (Δ={overflow}px)")
+
+        await page.goto(BASE + "/", wait_until="domcontentloaded")
+        await page.wait_for_timeout(600)
+        await page.get_by_role("button", name="Collect ▾").click()
+        await page.wait_for_timeout(200)
+        await page.locator("nav").get_by_role("link", name="Historical").click()
+        await page.wait_for_timeout(800)
+        step("/historical" in page.url, "mobile nav dropdown routes")
+
         await browser.close()
 
     print("\nconsole errors :", len(console_errs))

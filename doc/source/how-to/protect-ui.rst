@@ -2,16 +2,23 @@
 Protect the web UI with a token
 ===============================
 
-Set a token; the API then requires ``Authorization: Bearer <token>`` and the UI
-injects it automatically:
+Set a token; the API then requires ``Authorization: Bearer <token>``:
 
 .. code-block:: yaml
 
    settings:
      ui_auth_token: "a-long-random-string"
 
+When a token is set, the **web UI gates its pages too**: an unauthenticated browser
+is redirected to a ``/login`` page, and submitting the token sets an ``HttpOnly``
+session cookie (``SameSite=Lax``, marked ``Secure`` behind an HTTPS proxy). The raw
+token is **never** embedded in a served page — the browser holds only the opaque
+cookie, and the API accepts that cookie (as well as ``Bearer``/``?token=`` for
+non-browser clients). A **Logout** control clears the session. For programmatic
+access keep using the ``Authorization: Bearer`` header.
+
 Keep the default ``127.0.0.1`` bind for anything sensitive, or front it with a
-reverse proxy. See :doc:`/http-api` and :doc:`/web-ui`.
+reverse proxy (:doc:`expose-remote`). See :doc:`/http-api` and :doc:`/web-ui`.
 
 Injecting the token at deploy time
 ==================================

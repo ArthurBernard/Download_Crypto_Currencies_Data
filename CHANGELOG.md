@@ -16,6 +16,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.3.0] - 2026-06-10
+
+### Added
+
+- Threat-model section in `how-to/expose-remote` (trust boundaries: localhost / tailnet
+  / public; what the token+cookie session protect and don't; residual risks; a
+  recommended-postures table) — completing **Epic B** (view the UI remotely). (#110)
+- API hardening for remote exposure (all opt-in, off by default): `ui_rate_limit`
+  (token-bucket per client on `/api/*`, over budget → `429` + `Retry-After`),
+  `ui_readonly` (block mutating methods → `403`, view-only share), and
+  `ui_trusted_proxy` (trust `X-Forwarded-For` as the rate-limit key only behind a
+  vetted proxy). Regression tests prove CORS is never wildcard and every mutating
+  route is `401` without a token. Verified live over Tailscale. (#108)
+- Browser login + session: when `ui_auth_token` is set, the web UI now serves a
+  `/login` page and an `HttpOnly`, `SameSite=Lax` session cookie (marked `Secure`
+  behind an HTTPS proxy), with a Logout control. Page routes are gated (an
+  unauthenticated load is redirected to `/login`, no longer served), and the API
+  accepts the cookie alongside `Bearer`/`?token=`. Verified live over Tailscale. (#107)
+- How-to guide `how-to/expose-remote` for reaching the UI from a laptop/phone behind
+  TLS (Caddy/nginx/Cloudflare Tunnel) or a private Tailscale overlay — never the API
+  plaintext off-box. Verified on a real server (Tailscale path reached live; Caddy
+  installs + reverse-proxies). (#106)
+
+### Changed
+
+- Responsive layout for the web UI on narrow (mobile) viewports: wide/dense tables
+  scroll inside their own box (a `MutationObserver` wraps tables built after fetch),
+  bigger tap targets, and tighter nav/chrome under 640px — desktop layout unchanged.
+  `ui_smoke.py` gains a 390px mobile pass asserting no page-wide horizontal overflow.
+  Verified: 27/27 smoke steps, Δ=0px overflow on every page. (#109)
+
+### Fixed
+
+- The web UI no longer injects the raw `ui_auth_token` into served pages (it was
+  templated into `base.html`); a remotely reachable UI could leak the token to anyone
+  who loaded a page. The browser now holds only an opaque session cookie. (#107)
+
+### Deprecated
+
+### Removed
+
 ## [3.2.0] - 2026-06-10
 
 ### Added

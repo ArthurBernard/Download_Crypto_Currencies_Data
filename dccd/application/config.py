@@ -37,18 +37,37 @@ SUPPORTED_EXCHANGES: frozenset[str] = frozenset(
 
 
 class SettingsConfig(BaseModel):
-    """Global settings: data path, timezone, and web-UI bind/auth."""
+    """Global settings: data path, timezone, and web-UI bind/auth.
+
+    Hardening knobs (all off by default, i.e. localhost-safe):
+
+    - ``ui_readonly`` — block mutating HTTP methods on ``/api/*`` (read-only share).
+    - ``ui_rate_limit`` — requests/sec per client on ``/api/*`` (``0`` disables).
+    - ``ui_trusted_proxy`` — trust ``X-Forwarded-For`` as the rate-limit client key.
+      Enable **only** behind a reverse proxy that overwrites the header, else a direct
+      client can forge it and bypass the limit.
+    """
     data_path: str = "./data/crypto"
     timezone: str = "local"
     ui_host: str = "127.0.0.1"
     ui_port: int = 8080
     ui_auth_token: str | None = None
     ui_allow_origins: list[str] = Field(default_factory=list)
+    ui_readonly: bool = False
+    ui_rate_limit: int = 0
+    ui_trusted_proxy: bool = False
 
     @field_validator("data_path")
     @classmethod
     def _expand(cls, v: str) -> str:
         return str(pathlib.Path(v).expanduser())
+
+    @field_validator("ui_rate_limit")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("ui_rate_limit must be >= 0")
+        return v
 
     @field_validator("timezone")
     @classmethod
