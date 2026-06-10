@@ -24,8 +24,11 @@ import asyncio
 import contextlib
 import logging
 import pathlib
+import secrets
+import time
 from collections.abc import Coroutine
 from typing import Any, cast
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,6 +58,14 @@ from dccd.storage.runs_sqlite import RunsStore
 _UI_DIR = pathlib.Path(__file__).parent.parent / "ui"
 _TEMPLATES_DIR = _UI_DIR / "templates"
 _STATIC_DIR = _UI_DIR / "static"
+
+# Browser session cookie (set on /login when ui_auth_token is configured). The
+# cookie is opaque and HttpOnly; the raw token is never sent to the browser.
+_SESSION_COOKIE = "dccd_session"
+_SESSION_TTL_SECONDS = 7 * 24 * 3600
+_SESSION_TTL_NS = _SESSION_TTL_SECONDS * 1_000_000_000
+# Paths reachable without a session (so the login flow itself is not gated).
+_OPEN_PREFIXES = ("/login", "/logout", "/static", "/health")
 
 __all__ = ["create_app"]
 
@@ -219,6 +230,46 @@ def create_app(
 
     app = FastAPI(title="dccd v3", version="3.0.0", lifespan=lifespan)
 
+    # Browser sessions: sid -> creation time (ns). Opaque, in-process; reset on
+    # restart (acceptable for a single-node daemon). Populated by POST /login.
+    app.state.sessions = {}
+
+    # --- session / auth helpers (closures over app.state) ---
+
+    def _configured_token() -> str | None:
+        cfg = getattr(app.state, "config", None)
+        return getattr(getattr(cfg, "settings", None), "ui_auth_token", None)
+
+    def _prune_sessions() -> None:
+        cutoff = time.time_ns() - _SESSION_TTL_NS
+        for sid in [s for s, ts in app.state.sessions.items() if ts < cutoff]:
+            app.state.sessions.pop(sid, None)
+
+    def _new_session() -> str:
+        sid = secrets.token_urlsafe(32)
+        app.state.sessions[sid] = time.time_ns()
+        return sid
+
+    def _valid_session(request: Request) -> bool:
+        sid = request.cookies.get(_SESSION_COOKIE)
+        if not sid:
+            return False
+        _prune_sessions()
+        return sid in app.state.sessions
+
+    def _request_is_https(request: Request) -> bool:
+        """True over real HTTPS or behind a proxy that sets X-Forwarded-Proto."""
+        if request.url.scheme == "https":
+            return True
+        fwd = request.headers.get("x-forwarded-proto", "")
+        return fwd.split(",", 1)[0].strip() == "https"
+
+    def _safe_next(nxt: str | None) -> str:
+        """Local-path-only redirect target (blocks //evil.com and absolute URLs)."""
+        if nxt and nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+            return nxt
+        return "/"
+
     # CORS: no wildcard. The UI is served same-origin, so it needs no CORS at
     # all; allowing every origin let any website's JS drive the local API
     # (reachable on 127.0.0.1 from the user's browser). Cross-origin access is
@@ -234,24 +285,31 @@ def create_app(
 
     @app.middleware("http")
     async def _auth_guard(request: Request, call_next):
-        """Require a Bearer token on /api/* when settings.ui_auth_token is set.
+        """Gate the API and the page routes when ``ui_auth_token`` is set.
 
-        Page routes are intentionally not gated (browsers can't send Bearer on
-        navigation); for untrusted networks, front the UI with a reverse proxy.
+        ``/api/*`` accepts a Bearer header, a ``?token=`` query (for non-browser
+        SSE) **or** a valid session cookie. Page routes accept only the session
+        cookie (browsers can't send Bearer on navigation) and otherwise redirect
+        to ``/login`` — so an unauthenticated load never receives a token-bearing
+        page. With no token configured (localhost default) everything passes.
         """
-        cfg = getattr(request.app.state, "config", None)
-        token = getattr(getattr(cfg, "settings", None), "ui_auth_token", None)
-        if (
-            token
-            and request.url.path.startswith("/api/")
-            and request.method != "OPTIONS"
-        ):
-            # Header for normal calls; query param for EventSource (SSE), which
-            # cannot set Authorization headers.
+        token = _configured_token()
+        if not token or request.method == "OPTIONS":
+            return await call_next(request)
+        path = request.url.path
+        if path.startswith("/api/"):
             bearer = request.headers.get("Authorization") == f"Bearer {token}"
             query = request.query_params.get("token") == token
-            if not (bearer or query):
+            if not (bearer or query or _valid_session(request)):
                 return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            return await call_next(request)
+        # Non-API: the login flow, static assets and health stay open; everything
+        # else is a page route requiring a session cookie. Skip when there is no
+        # UI (API-only deployments have no page routes to gate).
+        if templates is None or path.startswith(_OPEN_PREFIXES):
+            return await call_next(request)
+        if not _valid_session(request):
+            return RedirectResponse(f"/login?next={path}", status_code=303)
         return await call_next(request)
 
     if _STATIC_DIR.exists():
@@ -718,12 +776,63 @@ def create_app(
                 ver = "dev"
             cfg = getattr(request.app.state, "config", None)
             settings = getattr(cfg, "settings", None)
-            token = getattr(settings, "ui_auth_token", None)
             tz = getattr(settings, "timezone", None) or "local"
+            # `authed` drives the Logout affordance; only meaningful when a token
+            # is configured. The raw token is never injected into the page.
+            authed = bool(_configured_token()) and _valid_session(request)
             return {
                 "active": request.url.path, "version": ver, "page": page,
-                "auth_token": token or "", "timezone": tz,
+                "authed": authed, "timezone": tz,
             }
+
+        @app.get("/login")
+        async def ui_login(request: Request):
+            # No token configured, or already authenticated → nothing to log into.
+            if not _configured_token() or _valid_session(request):
+                return RedirectResponse("/", status_code=303)
+            try:
+                ver = _pkg_version("dccd")
+            except Exception:
+                ver = "dev"
+            return templates.TemplateResponse(
+                request, "login.html",
+                {"version": ver, "next": _safe_next(request.query_params.get("next")),
+                 "error": False},
+            )
+
+        @app.post("/login")
+        async def ui_login_post(request: Request):
+            token = _configured_token()
+            # Parse the urlencoded form by hand to avoid a python-multipart dep.
+            fields = parse_qs((await request.body()).decode("utf-8", "replace"))
+            submitted = (fields.get("token") or [""])[0]
+            nxt = _safe_next((fields.get("next") or ["/"])[0])
+            if not token or not secrets.compare_digest(submitted, token):
+                try:
+                    ver = _pkg_version("dccd")
+                except Exception:
+                    ver = "dev"
+                return templates.TemplateResponse(
+                    request, "login.html",
+                    {"version": ver, "next": nxt, "error": True},
+                    status_code=401,
+                )
+            sid = _new_session()
+            resp = RedirectResponse(nxt, status_code=303)
+            resp.set_cookie(
+                _SESSION_COOKIE, sid, httponly=True, samesite="lax",
+                secure=_request_is_https(request), max_age=_SESSION_TTL_SECONDS, path="/",
+            )
+            return resp
+
+        @app.post("/logout")
+        async def ui_logout(request: Request):
+            sid = request.cookies.get(_SESSION_COOKIE)
+            if sid:
+                app.state.sessions.pop(sid, None)
+            resp = RedirectResponse("/login", status_code=303)
+            resp.delete_cookie(_SESSION_COOKIE, path="/")
+            return resp
 
         # Starlette >= 0.29 / 1.x signature: TemplateResponse(request, name, context)
         @app.get("/")

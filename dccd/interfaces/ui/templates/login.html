@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — dccd UI</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <style>
+    :root { --bg:#0f1419; --fg:#e6e6e6; --muted:#8b98a5; --accent:#4a9eff;
+            --border:#2a3038; --card:#161b22; --ok:#3fb950; --err:#f85149; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg);
+           color:var(--fg); display:flex; min-height:100vh; align-items:center;
+           justify-content:center; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+            padding:2rem; width:min(92vw, 360px); }
+    .brand { display:flex; align-items:center; gap:.5rem; margin-bottom:1.25rem; }
+    .brand img { height:32px; width:auto; }
+    .brand .name { font-size:1.2rem; font-weight:700; }
+    .brand .ver { color:var(--muted); font-size:.78rem; }
+    label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:.35rem; }
+    input[type=password] { width:100%; padding:.6rem .7rem; border-radius:8px;
+            border:1px solid var(--border); background:var(--bg); color:var(--fg);
+            font-size:1rem; }
+    button { margin-top:1rem; width:100%; padding:.65rem; border:0; border-radius:8px;
+            background:var(--accent); color:#06121f; font-weight:700; font-size:1rem;
+            cursor:pointer; }
+    button:hover { filter:brightness(1.08); }
+    .err { margin-top:.9rem; color:var(--err); font-size:.85rem; }
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <div class="brand">
+      <img src="/static/logo.svg" alt="dccd">
+      <span class="name">dccd</span>
+      <span class="ver">v{{ version }}</span>
+    </div>
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="token">Access token</label>
+    <input id="token" name="token" type="password" autocomplete="current-password"
+           autofocus required>
+    <button type="submit">Sign in</button>
+    {% if error %}<div class="err">Invalid token — try again.</div>{% endif %}
+  </form>
+</body>
+</html>

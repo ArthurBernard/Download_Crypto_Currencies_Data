@@ -66,6 +66,95 @@ class TestAuth:
     def test_no_token_means_open(self, client):
         assert client.get("/api/inventory").status_code == 200
 
+    def test_api_accepts_query_token(self, auth_client):
+        # SSE/EventSource path: ?token= still authorises (non-browser clients).
+        r = auth_client.get("/api/inventory?token=s3cret")
+        assert r.status_code == 200
+
+
+class TestAuthSession:
+    """Browser login/session: page routes gated, token never templated."""
+
+    @pytest.fixture
+    def cfg(self, tmp_data_path):
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.settings.ui_auth_token = "s3cret"
+        return cfg
+
+    @pytest.fixture
+    def auth_client(self, cfg):
+        with TestClient(create_app(config=cfg)) as c:
+            yield c
+
+    def test_page_redirects_to_login_when_unauthenticated(self, auth_client):
+        r = auth_client.get("/", follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"] == "/login?next=/"
+
+    def test_login_page_renders(self, auth_client):
+        r = auth_client.get("/login")
+        assert r.status_code == 200
+        assert "token" in r.text.lower()
+
+    def test_login_wrong_token_401(self, auth_client):
+        r = auth_client.post(
+            "/login", data={"token": "nope", "next": "/"}, follow_redirects=False
+        )
+        assert r.status_code == 401
+
+    def test_login_sets_httponly_lax_cookie_and_grants_access(self, cfg):
+        with TestClient(create_app(config=cfg)) as c:
+            r = c.post(
+                "/login", data={"token": "s3cret", "next": "/"}, follow_redirects=False
+            )
+            assert r.status_code == 303
+            set_cookie = r.headers["set-cookie"].lower()
+            assert "dccd_session=" in set_cookie
+            assert "httponly" in set_cookie
+            assert "samesite=lax" in set_cookie
+            assert "samesite=none" not in set_cookie  # CSRF: never cross-site
+            # The session cookie now drives both pages and the API.
+            assert c.get("/", follow_redirects=False).status_code == 200
+            assert c.get("/api/inventory").status_code == 200
+
+    def test_api_rejects_without_cookie_or_bearer(self, auth_client):
+        # Fresh client (no cookie) cannot reach the API.
+        assert auth_client.get("/api/inventory").status_code == 401
+
+    def test_logout_clears_session(self, cfg):
+        with TestClient(create_app(config=cfg)) as c:
+            c.post("/login", data={"token": "s3cret", "next": "/"})
+            assert c.get("/", follow_redirects=False).status_code == 200
+            c.post("/logout", follow_redirects=False)
+            assert c.get("/", follow_redirects=False).status_code == 303
+
+    def test_token_never_in_page(self, cfg):
+        with TestClient(create_app(config=cfg)) as c:
+            c.post("/login", data={"token": "s3cret", "next": "/"})
+            body = c.get("/").text
+            assert "s3cret" not in body  # regression: token must not leak into HTML
+
+    def test_open_redirect_blocked(self, cfg):
+        for bad in ("//evil.com", "https://evil", "/\\evil"):
+            with TestClient(create_app(config=cfg)) as c:
+                r = c.post(
+                    "/login", data={"token": "s3cret", "next": bad},
+                    follow_redirects=False,
+                )
+                assert r.headers["location"] == "/", bad
+        with TestClient(create_app(config=cfg)) as c:
+            r = c.post(
+                "/login", data={"token": "s3cret", "next": "/data"},
+                follow_redirects=False,
+            )
+            assert r.headers["location"] == "/data"
+
+    def test_no_token_pages_open(self, client):
+        # Default localhost (no token): pages render without a login.
+        assert client.get("/", follow_redirects=False).status_code == 200
+
 
 class _OkRemote:
     """In-test remote that reports success without invoking rclone."""
