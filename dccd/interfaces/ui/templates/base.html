@@ -129,6 +129,24 @@
                           to { opacity:1; transform:none; } }
     .j-key { color:#4a9eff; } .j-str { color:#3fb950; }
     .j-num { color:#d2a8ff; } .j-bool { color:#f0883e; } .j-null { color:#8b98a5; }
+    /* Wide/dense tables scroll horizontally inside their own box instead of
+       pushing the whole page wide (wrapper added by wrapTables(), below). */
+    .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:100%; }
+    /* Mobile / narrow viewport: bigger tap targets, tighter chrome, no page-wide
+       horizontal scroll. Desktop layout above the breakpoint is untouched. */
+    @media (max-width: 640px) {
+      nav { padding:.4rem .6rem; gap:.15rem; }
+      nav a, nav .nav-menu-btn, nav .nav-logout button { padding:.55rem .7rem; }
+      nav .brand-group .ver { display:none; }
+      nav .nav-menu-items { max-width:calc(100vw - 1.2rem); }
+      main { padding:.8rem .7rem; }
+      h1 { font-size:1.15rem; }
+      h2 { font-size:1rem; }
+      button, .tab { min-height:40px; }
+      details.ex > summary { padding:.7rem .8rem; }
+      .inline-form { gap:.5rem; }
+      .modal { min-width:0; width:calc(100vw - 2rem); }
+    }
   </style>
 </head>
 <body>
@@ -311,6 +329,25 @@
       root.appendChild(el);
       setTimeout(function () { el.remove(); }, kind === 'err' ? 6000 : 3500);
     }
+    // Keep wide tables inside a horizontally-scrollable box so a narrow viewport
+    // never scrolls the whole page sideways. Idempotent; a MutationObserver re-runs
+    // it for tables that pages build after fetching data.
+    function wrapTables(root) {
+      (root || document).querySelectorAll('main table').forEach(function (t) {
+        if (!t.parentElement.classList.contains('table-scroll')) {
+          var w = document.createElement('div');
+          w.className = 'table-scroll';
+          t.parentNode.insertBefore(w, t);
+          w.appendChild(t);
+        }
+      });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      wrapTables();
+      var main = document.querySelector('main') || document.body;
+      new MutationObserver(function () { wrapTables(); })
+        .observe(main, { childList: true, subtree: true });
+    });
     // Auth is carried by the HttpOnly `dccd_session` cookie (set at /login); the
     // raw token is never exposed to JS. `same-origin` ensures the cookie is sent.
     async function api(method, url, body) {
