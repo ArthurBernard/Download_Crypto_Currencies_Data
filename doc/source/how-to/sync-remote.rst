@@ -80,3 +80,19 @@ To spot-check integrity, compare counts/sizes between local and remote:
 
 Because the coverage manifest lives under ``.dccd`` (also synced), a restored
 instance keeps its resume cursors and continues collecting without gaps.
+
+Production checklist
+====================
+
+A sync deployment is not production-ready until all of the following are true:
+
+- **Remote configured and named** — ``rclone listremotes`` shows the target;
+  ``rclone lsd <remote>:<bucket>`` reaches it without auth errors.
+- **sync_interval set** — ``storage.sync_interval`` is non-zero in config (e.g.
+  ``3600`` for hourly). Leaving it at ``0`` disables automatic sync.
+- **Alert webhook ON** — set ``alerts.webhook_url`` so a failed sync cycle pages
+  you (see :doc:`deploy` → *Operate it → Alerts*).
+- **systemd limits applied** — ``TimeoutStopSec=120`` and an appropriate
+  ``MemoryMax`` are in the unit or a drop-in (see :doc:`deploy` →
+  *Production checklist*). A mid-drain SIGKILL can corrupt a partially-written
+  Parquet file before it is synced.

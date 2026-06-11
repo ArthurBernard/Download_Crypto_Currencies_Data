@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/06-prod-hardening
 kind: leaf
-status: planned
+status: executing
 complexity: medium
 depends: []
 parallel: false
