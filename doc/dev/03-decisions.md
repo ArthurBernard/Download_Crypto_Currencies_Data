@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-11 — Sphinx -W in CI, with docutils warnings suppressed (PR #XX)  [accepted]
+### 2026-06-11 — Sphinx -W in CI, with docutils warnings suppressed (PR #133)  [accepted]
 - **Choice**: a separate CI `docs` job builds with `sphinx-build -W`
   (warnings = errors), and `conf.py` adds
   `suppress_warnings = ['ref.citation', 'docutils']` to mute docutils noise
