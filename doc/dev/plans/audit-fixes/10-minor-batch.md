@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/10-minor-batch
 kind: leaf
-status: planned
+status: done
 complexity: low
 depends: []
 parallel: false

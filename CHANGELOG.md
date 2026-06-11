@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The OpenAPI schema (`/docs`, `/openapi.json`) reports the real installed
+  package version instead of a hardcoded "3.0.0"; CI gains a `docs` job that
+  builds Sphinx with `-W` so the "0 warnings" rule is enforced on every PR
+  (proven to fail on an injected broken reference). (#XX)
 - Stream jobs without a live WS capability no longer leak zombie `running`
   rows in runs.db (the capability check now runs before `create_run`), and
   their supervisor stops instead of retrying a permanent error every 60 s;

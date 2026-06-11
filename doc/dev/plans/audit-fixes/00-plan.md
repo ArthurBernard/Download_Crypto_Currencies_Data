@@ -56,7 +56,7 @@ roadmap ideas until load or evidence demands them.
 - [x] 07 gap-metric-context — feat/gap-metric-context — medium
 - [ ] 08 cli-tests — chore/cli-tests — medium (parallel)
 - [ ] 09 adapter-fixtures — chore/adapter-fixtures — medium (parallel)
-- [ ] 10 minor-batch — chore/audit-minor-batch — low
+- [x] 10 minor-batch — chore/audit-minor-batch — low
 
 ## Dependencies
 

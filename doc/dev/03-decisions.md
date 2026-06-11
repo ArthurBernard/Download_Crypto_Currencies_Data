@@ -120,6 +120,19 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — Sphinx -W in CI, with docutils warnings suppressed (PR #XX)  [accepted]
+- **Choice**: a separate CI `docs` job builds with `sphinx-build -W`
+  (warnings = errors), and `conf.py` adds
+  `suppress_warnings = ['ref.citation', 'docutils']` to mute docutils noise
+  coming from the sphinx-click/Typer rendering that we don't control.
+- **Why**: the "0 warnings" rule was only enforced by hand; `-W` makes it a
+  PR gate (verified to fail on an injected broken reference). The docutils
+  suppression is the price of `-W` viability — without it, third-party
+  rendering noise would block every PR for warnings we can't fix.
+- **Rejected alternatives**: grep-counting warnings in CI (fragile, doesn't
+  fail the build atomically); pinning/patching sphinx-click (maintenance
+  burden out of proportion).
+
 ### 2026-06-11 — Gap metric fix is presentational, not structural (PR #132)  [accepted]
 - **Choice**: keep `expected_rows`/`missing_rows` semantics (clock-time slots
   from footer stats) and fix the *presentation*: the Data page shows neutral
