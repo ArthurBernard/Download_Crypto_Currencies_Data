@@ -26,6 +26,7 @@ from dccd.sources.base import (
     OrderBookSnapshotREST,
     TradesHistory,
     TradesLive,
+    default_http_client,
 )
 from dccd.transport.http import AsyncHTTPClient
 from dccd.transport.ws import WebSocketBase
@@ -108,7 +109,7 @@ class KrakenSource(
     exchange = "kraken"
 
     def __init__(self, http: AsyncHTTPClient | None = None) -> None:
-        self._http = http or AsyncHTTPClient()
+        self._http = http or default_http_client(self.exchange)
 
     def capabilities(self) -> list[Capability]:
         """Declared capabilities, one per (data type × transport × mode)."""

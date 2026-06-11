@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from dccd.transport.ratelimit import RateLimiter
 
 __all__ = ["AsyncHTTPClient", "HTTPError"]
 
@@ -36,6 +39,15 @@ class AsyncHTTPClient:
         Exponential backoff base in seconds.
     timeout : float
         Request timeout in seconds.
+    exchange : str, optional
+        Exchange name used to key the *proactive* rate limiter. When set
+        together with *limiter*, every :meth:`get` awaits a token before the
+        request, smoothing bursts (e.g. "run all jobs") to the exchange's
+        published rate. ``None`` (default) disables proactive throttling.
+    limiter : RateLimiter, optional
+        Shared per-exchange limiter (typically
+        :func:`dccd.transport.ratelimit.shared_limiter`). Only consulted when
+        *exchange* is also set.
     """
 
     def __init__(
@@ -44,11 +56,15 @@ class AsyncHTTPClient:
         backoff_base: float = _DEFAULT_BACKOFF_BASE,
         timeout: float = _DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
+        exchange: str | None = None,
+        limiter: "RateLimiter | None" = None,
     ) -> None:
         self._max_retries = max_retries
         self._backoff_base = backoff_base
         self._timeout = timeout
         self._headers = headers or {}
+        self._exchange = exchange
+        self._limiter = limiter
         self._client: httpx.AsyncClient | None = None
         # Adapters share one AsyncHTTPClient and wrap each call in
         # ``async with self._http``. With two concurrent operations on the same
@@ -88,6 +104,12 @@ class AsyncHTTPClient:
         last_exc: Exception | None = None
         for attempt in range(self._max_retries):
             try:
+                # Proactive throttle: wait for a token before each outbound
+                # request so concurrent operations on the same exchange stay
+                # under its published rate (the shared limiter is keyed by
+                # exchange). Reactive 429 handling below remains as a backstop.
+                if self._limiter is not None and self._exchange is not None:
+                    await self._limiter.acquire(self._exchange)
                 resp = await client.get(url, params=params)
                 if resp.status_code == 429:
                     retry_after = float(resp.headers.get("Retry-After", self._backoff_base))

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Proactive per-exchange rate limiting on all REST fetches: the (previously
+  unwired) token-bucket `RateLimiter` is now a process-wide singleton keyed
+  by exchange, awaited before every outbound request — concurrent operations
+  on the same exchange share one bucket, so a `run-all` burst stays under
+  the exchange's published rate (reactive 429/Retry-After handling remains
+  as a backstop). Defaults verified against official docs (Coinbase's old
+  10/s constant was wrong — public cap is 3/s). Verified live on Kraken:
+  31 pages in 30 s = 1.03 req/s vs a 1.0/s cap, zero 429; 3 concurrent
+  backfills total 1.10 req/s, not 3×. (#130)
+
 ### Changed
 
 ### Fixed
