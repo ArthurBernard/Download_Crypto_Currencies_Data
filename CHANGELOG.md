@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their supervisor stops instead of retrying a permanent error every 60 s;
   the stream restart backoff resets to 5 s after a healthy run (≥ 300 s).
   (#126)
+- Runs orphaned in `running` state by a daemon crash/SIGKILL are marked
+  `stale` (with `error='orphaned by daemon restart'`) at daemon boot instead
+  of polluting `active_runs()`, `dccd status` and the Dashboard forever
+  (production had ~350 such rows). Boot-only: one-shot CLI commands never
+  trigger the purge. (#127)
 
 ### Deprecated
 

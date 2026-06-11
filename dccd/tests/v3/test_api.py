@@ -481,6 +481,27 @@ class TestRunsEndpoint:
         assert resp.status_code == 200
         assert "runs" in resp.json()
 
+    def test_orphaned_running_rows_marked_stale_at_boot(self, tmp_data_path):
+        """A 'running' row seeded before app boot must be stale after lifespan startup."""
+        from dccd.application.service_factory import build_runs_store
+
+        # Seed a 'running' row in the store *before* the app boots.
+        pre_runs = build_runs_store(tmp_data_path)
+        pre_runs.create_run("orphan-1", "spec1", "backfill", "binance", "BTC/USDT", "ohlc")
+        assert pre_runs.get_run("orphan-1")["state"] == "running"
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        with TestClient(create_app(config=cfg)) as c:
+            resp = c.get("/api/runs")
+            assert resp.status_code == 200
+            runs = resp.json()["runs"]
+            orphan = next((r for r in runs if r["run_id"] == "orphan-1"), None)
+            assert orphan is not None, "orphaned run must appear in /api/runs"
+            assert orphan["state"] == "stale", f"expected stale, got {orphan['state']!r}"
+            assert orphan["error"] == "orphaned by daemon restart"
+
 
 class TestMigrateEndpoint:
     def test_migrate_endpoint_removed(self, client):

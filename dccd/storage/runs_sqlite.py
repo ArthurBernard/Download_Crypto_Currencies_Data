@@ -177,3 +177,40 @@ class RunsStore:
     def active_runs(self) -> list[dict[str, Any]]:
         """Runs currently ``running`` or ``reconnecting``."""
         return self.list_runs(state="running") + self.list_runs(state="reconnecting")
+
+    def mark_stale_running(self) -> int:
+        """Transition all ``running`` rows to ``stale`` at daemon boot.
+
+        Runs left in state ``running`` after a daemon crash or SIGKILL pollute
+        :meth:`active_runs` and the Dashboard forever.  Calling this once during
+        daemon startup corrects the DB without deleting any history rows.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        int
+            Number of rows updated (0 when the store is clean).
+
+        Notes
+        -----
+        The ``ended_at`` timestamp is set to *now* (nanoseconds UTC) and
+        ``error`` is set to ``'orphaned by daemon restart'`` so the run history
+        clearly attributes the state change to a restart rather than a normal
+        completion or a user-visible error.
+
+        This method must only be called from the daemon boot path (FastAPI
+        lifespan startup).  Calling it while a daemon is live would incorrectly
+        stale-out its legitimate active runs.
+        """
+        import time
+        now = int(time.time() * 1_000_000_000)
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """UPDATE runs SET state='stale', ended_at=?, error='orphaned by daemon restart'
+                   WHERE state='running'""",
+                (now,),
+            )
+            return cursor.rowcount

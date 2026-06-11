@@ -177,3 +177,30 @@ class TestRunsStore:
         import json
         prog = json.loads(run["progress"])
         assert prog["done"] == 5
+
+    def test_mark_stale_running(self, runs_store):
+        """mark_stale_running transitions all running rows; done rows are untouched."""
+        runs_store.create_run("r1", "spec1", "backfill", "binance", "BTC/USDT", "ohlc")
+        runs_store.create_run("r2", "spec1", "backfill", "binance", "ETH/USDT", "ohlc")
+        runs_store.create_run("r3", "spec1", "backfill", "binance", "XRP/USDT", "ohlc")
+        runs_store.finish_run("r3", "done", rows_written=42)
+
+        count = runs_store.mark_stale_running()
+
+        assert count == 2, "exactly the two running rows should be updated"
+        assert runs_store.active_runs() == [], "active_runs() must be empty after purge"
+
+        r1 = runs_store.get_run("r1")
+        r2 = runs_store.get_run("r2")
+        assert r1 is not None and r1["state"] == "stale"
+        assert r1["ended_at"] is not None, "ended_at must be set"
+        assert r1["error"] == "orphaned by daemon restart"
+        assert r2 is not None and r2["state"] == "stale"
+
+        r3 = runs_store.get_run("r3")
+        assert r3 is not None and r3["state"] == "done", "finished run must be untouched"
+
+    def test_mark_stale_running_idempotent(self, runs_store):
+        """Calling mark_stale_running on a clean store returns 0."""
+        count = runs_store.mark_stale_running()
+        assert count == 0
