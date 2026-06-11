@@ -65,6 +65,24 @@ the main PC over Tailscale), ntfy alert webhook (test delivered), systemd
 limits, and the server upgraded to v3.5.0 — whose first boot marked 491
 orphaned runs `stale`. See `06-status.md`._
 
+## Hardening backlog (post-audit follow-ups, 2026-06-11)
+
+Small, well-scoped items surfaced while operating v3.5.0 in production.
+
+- [ ] **Guard manual triggers against duplicate concurrent runs** — streams
+  and scheduled backfills are guarded (worker no-op / sequential interval
+  loop), but `POST /api/backfill`, `/api/jobs/run` and `run-all` happily
+  start a second run for a dataset that is already being backfilled
+  (manually or by the scheduler). Benign for data (store locks + dedup;
+  shared rate limiter since #130) but wastes requests and confuses
+  runs/progress. Fix: reject — or return the existing `run_id` — when
+  `active_runs()` already holds a run for the same spec id. One leaf.
+- [ ] **runs.db retention** — the run history is append-only with no purge:
+  ~800 runs/day in prod ≈ 180 MB/year, unbounded. Add a boot-time retention
+  (e.g. delete `succeeded`/`stale`/`cancelled` runs older than a configurable
+  N days — default 90 — keep `failed`, then `VACUUM`), alongside the
+  existing `mark_stale_running()` call. One leaf.
+
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
