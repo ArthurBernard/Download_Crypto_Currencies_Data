@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   covered offline — `backfill` runs end-to-end through a fake adapter and
   the real `ParquetStore`, exit codes and failure modes asserted.
   `interfaces/cli/main.py` goes from 0 % to 97 % coverage with zero
-  production-code changes. (#XX)
+  production-code changes. (#134)
 
 ### Changed
 
