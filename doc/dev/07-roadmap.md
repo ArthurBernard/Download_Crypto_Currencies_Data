@@ -54,46 +54,22 @@ from parquet footer stats + cache + off-thread, honest WS subscriptions
 gzip + saner UI polling. PRs #118–#121 + the last leaf; ADR journal has the
 rationale; see `06-status.md`._
 
-## Epic E — Audit 2026-06-10 fixes (correctness, perf, prod hygiene)
+_Epic E — Audit 2026-06-10 fixes: **done** (PRs #126–#134, 2026-06-11). Zombie
+runs, startup purge, time-based stream flush, one HTTP pool per operation,
+wired rate limiter, systemd limits, honest coverage metric, CLI + adapter test
+suites, OpenAPI version + CI docs gate. ADR journal has the rationale; see
+`06-status.md`._
 
-Source: full-repo audit of 2026-06-10 (session doc `AUDIT-2026-06-10.md`, not
-committed). Ordered by priority; B6/B3 are confirmed in production
-(~350 zombie `running` runs in arthurserver's runs.db).
+## Prod ops — pending user input
 
-- [ ] **B6 — stream `NoCapability` leaks zombie runs** — in
-  `operations.stream()` the capability check sits before `create_run`'s
-  `try` → the run row is inserted but never finished; and
-  `_StreamWorker._run_forever` retries a *permanent* error forever (60 s
-  loop). Move the check before `create_run` (or into the `try`) **and** make
-  the supervisor abandon on permanent errors.
-- [ ] **B3 — purge orphan `running` runs at daemon startup** — `RunsStore`
-  never marks runs left `running` after a crash as `stale`/`failed`;
-  `active_runs()` returns them forever.
-- [ ] **B2 — time-based flush for trades/OHLC streams** — streams only flush
-  every 1000 records; a quiet pair keeps hours of data in RAM (lost on
-  crash, invisible on disk). Add a time-based flush (e.g. 60 s).
-- [ ] **B5/P1 — RateLimiter fate + one HTTP pool per operation** —
-  `RateLimiter` is wired nowhere (doc says it is); each paginated page
-  currently opens/closes a fresh `httpx.AsyncClient` (1 TLS handshake per
-  page). Decide: wire the limiter into adapters or delete it + fix
-  CLAUDE.md; and hold the shared client open for the whole operation.
-- [ ] **Prod config — off-box backup + alerts + systemd limits** — no rclone
-  remote configured (prod data backed up nowhere), no alert webhook,
-  no `MemoryMax`/`TimeoutStopSec` in the unit (62 s stop vs 90 s default).
-  Ops + how-to doc, on arthurserver.
-- [ ] **UX — gap % counts empty minutes as missing** — illiquid pairs show
-  misleading "85 % missing" (exchanges emit no empty candles). Distinguish
-  true holes from trade-less minutes, or label it in the Data UI.
-- [ ] **Tests — CLI 0 %, adapter payload fixtures, stop/cancel path** — Typer
-  `CliRunner` suite; recorded REST/WS payload fixtures for adapters
-  (38–63 % coverage today, network-only); cover `_StreamWorker.stop()` and
-  the no-capability stream case (B6 regression test).
-- [ ] **Minor batch** — dynamic OpenAPI version (`3.0.0` hardcoded), CI job
-  for the Sphinx 0-warning rule, streams' `rows_written` always 0, restart
-  delay never resets after a healthy period, purge 21 merged local branches.
+- [ ] **arthurserver: configure the rclone backup remote + alert webhook** —
+  everything else from the audit's prod hardening shipped (systemd limits
+  live, how-to checklist published); these two need the user's choice of
+  backup destination (provider + credentials) and webhook URL. Until then,
+  **prod data is not backed up off-box**.
 
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
-stay parked below as perf ideas until load demands them.
+stay parked as perf ideas until load demands them (see the audit doc).
 
 ## Deferred — M3 (post-3.0)
 

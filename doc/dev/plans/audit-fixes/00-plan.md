@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes
 kind: global
-status: executing
+status: done
 roadmap: "Epic E — Audit 2026-06-10 fixes (correctness, perf, prod hygiene)"
 release_on_done: true
 ---
@@ -55,7 +55,7 @@ roadmap ideas until load or evidence demands them.
 - [x] 06 prod-hardening — chore/prod-hardening — medium
 - [x] 07 gap-metric-context — feat/gap-metric-context — medium
 - [x] 08 cli-tests — chore/cli-tests — medium (parallel)
-- [ ] 09 adapter-fixtures — chore/adapter-fixtures — medium (parallel)
+- [x] 09 adapter-fixtures — chore/adapter-fixtures — medium (parallel)
 - [x] 10 minor-batch — chore/audit-minor-batch — low
 
 ## Dependencies

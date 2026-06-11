@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/09-adapter-fixtures
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: true
