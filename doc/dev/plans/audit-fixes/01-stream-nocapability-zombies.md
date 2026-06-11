@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/01-stream-nocapability-zombies
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: false

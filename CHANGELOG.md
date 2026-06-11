@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stream jobs without a live WS capability no longer leak zombie `running`
+  rows in runs.db (the capability check now runs before `create_run`), and
+  their supervisor stops instead of retrying a permanent error every 60 s;
+  the stream restart backoff resets to 5 s after a healthy run (≥ 300 s).
+  (#XX)
+
 ### Deprecated
 
 ### Removed

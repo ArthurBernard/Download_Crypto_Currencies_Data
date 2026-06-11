@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — Stream supervisor distinguishes permanent from transient errors (PR #XX)  [accepted]
+- **Choice**: `NoCapability` is treated as *permanent* by `_StreamWorker`:
+  the worker logs once, emits `status=failed`, and stops — no retry. All
+  other stream exceptions remain *transient* (exponential 5→60 s reconnect),
+  and the backoff resets to 5 s when the failed run had been healthy for
+  ≥ 300 s. The capability check in `operations.stream()` moved before
+  `create_run` so a rejected stream never creates a run row.
+- **Why**: prod audit 2026-06-10 (B6) found ~350 zombie `running` rows from
+  `stream:bitfinex:*:orderbook` — one per 60 s retry of an error that can
+  never succeed; and after weeks of occasional blips every reconnect waited
+  the full 60 s. Retrying a misconfiguration is noise, not resilience.
+- **Rejected alternatives**: keeping the check after `create_run` and
+  finishing the run as `failed` on each attempt (still one row per retry,
+  DB churn for a config error); a generic "max retries then give up" cap
+  (would also abandon genuinely transient WS outages, e.g. an exchange
+  maintenance window).
+
 ### 2026-06-10 — Order-book depths declared per capability; invalid requests snap with a warning (PR #122) [accepted]
 - **Choice**: `Capability.depths` lists the discrete depths a WS book channel
   accepts (Kraken verified live: {10, 25, 100, 500, 1000}; Bybit spot
