@@ -53,7 +53,7 @@ roadmap ideas until load or evidence demands them.
 - [x] 04 http-client-lifetime — fix/http-client-lifetime — medium
 - [x] 05 rate-limiter-fate — chore/rate-limiter-fate — high (depends on 04)
 - [x] 06 prod-hardening — chore/prod-hardening — medium
-- [ ] 07 gap-metric-context — feat/gap-metric-context — medium
+- [x] 07 gap-metric-context — feat/gap-metric-context — medium
 - [ ] 08 cli-tests — chore/cli-tests — medium (parallel)
 - [ ] 09 adapter-fixtures — chore/adapter-fixtures — medium (parallel)
 - [ ] 10 minor-batch — chore/audit-minor-batch — low
