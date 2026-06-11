@@ -62,11 +62,11 @@ suites, OpenAPI version + CI docs gate. ADR journal has the rationale; see
 
 ## Prod ops — pending user input
 
-- [ ] **arthurserver: configure the rclone backup remote + alert webhook** —
-  everything else from the audit's prod hardening shipped (systemd limits
-  live, how-to checklist published); these two need the user's choice of
-  backup destination (provider + credentials) and webhook URL. Until then,
-  **prod data is not backed up off-box**.
+- [ ] **arthurserver: configure the alert webhook** — `alerts.webhook_url` is
+  still null (user undecided on the target; ntfy.sh recommended). Off-box
+  backup is **done** (2026-06-11): hourly rclone sync to the main PC over
+  Tailscale (`~/data/arthurserver/`, service-owned key, `.dccd/**` excluded —
+  live SQLite), first cycle verified `succeeded`.
 
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
