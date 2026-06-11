@@ -381,6 +381,14 @@ async def stream(
     run_id = f"{spec.id}@{int(time.time() * NS)}"
     prov_src = f"{target.exchange}:ws"
 
+    # Reject early — before creating a run row — if the adapter does not declare
+    # a live WS capability for this data type.  Checking *after* create_run left
+    # an orphan "running" row in runs.db whenever the stream was attempted on an
+    # unsupported combination (B6: ~350 zombie rows from bitfinex orderbook).
+    adapter = registry.get(target.exchange)
+    if adapter.capability_for(target.data_type, "ws", "live") is None:
+        raise NoCapability(target.exchange, target.data_type.value, "live")
+
     if runs_store:
         runs_store.create_run(
             run_id, spec.id, "stream",
@@ -391,7 +399,6 @@ async def stream(
         events.log(f"Stream start: {spec.id}")
         events.status("running")
 
-    adapter = registry.get(target.exchange)
     batch: list[Any] = []
     snapshot_interval = params.snapshot_interval or 60
 
@@ -414,12 +421,6 @@ async def stream(
         if now_mono - _last_sample[0] >= _SAMPLE_MIN_INTERVAL:
             _last_sample[0] = now_mono
             events.sample(ts, value=value, bid=bid, ask=ask)
-
-    # Reject early if the adapter does not declare a live WS capability for this
-    # data type — otherwise a missing/stub implementation would "run" forever
-    # producing zero rows (the silent-empty-stream bug, D8).
-    if adapter.capability_for(target.data_type, "ws", "live") is None:
-        raise NoCapability(target.exchange, target.data_type.value, "live")
 
     try:
         if target.data_type == DataType.TRADES:

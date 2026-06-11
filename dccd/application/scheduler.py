@@ -9,6 +9,7 @@ import time
 
 from dccd.application.events import EventBus, RunEvents
 from dccd.application.jobs import JobSpec
+from dccd.domain.errors import NoCapability
 from dccd.sources.registry import SourceRegistry
 from dccd.storage.coverage_sqlite import CoverageStore
 from dccd.storage.parquet import ParquetStore
@@ -62,12 +63,19 @@ class _StreamWorker:
                 pass
             self._task = None
 
+    # Minimum healthy-stream duration (seconds) before a subsequent failure
+    # resets the reconnect delay back to the initial value.  A stream that ran
+    # for at least this long was essentially healthy; the next failure is likely
+    # transient (e.g. a brief WS drop), so starting from 5 s again is correct.
+    _HEALTHY_RUN_THRESHOLD_S = 300.0
+
     async def _run_forever(self) -> None:
         from dccd.application.operations import stream
         delay = 5.0
         while not self._stop_event.is_set():
             try:
                 run_events = self._events.for_run(f"{self._spec.id}@stream")
+                t0 = time.monotonic()
                 await stream(
                     self._spec,
                     registry=self._registry,
@@ -78,7 +86,25 @@ class _StreamWorker:
                 )
             except asyncio.CancelledError:
                 return
+            except NoCapability as exc:
+                # Permanent misconfiguration — the adapter has no live WS
+                # channel for this data type.  Retrying every 60 s would create
+                # zombie "running" rows and spam the logs.  Stop the worker.
+                logger.error(
+                    "Stream %s: no live capability (%s) — permanent, not retrying",
+                    self._spec.id, exc,
+                )
+                run_events = self._events.for_run(f"{self._spec.id}@stream")
+                run_events.log(str(exc), level="error")
+                run_events.status("failed")
+                return
             except Exception as exc:
+                elapsed = time.monotonic() - t0
+                # A stream that ran for a long time before failing was healthy;
+                # treat the failure as transient and reset the delay so the next
+                # reconnect is fast rather than waiting up to 60 s.
+                if elapsed >= self._HEALTHY_RUN_THRESHOLD_S:
+                    delay = 5.0
                 logger.warning("Stream %s failed: %s — restarting in %ds", self._spec.id, exc, delay)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 60)
