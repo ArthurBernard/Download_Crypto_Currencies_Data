@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `stale` (with `error='orphaned by daemon restart'`) at daemon boot instead
   of polluting `active_runs()`, `dccd status` and the Dashboard forever
   (production had ~350 such rows). Boot-only: one-shot CLI commands never
-  trigger the purge. (#XX)
+  trigger the purge. (#127)
 
 ### Deprecated
 
