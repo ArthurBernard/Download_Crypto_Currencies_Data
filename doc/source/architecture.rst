@@ -94,3 +94,6 @@ Data flow — a backfill
    windows for OHLC, by cursor for trades (draining the full requested window).
 4. Records are flushed in batches to ``ParquetStore``, deduplicated on the
    natural key per data type, with progress emitted on the ``EventBus``.
+   Live streams flush both on batch size (1000 records) **and** on a 60 s
+   interval, so even a quiet pair shows fresh data on disk and a crash can
+   only lose the last interval's worth of records.
