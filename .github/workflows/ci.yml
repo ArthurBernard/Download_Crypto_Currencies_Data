@@ -43,6 +43,27 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
 
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev,daemon,doc]"
+
+      - name: Build Sphinx documentation (fail on warnings)
+        run: sphinx-build -W -b html doc/source /tmp/doc-build
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

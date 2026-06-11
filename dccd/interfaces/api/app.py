@@ -27,6 +27,8 @@ import pathlib
 import secrets
 import time
 from collections.abc import Coroutine
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from typing import Any, cast
 from urllib.parse import parse_qs
 
@@ -71,6 +73,12 @@ _OPEN_PREFIXES = ("/login", "/logout", "/static", "/health")
 __all__ = ["create_app"]
 
 logger = logging.getLogger(__name__)
+
+# Resolve package version for OpenAPI spec, fallback to dev version if not installed.
+try:
+    _DCCD_VERSION = _pkg_version("dccd")
+except PackageNotFoundError:
+    _DCCD_VERSION = "0.0.0-dev"
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +243,7 @@ def create_app(
         yield
         # --- shutdown ---
 
-    app = FastAPI(title="dccd v3", version="3.0.0", lifespan=lifespan)
+    app = FastAPI(title="dccd v3", version=_DCCD_VERSION, lifespan=lifespan)
 
     # Browser sessions: sid -> creation time (ns). Opaque, in-process; reset on
     # restart (acceptable for a single-node daemon). Populated by POST /login.
