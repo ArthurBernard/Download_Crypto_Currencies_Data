@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/04-http-client-lifetime
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: false

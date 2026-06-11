@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their real `rows_written` (was always 0) on every finish path. Verified
   live: mid-stream parquet at ~63 s, `rows_written` = on-disk rows exactly.
   (#128)
+- Paginated backfills no longer open a fresh `httpx.AsyncClient` (TCP pool +
+  TLS handshake) per page: `backfill()` holds the adapter's ref-counted HTTP
+  client open for the whole operation, and the `Client` context manager now
+  actually opens the shared pools on enter and closes them on exit (its
+  `__aexit__` was a `pass`). Verified live: a ~42-page Coinbase backfill
+  constructs 1 pool instead of ~42. (#XX)
 
 ### Deprecated
 

@@ -120,6 +120,22 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — HTTP pool lifetime = operation scope (ref-count held), not a keep-alive (PR #XX)  [accepted]
+- **Choice**: `backfill()` enters the adapter's ref-counted `AsyncHTTPClient`
+  once for the whole paginated operation (per-page `async with` becomes a
+  ref-count bump); `Client.__aenter__/__aexit__` does the same for every
+  REST adapter over the public-API block. Pool lifetime is owned by explicit
+  scopes, nothing else.
+- **Why**: audit P1 — the ref-count fell 0→1→0 on every page, i.e. one TCP
+  pool + TLS handshake *per page* (a 500-page backfill = 500 handshakes),
+  and B4 — `Client.__aexit__` was `pass` while its docstring promised
+  cleanup ("Cannot send a request, as the client has been closed" seen twice
+  in prod 3.3.x).
+- **Rejected alternatives**: a grace-period keep-alive on the client (timer
+  state + a background reaper for the same effect, and the pool would
+  outlive the operation unpredictably); constructing one global pool at
+  import (no clean shutdown path for short-lived CLI invocations).
+
 ### 2026-06-11 — Stream flush is arrival-driven, not a background task (PR #128)  [accepted]
 - **Choice**: streams flush on record arrival when the batch hits 1000 rows
   *or* 60 s elapsed (`_STREAM_FLUSH_INTERVAL_S`) — no separate flusher task.

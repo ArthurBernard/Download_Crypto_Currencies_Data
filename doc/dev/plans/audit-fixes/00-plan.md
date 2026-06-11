@@ -50,7 +50,7 @@ roadmap ideas until load or evidence demands them.
 - [x] 01 stream-nocapability-zombies — fix/stream-nocapability-zombies — medium
 - [x] 02 runs-stale-purge — fix/runs-stale-purge — medium
 - [x] 03 stream-time-flush — fix/stream-time-flush — medium (depends on 01)
-- [ ] 04 http-client-lifetime — fix/http-client-lifetime — medium
+- [x] 04 http-client-lifetime — fix/http-client-lifetime — medium
 - [ ] 05 rate-limiter-fate — chore/rate-limiter-fate — high (depends on 04)
 - [ ] 06 prod-hardening — chore/prod-hardening — medium
 - [ ] 07 gap-metric-context — feat/gap-metric-context — medium
