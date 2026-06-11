@@ -82,6 +82,19 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
   (e.g. delete `succeeded`/`stale`/`cancelled` runs older than a configurable
   N days — default 90 — keep `failed`, then `VACUUM`), alongside the
   existing `mark_stale_running()` call. One leaf.
+- [ ] **ntfy-friendly alert formatting** — `HealthMonitor` POSTs
+  `{"text": msg}` JSON; on ntfy the phone shows the raw JSON blob. Send a
+  plain-text body (ntfy renders it as the message; optionally `X-Title`/
+  `X-Priority` headers), keeping a JSON mode for Slack-style endpoints if
+  trivially detectable. ~20 lines in `application/monitor.py` + test. One leaf.
+- [ ] **Config export / load (full file)** — round-trip the complete
+  effective configuration (settings + alerts + storage + all jobs): a
+  `dccd config export [-o file]` that dumps the validated running config as
+  YAML, and `dccd config load <file>` that validates, persists, and applies
+  it live (`sync_streams` + `sync_intervals`), plus the matching
+  `GET`/`POST /api/config/file` for registry parity. Use case: back up or
+  replicate a collector (e.g. arthurserver's 50 jobs) in one command. One
+  leaf.
 
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
