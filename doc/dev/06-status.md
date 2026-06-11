@@ -80,8 +80,9 @@ ws-subscription-honesty):
   Tailscale (sftp, service-owned key under `/var/lib/dccd` because
   `ProtectHome=yes`; `.dccd/**` excluded — live SQLite WAL files can't be
   copied consistently mid-write), first cycle verified `succeeded`. Systemd
-  limits in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`). **Still pending:
-  the alert webhook** (`alerts.webhook_url` null — user undecided).
+  limits in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`). Alert webhook
+  live (ntfy.sh private topic, test delivered). Server upgraded to v3.5.0
+  on 2026-06-11; its first boot marked 491 crash-orphaned runs `stale`.
 
 ## Tooling & infra present in the repo
 

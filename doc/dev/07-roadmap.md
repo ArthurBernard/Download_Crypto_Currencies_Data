@@ -60,13 +60,10 @@ wired rate limiter, systemd limits, honest coverage metric, CLI + adapter test
 suites, OpenAPI version + CI docs gate. ADR journal has the rationale; see
 `06-status.md`._
 
-## Prod ops — pending user input
-
-- [ ] **arthurserver: configure the alert webhook** — `alerts.webhook_url` is
-  still null (user undecided on the target; ntfy.sh recommended). Off-box
-  backup is **done** (2026-06-11): hourly rclone sync to the main PC over
-  Tailscale (`~/data/arthurserver/`, service-owned key, `.dccd/**` excluded —
-  live SQLite), first cycle verified `succeeded`.
+_Prod ops: **complete** (2026-06-11). Off-box backup (hourly rclone sync to
+the main PC over Tailscale), ntfy alert webhook (test delivered), systemd
+limits, and the server upgraded to v3.5.0 — whose first boot marked 491
+orphaned runs `stale`. See `06-status.md`._
 
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
