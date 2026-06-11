@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bitfinex and bitmex adapters; plus WS reconnect tests for
   `WebSocketBase.stream_raw()`. Coverage: bitfinex 38→71 %, bitmex 39→67 %,
   coinbase 42→71 %, binance 50→77 %, `transport/ws.py` 44→93 %; parser ↔
-  live agreement cross-checked on capture day. (#XX)
+  live agreement cross-checked on capture day. (#135)
 
 ### Changed
 

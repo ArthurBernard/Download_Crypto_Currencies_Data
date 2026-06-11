@@ -6,7 +6,7 @@ complexity: medium
 depends: []
 parallel: true
 branch: chore/adapter-fixtures
-pr: ""
+pr: "#135"
 ---
 
 # Tests — recorded payload fixtures for low-coverage adapters + transport units
