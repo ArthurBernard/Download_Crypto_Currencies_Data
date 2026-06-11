@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Deploy template (`deploy/dccd.service`) ships an explicit
+  `TimeoutStopSec=120` (62 s stop observed in production vs the 90 s systemd
+  default before SIGKILL) and a commented `MemoryMax=1.5G` example (prod RSS
+  ~830 MB with 50 jobs); the deploy and sync-remote how-tos gain a
+  "Production checklist" (off-box backup, alert webhook, systemd limits).
+  Limits applied and verified live on the production collector. (#XX)
+
 ### Fixed
 
 - Stream jobs without a live WS capability no longer leak zombie `running`
