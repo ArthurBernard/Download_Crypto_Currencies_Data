@@ -39,6 +39,60 @@ _BITFINEX_SPANS = {
 }
 
 
+def _parse_ohlc_page(data: list[Any]) -> list[OHLCBar]:
+    """Parse a raw Bitfinex candles/hist response into :class:`~dccd.domain.records.OHLCBar` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list returned by the ``candles/trade:{tf}:{sym}/hist``
+        endpoint — each element is ``[ts_ms, open, close, high, low, volume]``.
+    """
+    return [
+        OHLCBar(
+            ts=int(e[0]) * 1_000_000,
+            open=float(e[1]),
+            close=float(e[2]),
+            high=float(e[3]),
+            low=float(e[4]),
+            volume=float(e[5]),
+        )
+        for e in (data if isinstance(data, list) else [])
+        if isinstance(e, list) and len(e) >= 6
+    ]
+
+
+def _parse_trades_page(data: list[Any]) -> tuple[list[Trade], str | None]:
+    """Parse a raw Bitfinex trades/hist response into :class:`~dccd.domain.records.Trade` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list returned by the ``trades/{sym}/hist`` endpoint —
+        each element is ``[tid, ts_ms, amount, price]``.  Positive ``amount``
+        means buy; negative means sell.
+
+    Returns
+    -------
+    tuple[list[Trade], str | None]
+        The parsed trades and a cursor for the next page (last ts_ms + 1 as a
+        string), or ``None`` when the page is not full.
+    """
+    rows = [e for e in (data if isinstance(data, list) else [])
+            if isinstance(e, list) and len(e) >= 4]
+    trades = [
+        Trade(
+            ts=int(e[1]) * 1_000_000,
+            price=float(e[3]),
+            amount=abs(float(e[2])),
+            side="buy" if float(e[2]) > 0 else "sell",
+            tid=str(e[0]),
+        )
+        for e in rows
+    ]
+    return trades, None  # caller decides cursor from page-fullness
+
+
 def _bfx_symbol(s: Symbol) -> str:
     """Bitfinex trading pair format, e.g. ``tBTCUSD``.
 
@@ -131,18 +185,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
         async with self._http as client:
             data = await client.get(f"{_BASE}/candles/trade:{tf}:{sym}/hist", params)
 
-        return [
-            OHLCBar(
-                ts=int(e[0]) * 1_000_000,
-                open=float(e[1]),
-                close=float(e[2]),
-                high=float(e[3]),
-                low=float(e[4]),
-                volume=float(e[5]),
-            )
-            for e in (data if isinstance(data, list) else [])
-            if isinstance(e, list) and len(e) >= 6
-        ]
+        return _parse_ohlc_page(data)
 
     async def fetch_trades_page(
         self,
@@ -172,16 +215,7 @@ class BitfinexSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive
 
         rows = [e for e in (data if isinstance(data, list) else [])
                 if isinstance(e, list) and len(e) >= 4]
-        trades = [
-            Trade(
-                ts=int(e[1]) * 1_000_000,
-                price=float(e[3]),
-                amount=abs(float(e[2])),
-                side="buy" if float(e[2]) > 0 else "sell",
-                tid=str(e[0]),
-            )
-            for e in rows
-        ]
+        trades, _ = _parse_trades_page(data)
         if len(rows) < page_limit:
             return trades, None
         next_cursor = str(int(rows[-1][1]) + 1)

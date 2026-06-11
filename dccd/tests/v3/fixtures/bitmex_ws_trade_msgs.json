@@ -1,0 +1,5 @@
+[
+  {"info": "Welcome to the BitMEX Realtime API.", "version": "2024-01-01T00:00:00.000Z", "timestamp": "2024-01-01T00:00:00.000Z", "docs": "https://www.bitmex.com/app/wsAPI", "limit": {"remaining": 39}},
+  {"subscribe": "trade:XBTUSD", "success": true},
+  {"table": "trade", "action": "insert", "data": [{"timestamp": "2024-01-01T00:00:01.235Z", "symbol": "XBTUSD", "side": "Sell", "size": 14200, "price": 42315.0, "trdMatchID": "00000000-006d-1000-0000-0003ad666d43"}, {"timestamp": "2024-01-01T00:00:04.309Z", "symbol": "XBTUSD", "side": "Buy", "size": 100, "price": 42316.0, "trdMatchID": "00000000-006d-1000-0000-0003ad667f3d"}]}
+]

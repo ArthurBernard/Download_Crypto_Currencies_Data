@@ -1,11 +1,18 @@
-"""Transport-layer tests — AsyncHTTPClient concurrency safety."""
+"""Transport-layer tests — AsyncHTTPClient concurrency safety, WS reconnect."""
+
+from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
 from dccd.transport.http import AsyncHTTPClient
+from dccd.transport.ws import _BACKOFF_FACTOR, _INITIAL_DELAY, WebSocketBase
 
 
 @pytest.mark.asyncio
@@ -146,3 +153,339 @@ async def test_client_context_manager_opens_and_closes_pools(tmp_path, monkeypat
             http = adapter.http_client
             if http is not None:
                 assert http._client is not None
+
+# ---------------------------------------------------------------------------
+# Helpers for WebSocketBase reconnect tests
+# ---------------------------------------------------------------------------
+
+def _make_fake_ws(*frame_batches: list[str], fail_first: bool = False) -> Any:
+    """Build a fake WS context manager that yields frames in batches.
+
+    Parameters
+    ----------
+    frame_batches:
+        Each element is a list of raw frames yielded by one ``connect`` call.
+    fail_first:
+        If True the very first connect attempt raises ``ConnectionError`` before
+        yielding any frames.
+    """
+    call_count = 0
+
+    async def _aiter_frames(frames: list[str]) -> AsyncIterator[str]:
+        for f in frames:
+            yield f
+
+    @asynccontextmanager
+    async def _fake_connect(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        nonlocal call_count
+        idx = call_count
+        call_count += 1
+        if fail_first and idx == 0:
+            raise ConnectionError("simulated drop on first connect")
+        ws = MagicMock()
+        ws.__aiter__ = lambda self: _aiter_frames(frame_batches[min(idx, len(frame_batches) - 1)])
+        yield ws
+
+    return _fake_connect
+
+
+# ---------------------------------------------------------------------------
+# WebSocketBase.stream_raw() tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_ws_stream_raw_yields_frames(monkeypatch: pytest.MonkeyPatch) -> None:
+    """stream_raw() yields all frames from a stable connection."""
+    frames = ["frame1", "frame2", "frame3"]
+    fake_connect = _make_fake_ws(frames)
+
+    ws = WebSocketBase("ws://fake")
+    collected: list[str] = []
+
+    async def _collect() -> None:
+        async for raw in ws.stream_raw():
+            collected.append(raw)
+            if len(collected) >= 3:
+                ws.stop()
+
+    with patch("websockets.connect", fake_connect):
+        await _collect()
+
+    assert collected == frames
+
+
+@pytest.mark.asyncio
+async def test_ws_stream_raw_reconnects_after_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """stream_raw() reconnects after a connection error with exponential backoff.
+
+    The test patches asyncio.sleep so no real delay occurs, and verifies:
+    - at least one reconnect happens
+    - a frame from the second connection is received
+    """
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    # First connect raises, second yields one frame then ws.stop() fires.
+    fake_connect = _make_fake_ws([], ["after_reconnect"], fail_first=True)
+
+    ws = WebSocketBase("ws://fake")
+    collected: list[str] = []
+
+    async def _collect() -> None:
+        async for raw in ws.stream_raw():
+            collected.append(raw)
+            ws.stop()
+
+    with (
+        patch("websockets.connect",fake_connect),
+        patch("asyncio.sleep", fake_sleep),
+    ):
+        await _collect()
+
+    # At least one sleep (backoff) was recorded
+    assert len(slept) >= 1
+    # Initial delay is _INITIAL_DELAY
+    assert slept[0] == pytest.approx(_INITIAL_DELAY)
+    # A frame from the second connection was received
+    assert "after_reconnect" in collected
+
+
+@pytest.mark.asyncio
+async def test_ws_stream_raw_backoff_doubles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exponential backoff: each successive sleep doubles the previous one."""
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    # Three failing connections then a success.
+    fail_count = 0
+
+    @asynccontextmanager
+    async def _failing_then_ok(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        nonlocal fail_count
+        attempt = fail_count
+        fail_count += 1
+        if attempt < 3:
+            raise ConnectionError(f"drop #{attempt}")
+        ws_mock = MagicMock()
+        ws_mock.__aiter__ = lambda self: _one_frame()
+        yield ws_mock
+
+    async def _one_frame() -> AsyncIterator[str]:
+        yield "ok"
+
+    ws = WebSocketBase("ws://fake")
+    collected: list[str] = []
+
+    async def _collect() -> None:
+        async for raw in ws.stream_raw():
+            collected.append(raw)
+            ws.stop()
+
+    with (
+        patch("websockets.connect",_failing_then_ok),
+        patch("asyncio.sleep", fake_sleep),
+    ):
+        await _collect()
+
+    # Three sleep calls for three failures
+    assert len(slept) == 3
+    assert slept[0] == pytest.approx(_INITIAL_DELAY)
+    assert slept[1] == pytest.approx(_INITIAL_DELAY * _BACKOFF_FACTOR)
+    assert slept[2] == pytest.approx(_INITIAL_DELAY * _BACKOFF_FACTOR**2)
+    assert "ok" in collected
+
+
+@pytest.mark.asyncio
+async def test_ws_stream_raw_delay_resets_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After a successful connection the delay resets to _INITIAL_DELAY."""
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    call_count = 0
+
+    @asynccontextmanager
+    async def _alternating(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        """Fail, succeed (2 frames), fail, succeed (stop)."""
+        nonlocal call_count
+        idx = call_count
+        call_count += 1
+        if idx == 0:
+            raise ConnectionError("first drop")
+        ws_mock = MagicMock()
+        if idx == 1:
+            ws_mock.__aiter__ = lambda self: _two_frames()
+        elif idx == 2:
+            raise ConnectionError("second drop")
+        else:
+            ws_mock.__aiter__ = lambda self: _stop_frame()
+        yield ws_mock
+
+    async def _two_frames() -> AsyncIterator[str]:
+        yield "a"
+        yield "b"
+
+    async def _stop_frame() -> AsyncIterator[str]:
+        yield "done"
+
+    ws = WebSocketBase("ws://fake")
+    collected: list[str] = []
+
+    async def _collect() -> None:
+        async for raw in ws.stream_raw():
+            collected.append(raw)
+            if raw == "done":
+                ws.stop()
+
+    with (
+        patch("websockets.connect",_alternating),
+        patch("asyncio.sleep", fake_sleep),
+    ):
+        await _collect()
+
+    # Two sleeps: one after first drop, one after second drop
+    assert len(slept) == 2
+    # Both should be _INITIAL_DELAY because the middle connection succeeded
+    # and reset the delay.
+    assert slept[0] == pytest.approx(_INITIAL_DELAY)
+    assert slept[1] == pytest.approx(_INITIAL_DELAY)
+
+
+@pytest.mark.asyncio
+async def test_ws_stop_prevents_reconnect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After stop() is called mid-stream, no reconnect happens."""
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    @asynccontextmanager
+    async def _always_fail(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        raise ConnectionError("drop")
+        yield  # type: ignore[misc]
+
+    ws = WebSocketBase("ws://fake")
+    ws.stop()  # stop before we even start
+
+    collected: list[str] = []
+    with (
+        patch("websockets.connect",_always_fail),
+        patch("asyncio.sleep", fake_sleep),
+    ):
+        async for raw in ws.stream_raw():
+            collected.append(raw)
+
+    assert collected == []
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_ws_cancelled_error_exits_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CancelledError propagates out without triggering a reconnect."""
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    @asynccontextmanager
+    async def _cancel_on_connect(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        raise asyncio.CancelledError()
+        yield  # type: ignore[misc]
+
+    ws = WebSocketBase("ws://fake")
+    collected: list[str] = []
+
+    with (
+        patch("websockets.connect",_cancel_on_connect),
+        patch("asyncio.sleep", fake_sleep),
+    ):
+        async for raw in ws.stream_raw():
+            collected.append(raw)
+
+    assert collected == []
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_ws_on_connect_called_on_each_reconnect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """on_connect() must be called after every successful (re)connect."""
+    connect_calls: list[int] = []
+
+    class _CountingWS(WebSocketBase):
+        async def on_connect(self, ws: Any) -> None:
+            connect_calls.append(1)
+
+    call_count = 0
+
+    @asynccontextmanager
+    async def _fail_then_ok(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        nonlocal call_count
+        idx = call_count
+        call_count += 1
+        if idx == 0:
+            raise ConnectionError("first drop")
+        ws_mock = MagicMock()
+        ws_mock.__aiter__ = lambda self: _one_frame()
+        yield ws_mock
+
+    async def _one_frame() -> AsyncIterator[str]:
+        yield "frame"
+
+    async def fake_sleep(delay: float) -> None:
+        pass
+
+    ws = _CountingWS("ws://fake")
+
+    async def _collect() -> None:
+        async for raw in ws.stream_raw():
+            ws.stop()
+
+    with (
+        patch("websockets.connect",_fail_then_ok),
+        patch("asyncio.sleep", fake_sleep),
+    ):
+        await _collect()
+
+    # on_connect should have been called once (only the second attempt succeeds).
+    assert len(connect_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_ws_stream_delegates_to_parse_message() -> None:
+    """stream() feeds each raw frame to parse_message and yields the results."""
+    frames_seen: list[str] = []
+
+    class _EchoWS(WebSocketBase):
+        async def parse_message(self, raw: str | bytes) -> AsyncIterator[str]:
+            frames_seen.append(str(raw))
+            yield f"parsed:{raw}"
+
+    @asynccontextmanager
+    async def _two_frames(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+        ws_mock = MagicMock()
+        ws_mock.__aiter__ = lambda self: _iter()
+        yield ws_mock
+
+    async def _iter() -> AsyncIterator[str]:
+        yield "msg1"
+        yield "msg2"
+
+    ws = _EchoWS("ws://fake")
+    collected: list[str] = []
+
+    async def _collect() -> None:
+        async for record in ws.stream():
+            collected.append(record)
+            if len(collected) >= 2:
+                ws.stop()
+
+    with patch("websockets.connect",_two_frames):
+        await _collect()
+
+    assert collected == ["parsed:msg1", "parsed:msg2"]
+

@@ -35,6 +35,69 @@ _WS_URL = "wss://www.bitmex.com/realtime"
 _BITMEX_BINS = {60: "1m", 300: "5m", 3600: "1h", 86400: "1d"}
 
 
+def _parse_ohlc_page(data: list[Any], end_ns: int | None = None) -> list[OHLCBar]:
+    """Parse a raw BitMEX trade/bucketed response into :class:`~dccd.domain.records.OHLCBar` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``timestamp``
+        (ISO 8601 UTC), ``open``, ``high``, ``low``, ``close``, ``volume``.
+    end_ns:
+        Optional upper bound (nanoseconds UTC).  Bars whose ``ts`` exceeds this
+        value are dropped (BitMEX may return bars past the requested window).
+    """
+    from datetime import datetime
+    bars: list[OHLCBar] = []
+    for e in (data if isinstance(data, list) else []):
+        ts_str = e.get("timestamp", "")
+        try:
+            dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            ts_ns = s_to_ns(dt.timestamp())
+        except Exception:
+            continue
+        if end_ns is not None and ts_ns > end_ns:
+            break
+        bars.append(OHLCBar(
+            ts=ts_ns,
+            open=float(e.get("open") or 0),
+            high=float(e.get("high") or 0),
+            low=float(e.get("low") or 0),
+            close=float(e.get("close") or 0),
+            volume=float(e.get("volume") or 0),
+        ))
+    return bars
+
+
+def _parse_trades_page(data: list[Any]) -> list[Trade]:
+    """Parse a raw BitMEX trade response into :class:`~dccd.domain.records.Trade` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``timestamp``
+        (ISO 8601 UTC), ``price``, ``size``, ``side`` (``"Buy"``/``"Sell"``),
+        and ``trdMatchID``.
+    """
+    from datetime import datetime
+    trades: list[Trade] = []
+    for e in (data if isinstance(data, list) else []):
+        ts_str = e.get("timestamp", "")
+        try:
+            dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            ts_ns = s_to_ns(dt.timestamp())
+        except Exception:
+            continue
+        trades.append(Trade(
+            ts=ts_ns,
+            price=float(e.get("price") or 0),
+            amount=float(e.get("size") or 0),
+            side="buy" if e.get("side") == "Buy" else "sell",
+            tid=str(e.get("trdMatchID", "")),
+        ))
+    return trades
+
+
 class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, TradesLive, OrderBookLive):
     """BitMEX source adapter.
 
@@ -111,26 +174,7 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
         async with self._http as client:
             data = await client.get(f"{_BASE}/trade/bucketed", params)
 
-        bars = []
-        for e in (data if isinstance(data, list) else []):
-            from datetime import datetime, timezone
-            ts_str = e.get("timestamp", "")
-            try:
-                dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                ts_ns = s_to_ns(dt.timestamp())
-            except Exception:
-                continue
-            if ts_ns > end_ns:
-                break
-            bars.append(OHLCBar(
-                ts=ts_ns,
-                open=float(e.get("open") or 0),
-                high=float(e.get("high") or 0),
-                low=float(e.get("low") or 0),
-                close=float(e.get("close") or 0),
-                volume=float(e.get("volume") or 0),
-            ))
-        return bars
+        return _parse_ohlc_page(data, end_ns=end_ns)
 
     async def fetch_trades_page(
         self,
@@ -161,28 +205,22 @@ class BitMEXSource(OHLCHistory, TradesHistory, OrderBookSnapshotREST, OHLCLive, 
         async with self._http as client:
             data = await client.get(f"{_BASE}/trade", params)
 
+        from datetime import datetime
+        from datetime import timezone as _tz
         rows = data if isinstance(data, list) else []
-        trades: list[Trade] = []
+        trades = _parse_trades_page(data)
         last_ts_ns: int | None = None
         for e in rows:
             ts_str = e.get("timestamp", "")
             try:
                 dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                ts_ns = s_to_ns(dt.timestamp())
+                last_ts_ns = s_to_ns(dt.timestamp())
             except Exception:
                 continue
-            last_ts_ns = ts_ns
-            trades.append(Trade(
-                ts=ts_ns,
-                price=float(e.get("price") or 0),
-                amount=float(e.get("size") or 0),
-                side="buy" if e.get("side") == "Buy" else "sell",
-                tid=str(e.get("trdMatchID", "")),
-            ))
 
         if len(rows) < page_count or last_ts_ns is None or last_ts_ns >= end_ns:
             return trades, None
-        next_dt = datetime.fromtimestamp(last_ts_ns / NS, tz=timezone.utc) + timedelta(milliseconds=1)
+        next_dt = datetime.fromtimestamp(last_ts_ns / NS, tz=_tz.utc) + timedelta(milliseconds=1)
         return trades, next_dt.isoformat()
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
