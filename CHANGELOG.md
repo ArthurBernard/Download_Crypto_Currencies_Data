@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a backstop). Defaults verified against official docs (Coinbase's old
   10/s constant was wrong — public cap is 3/s). Verified live on Kraken:
   31 pages in 30 s = 1.03 req/s vs a 1.0/s cap, zero 429; 3 concurrent
-  backfills total 1.10 req/s, not 3×. (#XX)
+  backfills total 1.10 req/s, not 3×. (#130)
 
 ### Changed
 

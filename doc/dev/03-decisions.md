@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-11 — RateLimiter wired as a process-wide per-exchange singleton (PR #XX)  [accepted]
+### 2026-06-11 — RateLimiter wired as a process-wide per-exchange singleton (PR #130)  [accepted]
 - **Choice**: keep `transport/ratelimit.py` and make it real — a
   `shared_limiter()` singleton keyed by exchange, awaited by
   `AsyncHTTPClient.get()` before every outbound request (adapters get it via
