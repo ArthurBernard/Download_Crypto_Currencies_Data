@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-11 — Stream supervisor distinguishes permanent from transient errors (PR #XX)  [accepted]
+### 2026-06-11 — Stream supervisor distinguishes permanent from transient errors (PR #126)  [accepted]
 - **Choice**: `NoCapability` is treated as *permanent* by `_StreamWorker`:
   the worker logs once, emits `status=failed`, and stops — no retry. All
   other stream exceptions remain *transient* (exponential 5→60 s reconnect),
