@@ -27,6 +27,8 @@ import pathlib
 import secrets
 import time
 from collections.abc import Coroutine
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from typing import Any, cast
 from urllib.parse import parse_qs
 
@@ -71,6 +73,12 @@ _OPEN_PREFIXES = ("/login", "/logout", "/static", "/health")
 __all__ = ["create_app"]
 
 logger = logging.getLogger(__name__)
+
+# Resolve package version for OpenAPI spec, fallback to dev version if not installed.
+try:
+    _DCCD_VERSION = _pkg_version("dccd")
+except PackageNotFoundError:
+    _DCCD_VERSION = "0.0.0-dev"
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +191,12 @@ def create_app(
         app.state.config_path = config_path
         app.state.store = build_store(cfg.settings.data_path)
         app.state.runs_store = build_runs_store(cfg.settings.data_path)
+        # Mark any runs left in 'running' state as 'stale' — they were
+        # orphaned by the previous daemon crash/SIGKILL and would otherwise
+        # pollute active_runs() and the Dashboard forever.
+        _stale_count = app.state.runs_store.mark_stale_running()
+        if _stale_count:
+            logger.warning("marked %d orphaned run(s) stale (daemon restarted)", _stale_count)
         app.state.coverage_store = build_coverage_store(cfg.settings.data_path)
         app.state.event_bus = EventBus()
         app.state.registry = build_registry()
@@ -229,7 +243,7 @@ def create_app(
         yield
         # --- shutdown ---
 
-    app = FastAPI(title="dccd v3", version="3.0.0", lifespan=lifespan)
+    app = FastAPI(title="dccd v3", version=_DCCD_VERSION, lifespan=lifespan)
 
     # Browser sessions: sid -> creation time (ns). Opaque, in-process; reset on
     # restart (acceptable for a single-node daemon). Populated by POST /login.

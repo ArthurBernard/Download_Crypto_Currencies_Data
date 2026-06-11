@@ -54,6 +54,23 @@ from parquet footer stats + cache + off-thread, honest WS subscriptions
 gzip + saner UI polling. PRs #118–#121 + the last leaf; ADR journal has the
 rationale; see `06-status.md`._
 
+_Epic E — Audit 2026-06-10 fixes: **done** (PRs #126–#134, 2026-06-11). Zombie
+runs, startup purge, time-based stream flush, one HTTP pool per operation,
+wired rate limiter, systemd limits, honest coverage metric, CLI + adapter test
+suites, OpenAPI version + CI docs gate. ADR journal has the rationale; see
+`06-status.md`._
+
+## Prod ops — pending user input
+
+- [ ] **arthurserver: configure the rclone backup remote + alert webhook** —
+  everything else from the audit's prod hardening shipped (systemd limits
+  live, how-to checklist published); these two need the user's choice of
+  backup destination (provider + credentials) and webhook URL. Until then,
+  **prod data is not backed up off-box**.
+
+P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
+stay parked as perf ideas until load demands them (see the audit doc).
+
 ## Deferred — M3 (post-3.0)
 
 Larger axes intentionally parked until after the 3.0 release. Not started; do not

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from dccd.domain.capability import Capability
 from dccd.domain.records import OHLCBar, OrderBookSnapshot, Trade
 from dccd.domain.symbol import Symbol
 from dccd.domain.types import DataType
+
+if TYPE_CHECKING:
+    from dccd.transport.http import AsyncHTTPClient
 
 __all__ = [
     "Source",
@@ -17,7 +21,32 @@ __all__ = [
     "OHLCLive",
     "TradesLive",
     "OrderBookLive",
+    "default_http_client",
 ]
+
+
+def default_http_client(exchange: str) -> "AsyncHTTPClient":
+    """Build an :class:`~dccd.transport.http.AsyncHTTPClient` wired to the limiter.
+
+    REST adapters call this to construct their default shared client so that
+    every outbound request is throttled by the process-wide per-exchange
+    :func:`~dccd.transport.ratelimit.shared_limiter`. Keeping the wiring here
+    (rather than in each adapter) means a single seam controls proactive
+    rate-limiting for all exchanges.
+
+    Parameters
+    ----------
+    exchange : str
+        Exchange name used to key the limiter bucket.
+
+    Returns
+    -------
+    AsyncHTTPClient
+    """
+    from dccd.transport.http import AsyncHTTPClient
+    from dccd.transport.ratelimit import shared_limiter
+
+    return AsyncHTTPClient(exchange=exchange, limiter=shared_limiter())
 
 
 class Source:
@@ -51,6 +80,24 @@ class Source:
                 and cap.mode == mode
             ):
                 return cap
+        return None
+
+    @property
+    def http_client(self) -> "AsyncHTTPClient | None":
+        """Return the adapter's shared :class:`~dccd.transport.http.AsyncHTTPClient`.
+
+        REST adapters store their client in ``self._http`` and return it here so
+        callers (e.g. :func:`~dccd.application.operations.backfill`) can hold the
+        context open for an entire multi-page operation — keeping ``_depth >= 1``
+        across pages so no TCP/TLS re-handshake occurs between pages.
+
+        WebSocket-only adapters return ``None`` (default).
+        """
+        http = getattr(self, "_http", None)
+        if http is not None:
+            from dccd.transport.http import AsyncHTTPClient
+            if isinstance(http, AsyncHTTPClient):
+                return http
         return None
 
 

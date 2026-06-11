@@ -16,6 +16,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.5.0] - 2026-06-11
+
+### Added
+
+- Proactive per-exchange rate limiting on all REST fetches: the (previously
+  unwired) token-bucket `RateLimiter` is now a process-wide singleton keyed
+  by exchange, awaited before every outbound request — concurrent operations
+  on the same exchange share one bucket, so a `run-all` burst stays under
+  the exchange's published rate (reactive 429/Retry-After handling remains
+  as a backstop). Defaults verified against official docs (Coinbase's old
+  10/s constant was wrong — public cap is 3/s). Verified live on Kraken:
+  31 pages in 30 s = 1.03 req/s vs a 1.0/s cap, zero 429; 3 concurrent
+  backfills total 1.10 req/s, not 3×. (#130)
+- CLI test suite (`test_cli.py`, Typer `CliRunner`, 27 tests): every command
+  covered offline — `backfill` runs end-to-end through a fake adapter and
+  the real `ParquetStore`, exit codes and failure modes asserted.
+  `interfaces/cli/main.py` goes from 0 % to 97 % coverage with zero
+  production-code changes. (#134)
+- Offline adapter-parsing tests from 14 recorded live payloads (REST + WS,
+  capture commands + dates in `tests/v3/fixtures/README.md`), with pure
+  `_parse_*` seams extracted (behavior-preserving) in the binance, coinbase,
+  bitfinex and bitmex adapters; plus WS reconnect tests for
+  `WebSocketBase.stream_raw()`. Coverage: bitfinex 38→71 %, bitmex 39→67 %,
+  coinbase 42→71 %, binance 50→77 %, `transport/ws.py` 44→93 %; parser ↔
+  live agreement cross-checked on capture day. (#135)
+
+### Changed
+
+- Deploy template (`deploy/dccd.service`) ships an explicit
+  `TimeoutStopSec=120` (62 s stop observed in production vs the 90 s systemd
+  default before SIGKILL) and a commented `MemoryMax=1.5G` example (prod RSS
+  ~830 MB with 50 jobs); the deploy and sync-remote how-tos gain a
+  "Production checklist" (off-box backup, alert webhook, systemd limits).
+  Limits applied and verified live on the production collector. (#131)
+- Data page presents OHLC completeness as neutral "candle coverage" (with an
+  explanatory tooltip) instead of a red "missing %": exchanges emit no candle
+  for minutes without trades, so an illiquid pair showed an alarming
+  "85 % missing" when nothing was lost. True holes still surface (the number
+  drops); `expected_rows`/`missing_rows` API fields are unchanged. (#132)
+
+### Fixed
+
+- The OpenAPI schema (`/docs`, `/openapi.json`) reports the real installed
+  package version instead of a hardcoded "3.0.0"; CI gains a `docs` job that
+  builds Sphinx with `-W` so the "0 warnings" rule is enforced on every PR
+  (proven to fail on an injected broken reference). (#133)
+- Stream jobs without a live WS capability no longer leak zombie `running`
+  rows in runs.db (the capability check now runs before `create_run`), and
+  their supervisor stops instead of retrying a permanent error every 60 s;
+  the stream restart backoff resets to 5 s after a healthy run (≥ 300 s).
+  (#126)
+- Runs orphaned in `running` state by a daemon crash/SIGKILL are marked
+  `stale` (with `error='orphaned by daemon restart'`) at daemon boot instead
+  of polluting `active_runs()`, `dccd status` and the Dashboard forever
+  (production had ~350 such rows). Boot-only: one-shot CLI commands never
+  trigger the purge. (#127)
+- Trades/OHLC streams flush to disk on a 60 s interval as well as on the
+  1000-record threshold — a quiet pair no longer keeps hours of data in RAM
+  (lost on crash, invisible to inventory/freshness). Stream runs now record
+  their real `rows_written` (was always 0) on every finish path. Verified
+  live: mid-stream parquet at ~63 s, `rows_written` = on-disk rows exactly.
+  (#128)
+- Paginated backfills no longer open a fresh `httpx.AsyncClient` (TCP pool +
+  TLS handshake) per page: `backfill()` holds the adapter's ref-counted HTTP
+  client open for the whole operation, and the `Client` context manager now
+  actually opens the shared pools on enter and closes them on exit (its
+  `__aexit__` was a `pass`). Verified live: a ~42-page Coinbase backfill
+  constructs 1 pool instead of ~42. (#129)
+
+### Deprecated
+
+### Removed
+
 ## [3.4.0] - 2026-06-10
 
 ### Added

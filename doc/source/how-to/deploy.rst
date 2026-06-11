@@ -97,6 +97,30 @@ declares a ``HEALTHCHECK`` against ``/health``. Set ``settings.data_path: /data`
 ``settings.ui_host: 0.0.0.0`` in the mounted config. Check ``docker inspect
 --format '{{.State.Health.Status}}' dccd`` → ``healthy``.
 
+Production checklist
+====================
+
+Before calling a deployment production-ready, verify these four items:
+
+- **Off-box backup ON** — configure at least one rclone remote and a
+  ``sync_interval`` in ``storage`` (see :doc:`sync-remote`). Without it a disk
+  failure means total data loss.
+- **Alert webhook ON** — set ``alerts.webhook_url`` (and optionally
+  ``alerts.max_consecutive_errors``) so job failures page you rather than
+  silently accumulating (see the *Alerts* bullet under *Operate it* above).
+- **TimeoutStopSec** — the default 90 s may SIGKILL the daemon mid-drain on a
+  busy multi-stream box. ``deploy/dccd.service`` ships ``TimeoutStopSec=120``; if
+  you installed an older unit, add a drop-in::
+
+      sudo mkdir -p /etc/systemd/system/dccd.service.d
+      printf '[Service]\nTimeoutStopSec=120\n' | \
+          sudo tee /etc/systemd/system/dccd.service.d/limits.conf
+      sudo systemctl daemon-reload
+
+- **MemoryMax** — uncomment and tune the ``MemoryMax`` line in the unit (or
+  drop-in). Production RSS with 50 jobs was ~830 MB; ``1.5G`` leaves comfortable
+  headroom. Omitting it leaves the daemon unbounded, risking OOM on a shared box.
+
 Reaching the UI from another machine
 ====================================
 

@@ -120,6 +120,104 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — Sphinx -W in CI, with docutils warnings suppressed (PR #133)  [accepted]
+- **Choice**: a separate CI `docs` job builds with `sphinx-build -W`
+  (warnings = errors), and `conf.py` adds
+  `suppress_warnings = ['ref.citation', 'docutils']` to mute docutils noise
+  coming from the sphinx-click/Typer rendering that we don't control.
+- **Why**: the "0 warnings" rule was only enforced by hand; `-W` makes it a
+  PR gate (verified to fail on an injected broken reference). The docutils
+  suppression is the price of `-W` viability — without it, third-party
+  rendering noise would block every PR for warnings we can't fix.
+- **Rejected alternatives**: grep-counting warnings in CI (fragile, doesn't
+  fail the build atomically); pinning/patching sphinx-click (maintenance
+  burden out of proportion).
+
+### 2026-06-11 — Gap metric fix is presentational, not structural (PR #132)  [accepted]
+- **Choice**: keep `expected_rows`/`missing_rows` semantics (clock-time slots
+  from footer stats) and fix the *presentation*: the Data page shows neutral
+  "candle coverage" with a tooltip instead of a red "missing %"; no alarm
+  threshold at all.
+- **Why**: with footer stats only (min/max/rowcount — the zero-extra-I/O
+  constraint from #119) there is no way to distinguish "exchange emits no
+  empty candles" from a collection hole; any styling threshold would still
+  false-alarm on sparse-but-complete pairs. The audit explicitly allowed the
+  labeling fix. True holes still surface as a visibly lower number (verified
+  by injecting one).
+- **Rejected alternatives**: deriving liquidity-aware expectations from trade
+  data (per-row I/O, breaks the footer-stats constraint); a warn-below-X%
+  threshold (false-alarms quiet pairs by construction).
+
+### 2026-06-11 — RateLimiter wired as a process-wide per-exchange singleton (PR #130)  [accepted]
+- **Choice**: keep `transport/ratelimit.py` and make it real — a
+  `shared_limiter()` singleton keyed by exchange, awaited by
+  `AsyncHTTPClient.get()` before every outbound request (adapters get it via
+  `default_http_client(exchange)` in `sources/base.py`). Conservative
+  doc-sourced defaults (kraken 1/s, coinbase 3/s, okx 8/s, bitmex 0.5/s, …);
+  reactive 429/Retry-After stays as backstop. Clock/sleep seams injected for
+  deterministic tests.
+- **Why**: production evidence settled the wire-or-delete question — 481
+  `Rate-limited` (429) events in 14 days on arthurserver (OKX 454, Coinbase
+  27, single burst day), and the old hardcoded Coinbase rate (10/s) was
+  simply wrong (public cap 3/s). The limiter must be process-wide: each
+  adapter owns its own HTTP client, so a per-client bucket cannot coordinate
+  a `run-all` burst. Verified live: 3 concurrent Kraken backfills share one
+  bucket (1.10 req/s total vs the 1.0/s cap), zero 429.
+- **Rejected alternatives**: deleting the module and staying reactive-only
+  (the journalctl data shows reactive-only thrashing OKX in 2 s retry loops
+  for ~90 s); per-client limiters (no cross-operation coordination — the
+  exact failure mode observed); weight-based limiting à la Binance (real
+  fidelity would need per-endpoint weights — out of scope, conservative
+  flat rates suffice).
+
+### 2026-06-11 — HTTP pool lifetime = operation scope (ref-count held), not a keep-alive (PR #129)  [accepted]
+- **Choice**: `backfill()` enters the adapter's ref-counted `AsyncHTTPClient`
+  once for the whole paginated operation (per-page `async with` becomes a
+  ref-count bump); `Client.__aenter__/__aexit__` does the same for every
+  REST adapter over the public-API block. Pool lifetime is owned by explicit
+  scopes, nothing else.
+- **Why**: audit P1 — the ref-count fell 0→1→0 on every page, i.e. one TCP
+  pool + TLS handshake *per page* (a 500-page backfill = 500 handshakes),
+  and B4 — `Client.__aexit__` was `pass` while its docstring promised
+  cleanup ("Cannot send a request, as the client has been closed" seen twice
+  in prod 3.3.x).
+- **Rejected alternatives**: a grace-period keep-alive on the client (timer
+  state + a background reaper for the same effect, and the pool would
+  outlive the operation unpredictably); constructing one global pool at
+  import (no clean shutdown path for short-lived CLI invocations).
+
+### 2026-06-11 — Stream flush is arrival-driven, not a background task (PR #128)  [accepted]
+- **Choice**: streams flush on record arrival when the batch hits 1000 rows
+  *or* 60 s elapsed (`_STREAM_FLUSH_INTERVAL_S`) — no separate flusher task.
+  `rows_written` is accumulated from every save and reported on all finish
+  paths.
+- **Why**: with zero arrivals there is nothing in RAM, so an arrival-driven
+  check bounds crash loss to one interval plus one inter-record gap — same
+  guarantee as a background task without owning another task lifecycle in
+  `stream()` (cancellation, exception routing through the existing
+  `finish_run` paths).
+- **Rejected alternatives**: an `asyncio` background flusher per stream
+  (flushes an empty buffer on quiet pairs, adds a second cancellation path
+  for no stronger bound); `asyncio.timeout` around the iterator (restructures
+  the three loops for the same result).
+
+### 2026-06-11 — Stream supervisor distinguishes permanent from transient errors (PR #126)  [accepted]
+- **Choice**: `NoCapability` is treated as *permanent* by `_StreamWorker`:
+  the worker logs once, emits `status=failed`, and stops — no retry. All
+  other stream exceptions remain *transient* (exponential 5→60 s reconnect),
+  and the backoff resets to 5 s when the failed run had been healthy for
+  ≥ 300 s. The capability check in `operations.stream()` moved before
+  `create_run` so a rejected stream never creates a run row.
+- **Why**: prod audit 2026-06-10 (B6) found ~350 zombie `running` rows from
+  `stream:bitfinex:*:orderbook` — one per 60 s retry of an error that can
+  never succeed; and after weeks of occasional blips every reconnect waited
+  the full 60 s. Retrying a misconfiguration is noise, not resilience.
+- **Rejected alternatives**: keeping the check after `create_run` and
+  finishing the run as `failed` on each attempt (still one row per retry,
+  DB churn for a config error); a generic "max retries then give up" cap
+  (would also abandon genuinely transient WS outages, e.g. an exchange
+  maintenance window).
+
 ### 2026-06-10 — Order-book depths declared per capability; invalid requests snap with a warning (PR #122) [accepted]
 - **Choice**: `Capability.depths` lists the discrete depths a WS book channel
   accepts (Kraken verified live: {10, 25, 100, 500, 1000}; Bybit spot

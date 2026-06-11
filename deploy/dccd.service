@@ -27,14 +27,18 @@ ExecStart=/opt/dccd/venv/bin/dccd start
 WorkingDirectory=/var/lib/dccd
 Restart=on-failure
 RestartSec=5
+# Give the daemon enough time to drain open streams before SIGKILL (62 s observed
+# in production; 120 s adds comfortable headroom for busy multi-stream setups).
+TimeoutStopSec=120
 
 # Logs go to the journal: `journalctl -u dccd [-f]`. Rotation is handled by
 # journald (see /etc/systemd/journald.conf: SystemMaxUse=, MaxRetentionSec=) —
 # dccd writes no log files of its own.
 
 # Resource limits — uncomment and tune for your host (defaults sized for a small
-# box; too-low values can OOM-kill a busy daemon):
-#MemoryMax=1G
+# box; too-low values can OOM-kill a busy daemon).
+# Production RSS observed ~830 MB with 50 jobs; 1.5 G leaves ~80 % headroom.
+#MemoryMax=1.5G
 #CPUQuota=200%
 #TasksMax=256
 

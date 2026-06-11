@@ -75,7 +75,11 @@ ws-subscription-honesty):
   sync to stay above the floor, and **read-through restore** pulls a purged
   dataset back from the remote on read. **Epic C (tiered storage) is complete** —
   provisioning, restore and integrity are documented in
-  `doc/source/how-to/sync-remote.rst`.
+  `doc/source/how-to/sync-remote.rst`. **Production caveat**: arthurserver has
+  **no rclone remote and no alert webhook configured yet** (pending the user's
+  choice of destination + webhook URL) — prod data is not backed up off-box.
+  The systemd unit limits are in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`,
+  drop-in verified live 2026-06-11).
 
 ## Tooling & infra present in the repo
 

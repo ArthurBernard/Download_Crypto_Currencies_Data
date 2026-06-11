@@ -109,3 +109,13 @@ class SourceRegistry:
     def exchanges(self) -> list[str]:
         """Names of all registered exchanges."""
         return list(self._adapters.keys())
+
+    @property
+    def adapters(self) -> "dict[str, Source]":
+        """Read-only view of all registered adapters keyed by exchange name.
+
+        Used by :class:`dccd.Client` to enter/exit every adapter's HTTP client
+        in a single ``async with`` block, keeping one pool alive for the
+        lifetime of the context.
+        """
+        return dict(self._adapters)

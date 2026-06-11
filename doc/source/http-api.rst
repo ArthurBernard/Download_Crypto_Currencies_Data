@@ -38,7 +38,7 @@ Inventory & data
      - Description
    * - ``GET``
      - ``/api/inventory``
-     - All stored datasets (exchange, pair, type, span, rows, time range, on-disk ``bytes``, file count; OHLC also gets ``expected_rows`` / ``missing_rows`` for gap detection).
+     - All stored datasets (exchange, pair, type, span, rows, time range, on-disk ``bytes``, file count; OHLC also gets ``expected_rows`` / ``missing_rows`` for candle-coverage computation — ``missing_rows = expected_rows − actual_rows`` counts clock-time slots with no candle, which is normal for illiquid pairs that emit no empty candles).
    * - ``POST``
      - ``/api/read``
      - Read stored rows for a dataset; body ``{exchange, symbol, data_type, span, start_ns, end_ns}`` (returns up to 1 000 rows).
