@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.5.0] - 2026-06-11
+
+### Added
+
 - Proactive per-exchange rate limiting on all REST fetches: the (previously
   unwired) token-bucket `RateLimiter` is now a process-wide singleton keyed
   by exchange, awaited before every outbound request — concurrent operations
