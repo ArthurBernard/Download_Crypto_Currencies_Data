@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/05-rate-limiter-fate
 kind: leaf
-status: planned
+status: done
 complexity: high
 depends: [04]
 parallel: false

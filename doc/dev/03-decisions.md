@@ -120,6 +120,28 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — RateLimiter wired as a process-wide per-exchange singleton (PR #XX)  [accepted]
+- **Choice**: keep `transport/ratelimit.py` and make it real — a
+  `shared_limiter()` singleton keyed by exchange, awaited by
+  `AsyncHTTPClient.get()` before every outbound request (adapters get it via
+  `default_http_client(exchange)` in `sources/base.py`). Conservative
+  doc-sourced defaults (kraken 1/s, coinbase 3/s, okx 8/s, bitmex 0.5/s, …);
+  reactive 429/Retry-After stays as backstop. Clock/sleep seams injected for
+  deterministic tests.
+- **Why**: production evidence settled the wire-or-delete question — 481
+  `Rate-limited` (429) events in 14 days on arthurserver (OKX 454, Coinbase
+  27, single burst day), and the old hardcoded Coinbase rate (10/s) was
+  simply wrong (public cap 3/s). The limiter must be process-wide: each
+  adapter owns its own HTTP client, so a per-client bucket cannot coordinate
+  a `run-all` burst. Verified live: 3 concurrent Kraken backfills share one
+  bucket (1.10 req/s total vs the 1.0/s cap), zero 429.
+- **Rejected alternatives**: deleting the module and staying reactive-only
+  (the journalctl data shows reactive-only thrashing OKX in 2 s retry loops
+  for ~90 s); per-client limiters (no cross-operation coordination — the
+  exact failure mode observed); weight-based limiting à la Binance (real
+  fidelity would need per-endpoint weights — out of scope, conservative
+  flat rates suffice).
+
 ### 2026-06-11 — HTTP pool lifetime = operation scope (ref-count held), not a keep-alive (PR #129)  [accepted]
 - **Choice**: `backfill()` enters the adapter's ref-counted `AsyncHTTPClient`
   once for the whole paginated operation (per-page `async with` becomes a
