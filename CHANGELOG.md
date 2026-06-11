@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10/s constant was wrong — public cap is 3/s). Verified live on Kraken:
   31 pages in 30 s = 1.03 req/s vs a 1.0/s cap, zero 429; 3 concurrent
   backfills total 1.10 req/s, not 3×. (#130)
+- CLI test suite (`test_cli.py`, Typer `CliRunner`, 27 tests): every command
+  covered offline — `backfill` runs end-to-end through a fake adapter and
+  the real `ParquetStore`, exit codes and failure modes asserted.
+  `interfaces/cli/main.py` goes from 0 % to 97 % coverage with zero
+  production-code changes. (#134)
 
 ### Changed
 
