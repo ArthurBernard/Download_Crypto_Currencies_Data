@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of polluting `active_runs()`, `dccd status` and the Dashboard forever
   (production had ~350 such rows). Boot-only: one-shot CLI commands never
   trigger the purge. (#127)
+- Trades/OHLC streams flush to disk on a 60 s interval as well as on the
+  1000-record threshold — a quiet pair no longer keeps hours of data in RAM
+  (lost on crash, invisible to inventory/freshness). Stream runs now record
+  their real `rows_written` (was always 0) on every finish path. Verified
+  live: mid-stream parquet at ~63 s, `rows_written` = on-disk rows exactly.
+  (#128)
 
 ### Deprecated
 

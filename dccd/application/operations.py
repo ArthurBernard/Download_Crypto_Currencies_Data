@@ -37,6 +37,11 @@ __all__ = ["backfill", "stream", "read", "inventory", "sync_remote"]
 logger = logging.getLogger(__name__)
 
 _FLUSH_BATCH = 10_000
+# Time-based flush interval for stream(): flush the in-memory batch at least
+# every N seconds even if it has not reached the 1000-record threshold.  This
+# bounds the amount of data that can be lost on a crash to one interval worth of
+# records plus at most one inter-record gap.
+_STREAM_FLUSH_INTERVAL_S = 60.0
 # Default lookback per data type when start="last" and no data exists yet.
 # Bounds the very first backfill so it can't silently run for millions of rows
 # (trades) or from epoch 0. Deep history is opt-in via an explicit start date.
@@ -400,6 +405,7 @@ async def stream(
         events.status("running")
 
     batch: list[Any] = []
+    rows_written = 0
     snapshot_interval = params.snapshot_interval or 60
 
     # Liveness heartbeat: emit a throttled sample (last price/quote) so the Live
@@ -422,6 +428,28 @@ async def stream(
             _last_sample[0] = now_mono
             events.sample(ts, value=value, bid=bid, ask=ask)
 
+    # Time-based flush: flush the batch when it reaches 1000 records *or* after
+    # _STREAM_FLUSH_INTERVAL_S seconds — whichever comes first.  A separate
+    # monotonic baseline is shared by trades and OHLC (order-book snapshots are
+    # saved immediately and do not participate).
+    _last_flush: list[float] = [time.monotonic()]
+
+    async def _maybe_flush() -> int:
+        """Flush batch if count threshold or time interval exceeded; return rows saved."""
+        nonlocal batch
+        now = time.monotonic()
+        if batch and (
+            len(batch) >= 1000
+            or now - _last_flush[0] >= _STREAM_FLUSH_INTERVAL_S
+        ):
+            n = await asyncio.to_thread(
+                store.save, ds, list(batch), Provenance(source=prov_src)
+            )
+            batch.clear()
+            _last_flush[0] = now
+            return n
+        return 0
+
     try:
         if target.data_type == DataType.TRADES:
             if not isinstance(adapter, TradesLive):
@@ -431,9 +459,7 @@ async def stream(
                     break
                 batch.append(record)
                 _emit_sample(record.ts, value=record.price)
-                if len(batch) >= 1000:
-                    await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
-                    batch.clear()
+                rows_written += await _maybe_flush()
 
         elif target.data_type == DataType.OHLC:
             if not isinstance(adapter, OHLCLive):
@@ -443,9 +469,7 @@ async def stream(
                     break
                 batch.append(bar)
                 _emit_sample(bar.ts, value=bar.close)
-                if len(batch) >= 1000:
-                    await asyncio.to_thread(store.save, ds, list(batch), Provenance(source=prov_src))
-                    batch.clear()
+                rows_written += await _maybe_flush()
 
         elif target.data_type == DataType.ORDERBOOK:
             if not isinstance(adapter, OrderBookLive):
@@ -477,7 +501,9 @@ async def stream(
             ):
                 if stop_event and stop_event.is_set():
                     break
-                await asyncio.to_thread(store.save, ds, [snap], Provenance(source=prov_src))
+                rows_written += await asyncio.to_thread(
+                    store.save, ds, [snap], Provenance(source=prov_src)
+                )
                 # Best bid = highest bid price, best ask = lowest ask price.
                 # Compute rather than trust ordering so a momentarily unsorted
                 # book can't surface a crossed bid/ask in the liveness sample.
@@ -490,11 +516,14 @@ async def stream(
             events.log(f"Stream error: {exc}", level="error")
             events.status("failed")
         if runs_store:
-            runs_store.finish_run(run_id, "failed", error=str(exc))
+            runs_store.finish_run(run_id, "failed", rows_written=rows_written, error=str(exc))
         raise
 
+    # Final flush: drain any records buffered since the last periodic flush.
     if batch:
-        await asyncio.to_thread(store.save, ds, batch, Provenance(source=prov_src))
+        rows_written += await asyncio.to_thread(
+            store.save, ds, batch, Provenance(source=prov_src)
+        )
 
     # `cancelled` only when a stop was actually requested. A WS generator that
     # ends on its own (exhausted without stop) is a failure — recording it as
@@ -503,14 +532,14 @@ async def stream(
         if events:
             events.status("cancelled")
         if runs_store:
-            runs_store.finish_run(run_id, "cancelled")
+            runs_store.finish_run(run_id, "cancelled", rows_written=rows_written)
     else:
         msg = "stream ended unexpectedly"
         if events:
             events.log(msg, level="error")
             events.status("failed")
         if runs_store:
-            runs_store.finish_run(run_id, "failed", error=msg)
+            runs_store.finish_run(run_id, "failed", rows_written=rows_written, error=msg)
 
 
 def read(
