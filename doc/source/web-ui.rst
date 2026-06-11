@@ -53,7 +53,7 @@ Pages
    * - **Dashboard**
      - A KPI bar (datasets, rows stored, on-disk size, live streams, runs in progress), an *Active now* panel (running backfills with a live progress bar + live streams), recent runs, and a per-exchange data summary.
    * - **Data**
-     - Read-only view of every dataset on disk under ``data_path`` — data-type tabs (OHLC / Trades / Order Book) → per-exchange accordions. Each row shows rows, time range, freshness dot, OHLC gap %, on-disk size, and file count. (Formerly *Inventory*; ``/inventory`` still redirects here.)
+     - Read-only view of every dataset on disk under ``data_path`` — data-type tabs (OHLC / Trades / Order Book) → per-exchange accordions. Each row shows rows, time range, freshness dot, OHLC **candle coverage** (fraction of clock-time slots that contain a candle — low values on quiet/illiquid pairs are normal, not data loss), on-disk size, and file count. (Formerly *Inventory*; ``/inventory`` still redirects here.)
    * - **Historical**
      - Manage backfill jobs (**OHLC** and **Trades**): data-type tabs → per-exchange accordions → one row per dataset with an editable **first date**, a **Schedule** (Off / hourly / daily / custom — a recurring backfill run by the daemon), a real **coverage bar** (first date → today, reflecting stored data and holes), and inline **Run** / **Delete**. **Run all** (page header) and per-exchange **Run all** trigger every job at once. Order books have no REST history, so they live only on *Live*.
    * - **Live**

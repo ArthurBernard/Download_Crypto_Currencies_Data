@@ -74,14 +74,21 @@ function renderPane(dt) {
     </summary><div class="ex-body">
     <table><thead><tr>
       <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>Rows</th><th>From</th><th>To</th>
-      <th>Freshness</th>${dt==='ohlc'?'<th>Gaps</th>':''}<th>Size</th><th>Files</th>
+      <th>Freshness</th>${dt==='ohlc'?'<th title="Fraction of clock-time slots that contain a candle. Exchanges emit no candle for minutes without trades — low coverage on a quiet pair is normal, not data loss.">Coverage ⓘ</th>':''}<th>Size</th><th>Files</th>
     </tr></thead><tbody>`;
     for (const d of byEx[ex]) {
       const fcls = stalenessClass(d.max_ts);
+      const coverageTip = 'Exchanges emit no candle for minutes without trades — low coverage on a quiet pair is normal, not data loss.';
       const gap = d.expected_rows
-        ? (d.missing_rows>0
-            ? `<td title="${d.missing_rows} missing bars"><span class="err">${(100*d.missing_rows/d.expected_rows).toFixed(1)}%</span></td>`
-            : '<td><span class="ok">0</span></td>')
+        ? (() => {
+            const pct = 100 * (1 - d.missing_rows / d.expected_rows);
+            const label = pct.toFixed(1) + '%';
+            // Coverage is always shown neutrally: low values are expected for
+            // illiquid pairs that emit no empty candles. There is no threshold
+            // that reliably separates "sparse trading" from "collection hole"
+            // using only the footer stats available here, so we never alarm.
+            return `<td title="${coverageTip}"><span class="muted">${label}</span></td>`;
+          })()
         : '<td><span class="muted">n/a</span></td>';
       html += `<tr>
         <td><strong>${escapeHtml(d.pair)}</strong></td>
