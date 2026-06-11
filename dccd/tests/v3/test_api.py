@@ -1,6 +1,9 @@
 """Tests for FastAPI HTTP interface."""
 
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -32,6 +35,20 @@ class TestHealthEndpoint:
         resp = client.get("/health")
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
+
+
+class TestOpenAPIVersion:
+    def test_openapi_version_matches_package(self, client):
+        """OpenAPI spec version must match the installed dccd package version."""
+        try:
+            expected_version = _pkg_version("dccd")
+        except PackageNotFoundError:
+            expected_version = "0.0.0-dev"
+
+        resp = client.get("/openapi.json")
+        assert resp.status_code == 200
+        openapi = resp.json()
+        assert openapi["info"]["version"] == expected_version
 
 
 class TestBackfillCancel:

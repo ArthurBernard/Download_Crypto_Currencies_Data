@@ -203,5 +203,5 @@ def setup(app):
 numpydoc_show_class_members = False
 numpydoc_class_members_toctree = False
 
-# Suppress citation duplicate warnings from autosummary
-suppress_warnings = ['ref.citation']
+# Suppress citation duplicate warnings from autosummary and sphinx-click/Typer incompatibility
+suppress_warnings = ['ref.citation', 'docutils']
