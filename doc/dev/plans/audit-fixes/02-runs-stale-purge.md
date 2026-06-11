@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/02-runs-stale-purge
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: false
