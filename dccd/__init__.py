@@ -98,10 +98,30 @@ class Client:
         self._coverage_store = build_coverage_store(self._config.settings.data_path)
         self._remote = build_remote(self._config)
         self._registry = build_registry()
+
+        # Enter every adapter's HTTP client so the shared pool is open for the
+        # full lifetime of the ``async with Client() as c:`` block.  Individual
+        # calls inside the block (backfill, etc.) do their own inner
+        # ``async with adapter._http`` which becomes a cheap ref-count bump
+        # rather than a fresh TCP+TLS connection.
+        for adapter in self._registry.adapters.values():
+            http = adapter.http_client
+            if http is not None:
+                await http.__aenter__()
+
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        pass
+        # Exit every adapter's HTTP client in the reverse direction (LIFO).
+        # Mirrors __aenter__: decrements the ref-count for each adapter; when
+        # the count drops to 0 the underlying httpx.AsyncClient is closed.
+        if self._registry is not None:
+            for adapter in reversed(list(self._registry.adapters.values())):
+                http = adapter.http_client
+                if http is not None:
+                    await http.__aexit__(None, None, None)
+        self._registry = None
+        self._store = None
 
     async def backfill(self, exchange: str, symbol: str, data_type: str = "ohlc",
                        span: int | None = None, start: str = "last") -> dict[str, Any]:
