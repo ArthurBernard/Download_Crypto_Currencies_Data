@@ -54,7 +54,7 @@ roadmap ideas until load or evidence demands them.
 - [x] 05 rate-limiter-fate — chore/rate-limiter-fate — high (depends on 04)
 - [x] 06 prod-hardening — chore/prod-hardening — medium
 - [x] 07 gap-metric-context — feat/gap-metric-context — medium
-- [ ] 08 cli-tests — chore/cli-tests — medium (parallel)
+- [x] 08 cli-tests — chore/cli-tests — medium (parallel)
 - [ ] 09 adapter-fixtures — chore/adapter-fixtures — medium (parallel)
 - [x] 10 minor-batch — chore/audit-minor-batch — low
 
