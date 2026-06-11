@@ -21,7 +21,32 @@ __all__ = [
     "OHLCLive",
     "TradesLive",
     "OrderBookLive",
+    "default_http_client",
 ]
+
+
+def default_http_client(exchange: str) -> "AsyncHTTPClient":
+    """Build an :class:`~dccd.transport.http.AsyncHTTPClient` wired to the limiter.
+
+    REST adapters call this to construct their default shared client so that
+    every outbound request is throttled by the process-wide per-exchange
+    :func:`~dccd.transport.ratelimit.shared_limiter`. Keeping the wiring here
+    (rather than in each adapter) means a single seam controls proactive
+    rate-limiting for all exchanges.
+
+    Parameters
+    ----------
+    exchange : str
+        Exchange name used to key the limiter bucket.
+
+    Returns
+    -------
+    AsyncHTTPClient
+    """
+    from dccd.transport.http import AsyncHTTPClient
+    from dccd.transport.ratelimit import shared_limiter
+
+    return AsyncHTTPClient(exchange=exchange, limiter=shared_limiter())
 
 
 class Source:
