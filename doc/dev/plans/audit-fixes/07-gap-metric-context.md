@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/07-gap-metric-context
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: []
 parallel: false

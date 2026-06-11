@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ~830 MB with 50 jobs); the deploy and sync-remote how-tos gain a
   "Production checklist" (off-box backup, alert webhook, systemd limits).
   Limits applied and verified live on the production collector. (#131)
+- Data page presents OHLC completeness as neutral "candle coverage" (with an
+  explanatory tooltip) instead of a red "missing %": exchanges emit no candle
+  for minutes without trades, so an illiquid pair showed an alarming
+  "85 % missing" when nothing was lost. True holes still surface (the number
+  drops); `expected_rows`/`missing_rows` API fields are unchanged. (#XX)
 
 ### Fixed
 

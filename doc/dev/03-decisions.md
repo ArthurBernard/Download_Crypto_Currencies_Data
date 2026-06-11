@@ -120,6 +120,21 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — Gap metric fix is presentational, not structural (PR #XX)  [accepted]
+- **Choice**: keep `expected_rows`/`missing_rows` semantics (clock-time slots
+  from footer stats) and fix the *presentation*: the Data page shows neutral
+  "candle coverage" with a tooltip instead of a red "missing %"; no alarm
+  threshold at all.
+- **Why**: with footer stats only (min/max/rowcount — the zero-extra-I/O
+  constraint from #119) there is no way to distinguish "exchange emits no
+  empty candles" from a collection hole; any styling threshold would still
+  false-alarm on sparse-but-complete pairs. The audit explicitly allowed the
+  labeling fix. True holes still surface as a visibly lower number (verified
+  by injecting one).
+- **Rejected alternatives**: deriving liquidity-aware expectations from trade
+  data (per-row I/O, breaks the footer-stats constraint); a warn-below-X%
+  threshold (false-alarms quiet pairs by construction).
+
 ### 2026-06-11 — RateLimiter wired as a process-wide per-exchange singleton (PR #130)  [accepted]
 - **Choice**: keep `transport/ratelimit.py` and make it real — a
   `shared_limiter()` singleton keyed by exchange, awaited by
