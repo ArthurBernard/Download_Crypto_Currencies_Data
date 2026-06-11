@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explanatory tooltip) instead of a red "missing %": exchanges emit no candle
   for minutes without trades, so an illiquid pair showed an alarming
   "85 % missing" when nothing was lost. True holes still surface (the number
-  drops); `expected_rows`/`missing_rows` API fields are unchanged. (#XX)
+  drops); `expected_rows`/`missing_rows` API fields are unchanged. (#132)
 
 ### Fixed
 

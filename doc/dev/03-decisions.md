@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-11 — Gap metric fix is presentational, not structural (PR #XX)  [accepted]
+### 2026-06-11 — Gap metric fix is presentational, not structural (PR #132)  [accepted]
 - **Choice**: keep `expected_rows`/`missing_rows` semantics (clock-time slots
   from footer stats) and fix the *presentation*: the Data page shows neutral
   "candle coverage" with a tooltip instead of a red "missing %"; no alarm
