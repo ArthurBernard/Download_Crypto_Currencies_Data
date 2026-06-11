@@ -75,11 +75,13 @@ ws-subscription-honesty):
   sync to stay above the floor, and **read-through restore** pulls a purged
   dataset back from the remote on read. **Epic C (tiered storage) is complete** —
   provisioning, restore and integrity are documented in
-  `doc/source/how-to/sync-remote.rst`. **Production caveat**: arthurserver has
-  **no rclone remote and no alert webhook configured yet** (pending the user's
-  choice of destination + webhook URL) — prod data is not backed up off-box.
-  The systemd unit limits are in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`,
-  drop-in verified live 2026-06-11).
+  `doc/source/how-to/sync-remote.rst`. **Production (2026-06-11)**: off-box
+  backup is live — hourly rclone sync from arthurserver to the main PC over
+  Tailscale (sftp, service-owned key under `/var/lib/dccd` because
+  `ProtectHome=yes`; `.dccd/**` excluded — live SQLite WAL files can't be
+  copied consistently mid-write), first cycle verified `succeeded`. Systemd
+  limits in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`). **Still pending:
+  the alert webhook** (`alerts.webhook_url` null — user undecided).
 
 ## Tooling & infra present in the repo
 
