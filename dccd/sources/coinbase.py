@@ -34,6 +34,64 @@ _BASE = "https://api.exchange.coinbase.com"
 _COINBASE_SPANS = [60, 300, 900, 3600, 21600, 86400]
 
 
+def _parse_ohlc_page(data: list[Any]) -> list[OHLCBar]:
+    """Parse a raw Coinbase candles response into :class:`~dccd.domain.records.OHLCBar` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is
+        ``[time_s, low, high, open, close, volume]``.  Coinbase returns newest
+        first; callers sort if order matters.
+    """
+    return [
+        OHLCBar(
+            ts=int(e[0]) * NS,
+            open=float(e[3]),
+            high=float(e[2]),
+            low=float(e[1]),
+            close=float(e[4]),
+            volume=float(e[5]),
+            quote_volume=None,
+        )
+        for e in data
+        if isinstance(e, (list, tuple)) and len(e) >= 6
+    ]
+
+
+def _parse_trades_page(data: list[Any], start_ns: int = 0, end_ns: int = 2**63 - 1) -> list[Trade]:
+    """Parse a raw Coinbase trades response into :class:`~dccd.domain.records.Trade` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``trade_id``,
+        ``side``, ``size``, ``price``, and ``time`` (ISO 8601 UTC).
+    start_ns, end_ns:
+        Optional nanosecond bounds; trades outside ``[start_ns, end_ns]`` are
+        silently dropped (Coinbase returns a fixed recent page regardless of the
+        requested window).
+    """
+    result: list[Trade] = []
+    for e in (data if isinstance(data, list) else []):
+        try:
+            ts_str = e.get("time", "")
+            ts_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            ts_ns = s_to_ns(ts_dt.timestamp())
+            if not (start_ns <= ts_ns <= end_ns):
+                continue
+            result.append(Trade(
+                ts=ts_ns,
+                price=float(e["price"]),
+                amount=float(e["size"]),
+                side=e.get("side"),
+                tid=str(e.get("trade_id", "")),
+            ))
+        except Exception:
+            continue
+    return result
+
+
 class CoinbaseSource(
     OHLCHistory,
     TradesHistory,
@@ -126,22 +184,10 @@ class CoinbaseSource(
             logger.error("Coinbase candles unexpected response: %r", data)
             return []
 
-        return [
-            OHLCBar(
-                ts=int(e[0]) * NS,
-                open=float(e[3]),
-                high=float(e[2]),
-                low=float(e[1]),
-                close=float(e[4]),
-                volume=float(e[5]),
-                # Coinbase candles carry no quote volume; close×volume would be
-                # a fabricated approximation, so leave it null (see fidelity
-                # matrix in the docs).
-                quote_volume=None,
-            )
-            for e in data
-            if isinstance(e, (list, tuple)) and len(e) >= 6
-        ]
+        # Coinbase candles carry no quote volume; close×volume would be
+        # a fabricated approximation, so leave it null (see fidelity
+        # matrix in the docs).
+        return _parse_ohlc_page(data)
 
     async def fetch_trades_page(
         self,
@@ -166,24 +212,7 @@ class CoinbaseSource(
                 {"limit": min(limit, 100)},
             )
 
-        result = []
-        for e in (data if isinstance(data, list) else []):
-            try:
-                ts_str = e.get("time", "")
-                ts_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                ts_ns = s_to_ns(ts_dt.timestamp())
-                if not (start_ns <= ts_ns <= end_ns):
-                    continue
-                result.append(Trade(
-                    ts=ts_ns,
-                    price=float(e["price"]),
-                    amount=float(e["size"]),
-                    side=e.get("side"),
-                    tid=str(e.get("trade_id", "")),
-                ))
-            except Exception:
-                continue
-        return result, None
+        return _parse_trades_page(data, start_ns=start_ns, end_ns=end_ns), None
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         """Fetch a current order-book snapshot up to *depth* levels."""

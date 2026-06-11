@@ -32,6 +32,63 @@ _BASE_REST = "https://api.binance.com/api/v3"
 _BASE_WS = "wss://stream.binance.com:9443/stream"
 
 
+def _parse_ohlc_page(data: list[Any]) -> list[OHLCBar]:
+    """Parse a raw Binance klines response into :class:`~dccd.domain.records.OHLCBar` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is
+        ``[open_time_ms, open, high, low, close, volume, close_time_ms,
+        quote_vol, trades, ...]``.
+    """
+    return [
+        OHLCBar(
+            ts=int(e[0]) * 1_000_000,
+            open=float(e[1]),
+            high=float(e[2]),
+            low=float(e[3]),
+            close=float(e[4]),
+            volume=float(e[5]),
+            quote_volume=float(e[7]),
+            trades=int(e[8]),
+        )
+        for e in data
+    ]
+
+
+def _parse_aggtrades_page(data: list[Any], end_ms: int | None = None) -> tuple[list[Trade], str | None]:
+    """Parse a raw Binance aggTrades response into :class:`~dccd.domain.records.Trade` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``a`` (agg id),
+        ``p`` (price), ``q`` (qty), ``T`` (timestamp ms), ``m`` (is maker).
+    end_ms:
+        Upper bound in milliseconds; used to decide whether to return a cursor.
+    """
+    if not data:
+        return [], None
+    trades = [
+        Trade(
+            ts=int(e["T"]) * 1_000_000,
+            price=float(e["p"]),
+            amount=float(e["q"]),
+            side="sell" if e["m"] else "buy",
+            tid=str(e["a"]),
+        )
+        for e in data
+    ]
+    last_ts_ms = int(data[-1]["T"])
+    next_cursor = (
+        str(int(data[-1]["a"]) + 1)
+        if end_ms is not None and len(data) > 0 and last_ts_ms < end_ms
+        else None
+    )
+    return trades, next_cursor
+
+
 class BinanceSource(
     OHLCHistory,
     TradesHistory,
@@ -117,19 +174,7 @@ class BinanceSource(
         async with self._http as client:
             data = await client.get(f"{_BASE_REST}/klines", params)
 
-        return [
-            OHLCBar(
-                ts=int(e[0]) * 1_000_000,
-                open=float(e[1]),
-                high=float(e[2]),
-                low=float(e[3]),
-                close=float(e[4]),
-                volume=float(e[5]),
-                quote_volume=float(e[7]),
-                trades=int(e[8]),
-            )
-            for e in data
-        ]
+        return _parse_ohlc_page(data)
 
     async def fetch_trades_page(
         self,
@@ -161,26 +206,7 @@ class BinanceSource(
         async with self._http as client:
             data = await client.get(f"{_BASE_REST}/aggTrades", params)
 
-        if not data:
-            return [], None
-
-        trades = [
-            Trade(
-                ts=int(e["T"]) * 1_000_000,
-                price=float(e["p"]),
-                amount=float(e["q"]),
-                side="sell" if e["m"] else "buy",
-                tid=str(e["a"]),
-            )
-            for e in data
-        ]
-        last_ts_ms = int(data[-1]["T"])
-        next_cursor = (
-            str(int(data[-1]["a"]) + 1)
-            if len(data) >= limit and last_ts_ms < end_ms
-            else None
-        )
-        return trades, next_cursor
+        return _parse_aggtrades_page(data, end_ms=end_ms if len(data) >= limit else None)
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         """Fetch a current order-book snapshot up to *depth* levels."""
