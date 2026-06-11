@@ -36,6 +36,22 @@ __all__ = ["backfill", "stream", "read", "inventory", "sync_remote"]
 
 logger = logging.getLogger(__name__)
 
+
+class _NullContext:
+    """No-op async context manager used when an adapter has no HTTP client.
+
+    Adapters that only use WebSocket (no REST) return ``None`` from
+    :attr:`~dccd.sources.base.Source.http_client`.  ``backfill`` uses this
+    sentinel so the operation-level ``async with`` is always present in the
+    code path, keeping the logic uniform without a conditional branch.
+    """
+
+    async def __aenter__(self) -> "_NullContext":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
 _FLUSH_BATCH = 10_000
 # Time-based flush interval for stream(): flush the in-memory batch at least
 # every N seconds even if it has not reached the 1000-record threshold.  This
@@ -243,104 +259,116 @@ async def backfill(
     try:
         adapter = registry.get(target.exchange)
 
-        if target.data_type == DataType.OHLC:
-            if not isinstance(adapter, OHLCHistory):
-                raise NoCapability(target.exchange, "ohlc", "historical")
-            cap = adapter.capability_for(DataType.OHLC, "rest", "historical")
-            if cap is None:
-                raise NoCapability(target.exchange, "ohlc", "historical")
+        # Hold the adapter's HTTP client open for the entire backfill so the
+        # reference count (_depth) stays ≥ 1 across all pages.  Without this,
+        # every fetch_*_page opens and closes the shared httpx.AsyncClient,
+        # creating a fresh TCP connection + TLS handshake per page (500 pages
+        # → 500 handshakes).  The inner ``async with self._http`` calls in each
+        # fetch_*_page become cheap ref-count increments while the outer context
+        # keeps the pool alive.  WebSocket-only adapters return None from
+        # http_client, in which case the null-context is a no-op.
+        _http = adapter.http_client
+        _http_ctx = _http if _http is not None else _NullContext()
 
-            from dccd.transport.paginate import paginate_ohlc
+        async with _http_ctx:
+            if target.data_type == DataType.OHLC:
+                if not isinstance(adapter, OHLCHistory):
+                    raise NoCapability(target.exchange, "ohlc", "historical")
+                cap = adapter.capability_for(DataType.OHLC, "rest", "historical")
+                if cap is None:
+                    raise NoCapability(target.exchange, "ohlc", "historical")
 
-            span = target.span or 3600
-            if cap.spans and span not in cap.spans:
-                raise ValueError(
-                    f"Span {span}s not supported by {target.exchange}. "
-                    f"Supported spans: {sorted(cap.spans)}"
-                )
+                from dccd.transport.paginate import paginate_ohlc
 
-            # Honour history="recent": these exchanges (e.g. Kraken, 720 bars)
-            # only serve a recent window. Paginating deeper just refetches the
-            # same recent bars — wasteful and misleading. Clamp + warn instead.
-            if cap.history == "recent" and cap.max_per_request:
-                earliest = end_ns - cap.max_per_request * span * NS
-                if start_ns < earliest:
-                    _emit_log(
-                        events, runs_store, run_id,
-                        f"{target.exchange} OHLC serves only the "
-                        f"{cap.max_per_request} most recent bars; clamping start "
-                        f"to {ns_to_dt(earliest).isoformat()}.",
-                        level="warning",
+                span = target.span or 3600
+                if cap.spans and span not in cap.spans:
+                    raise ValueError(
+                        f"Span {span}s not supported by {target.exchange}. "
+                        f"Supported spans: {sorted(cap.spans)}"
                     )
-                    start_ns = earliest
 
-            sym = target.symbol
+                # Honour history="recent": these exchanges (e.g. Kraken, 720 bars)
+                # only serve a recent window. Paginating deeper just refetches the
+                # same recent bars — wasteful and misleading. Clamp + warn instead.
+                if cap.history == "recent" and cap.max_per_request:
+                    earliest = end_ns - cap.max_per_request * span * NS
+                    if start_ns < earliest:
+                        _emit_log(
+                            events, runs_store, run_id,
+                            f"{target.exchange} OHLC serves only the "
+                            f"{cap.max_per_request} most recent bars; clamping start "
+                            f"to {ns_to_dt(earliest).isoformat()}.",
+                            level="warning",
+                        )
+                        start_ns = earliest
 
-            async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:
-                return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)
+                sym = target.symbol
 
-            bars: list[OHLCBar] = []
-            async for bar in paginate_ohlc(_fetch_ohlc, cap, start_ns, end_ns, span):
-                if stop_event and stop_event.is_set():
-                    break
-                bars.append(bar)
-                _collected[0] += 1
-                _track_ts(bar.ts)
-                if _collected[0] % 200 == 0:
-                    _emit_time(bar.ts)
-                if len(bars) >= _FLUSH_BATCH:
-                    total_written += await _flush(store, ds, bars, prov_src)
+                async def _fetch_ohlc(s_ns: int, e_ns: int, limit: int) -> list[OHLCBar]:
+                    return await adapter.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)
 
-            total_written += await _flush(store, ds, bars, prov_src)
-            _emit_time(end_ns)
+                bars: list[OHLCBar] = []
+                async for bar in paginate_ohlc(_fetch_ohlc, cap, start_ns, end_ns, span):
+                    if stop_event and stop_event.is_set():
+                        break
+                    bars.append(bar)
+                    _collected[0] += 1
+                    _track_ts(bar.ts)
+                    if _collected[0] % 200 == 0:
+                        _emit_time(bar.ts)
+                    if len(bars) >= _FLUSH_BATCH:
+                        total_written += await _flush(store, ds, bars, prov_src)
 
-        elif target.data_type == DataType.TRADES:
-            if not isinstance(adapter, TradesHistory):
-                raise NoCapability(target.exchange, "trades", "historical")
-            cap = adapter.capability_for(DataType.TRADES, "rest", "historical")
-            if cap is None:
-                raise NoCapability(target.exchange, "trades", "historical")
-
-            from dccd.transport.paginate import paginate_trades
-
-            if cap.history == "recent":
-                _emit_log(
-                    events, runs_store, run_id,
-                    f"{target.exchange} serves only recent trades; "
-                    "deep history is unavailable.",
-                    level="warning",
-                )
-
-            sym = target.symbol
-
-            async def _fetch_trades(
-                s_ns: int, e_ns: int, limit: int, cursor: str | None,
-            ) -> tuple[list[Trade], str | None]:
-                return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit, cursor)
-
-            batch: list[Trade] = []
-            async for trade in paginate_trades(_fetch_trades, cap, start_ns, end_ns):
-                if stop_event and stop_event.is_set():
-                    break
-                batch.append(trade)
-                _collected[0] += 1
-                _track_ts(trade.ts)
-                if _collected[0] % 1000 == 0:
-                    _emit_time(trade.ts)  # progress by time covered, not page count
-                if len(batch) >= _FLUSH_BATCH:
-                    total_written += await _flush(store, ds, batch, prov_src)
-
-            total_written += await _flush(store, ds, batch, prov_src)
-            if not (stop_event and stop_event.is_set()):
+                total_written += await _flush(store, ds, bars, prov_src)
                 _emit_time(end_ns)
 
-        elif target.data_type == DataType.ORDERBOOK:
-            if not isinstance(adapter, OrderBookSnapshotREST):
-                raise NoCapability(target.exchange, "orderbook", "snapshot")
-            depth = params.depth or 50
-            snap = await adapter.fetch_orderbook(target.symbol, depth)
-            _track_ts(snap.ts)
-            total_written += await _flush(store, ds, [snap], prov_src)
+            elif target.data_type == DataType.TRADES:
+                if not isinstance(adapter, TradesHistory):
+                    raise NoCapability(target.exchange, "trades", "historical")
+                cap = adapter.capability_for(DataType.TRADES, "rest", "historical")
+                if cap is None:
+                    raise NoCapability(target.exchange, "trades", "historical")
+
+                from dccd.transport.paginate import paginate_trades
+
+                if cap.history == "recent":
+                    _emit_log(
+                        events, runs_store, run_id,
+                        f"{target.exchange} serves only recent trades; "
+                        "deep history is unavailable.",
+                        level="warning",
+                    )
+
+                sym = target.symbol
+
+                async def _fetch_trades(
+                    s_ns: int, e_ns: int, limit: int, cursor: str | None,
+                ) -> tuple[list[Trade], str | None]:
+                    return await adapter.fetch_trades_page(sym, s_ns, e_ns, limit, cursor)
+
+                batch: list[Trade] = []
+                async for trade in paginate_trades(_fetch_trades, cap, start_ns, end_ns):
+                    if stop_event and stop_event.is_set():
+                        break
+                    batch.append(trade)
+                    _collected[0] += 1
+                    _track_ts(trade.ts)
+                    if _collected[0] % 1000 == 0:
+                        _emit_time(trade.ts)  # progress by time covered, not page count
+                    if len(batch) >= _FLUSH_BATCH:
+                        total_written += await _flush(store, ds, batch, prov_src)
+
+                total_written += await _flush(store, ds, batch, prov_src)
+                if not (stop_event and stop_event.is_set()):
+                    _emit_time(end_ns)
+
+            elif target.data_type == DataType.ORDERBOOK:
+                if not isinstance(adapter, OrderBookSnapshotREST):
+                    raise NoCapability(target.exchange, "orderbook", "snapshot")
+                depth = params.depth or 50
+                snap = await adapter.fetch_orderbook(target.symbol, depth)
+                _track_ts(snap.ts)
+                total_written += await _flush(store, ds, [snap], prov_src)
 
     except Exception as exc:
         error_msg = str(exc)
