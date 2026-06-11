@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   client open for the whole operation, and the `Client` context manager now
   actually opens the shared pools on enter and closes them on exit (its
   `__aexit__` was a `pass`). Verified live: a ~42-page Coinbase backfill
-  constructs 1 pool instead of ~42. (#XX)
+  constructs 1 pool instead of ~42. (#129)
 
 ### Deprecated
 

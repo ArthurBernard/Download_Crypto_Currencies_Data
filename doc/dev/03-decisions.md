@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-11 — HTTP pool lifetime = operation scope (ref-count held), not a keep-alive (PR #XX)  [accepted]
+### 2026-06-11 — HTTP pool lifetime = operation scope (ref-count held), not a keep-alive (PR #129)  [accepted]
 - **Choice**: `backfill()` enters the adapter's ref-counted `AsyncHTTPClient`
   once for the whole paginated operation (per-page `async with` becomes a
   ref-count bump); `Client.__aenter__/__aexit__` does the same for every
