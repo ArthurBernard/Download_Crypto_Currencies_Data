@@ -120,6 +120,21 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-11 — Stream flush is arrival-driven, not a background task (PR #XX)  [accepted]
+- **Choice**: streams flush on record arrival when the batch hits 1000 rows
+  *or* 60 s elapsed (`_STREAM_FLUSH_INTERVAL_S`) — no separate flusher task.
+  `rows_written` is accumulated from every save and reported on all finish
+  paths.
+- **Why**: with zero arrivals there is nothing in RAM, so an arrival-driven
+  check bounds crash loss to one interval plus one inter-record gap — same
+  guarantee as a background task without owning another task lifecycle in
+  `stream()` (cancellation, exception routing through the existing
+  `finish_run` paths).
+- **Rejected alternatives**: an `asyncio` background flusher per stream
+  (flushes an empty buffer on quiet pairs, adds a second cancellation path
+  for no stronger bound); `asyncio.timeout` around the iterator (restructures
+  the three loops for the same result).
+
 ### 2026-06-11 — Stream supervisor distinguishes permanent from transient errors (PR #126)  [accepted]
 - **Choice**: `NoCapability` is treated as *permanent* by `_StreamWorker`:
   the worker logs once, emits `status=failed`, and stops — no retry. All

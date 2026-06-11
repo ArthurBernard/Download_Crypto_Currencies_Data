@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes/03-stream-time-flush
 kind: leaf
-status: planned
+status: done
 complexity: medium
 depends: [01]
 parallel: false
