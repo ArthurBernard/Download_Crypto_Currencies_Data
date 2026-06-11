@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-11 — Stream flush is arrival-driven, not a background task (PR #XX)  [accepted]
+### 2026-06-11 — Stream flush is arrival-driven, not a background task (PR #128)  [accepted]
 - **Choice**: streams flush on record arrival when the batch hits 1000 rows
   *or* 60 s elapsed (`_STREAM_FLUSH_INTERVAL_S`) — no separate flusher task.
   `rows_written` is accumulated from every save and reported on all finish

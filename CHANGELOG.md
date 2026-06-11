@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (lost on crash, invisible to inventory/freshness). Stream runs now record
   their real `rows_written` (was always 0) on every finish path. Verified
   live: mid-stream parquet at ~63 s, `rows_written` = on-disk rows exactly.
-  (#XX)
+  (#128)
 
 ### Deprecated
 
