@@ -1,7 +1,7 @@
 ---
 plan: hardening-backlog-2026-06
 kind: global
-status: planning
+status: executing
 roadmap: "## Hardening backlog (post-audit follow-ups, 2026-06-11)"
 release_on_done: true
 ---
@@ -32,7 +32,7 @@ a later epic.
 
 ## Leaf checklist
 
-- [ ] 01 remote-copy-not-sync — fix/remote-copy-not-sync — medium
+- [x] 01 remote-copy-not-sync — fix/remote-copy-not-sync — medium
 - [ ] 02 duplicate-run-guard — fix/duplicate-run-guard — medium
 - [ ] 03 runs-db-retention — feat/runs-db-retention — medium
 - [ ] 04 ntfy-alert-format — fix/ntfy-alert-format — medium

@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-12 — Remote is an archive superset, not a mirror (PR #XX)  [accepted]
+### 2026-06-12 — Remote is an archive superset, not a mirror (PR #152)  [accepted]
 - **Choice**: `RemoteStorage.sync_one` uploads with `rclone copy` (add/update
   only) instead of `rclone sync` (mirror that deletes remote extras).
 - **Why**: the Epic C tiered-storage contract — free-space purge deletes old
