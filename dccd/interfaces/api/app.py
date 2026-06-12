@@ -448,6 +448,14 @@ def create_app(
         await request.app.state.scheduler.sync_streams(request.app.state.all_specs)
         await request.app.state.scheduler.sync_intervals(request.app.state.all_specs)
 
+    async def _active_run_for(request: Request, spec_id: str) -> str | None:
+        """Return the run_id of the first active run matching *spec_id*, or None."""
+        active = await asyncio.to_thread(_runs(request).active_runs)
+        for row in active:
+            if row.get("spec_id") == spec_id:
+                return str(row["run_id"])
+        return None
+
     def _run_backfill_tracked(request: Request, spec: JobSpec, run_id: str) -> None:
         """Spawn a backfill with a cancellable stop event registered by run_id."""
         reg = _reg(request)
@@ -585,6 +593,11 @@ def create_app(
             origin="runtime",
         )
 
+        # Idempotency guard: if the spec is already running, return the existing run_id.
+        existing = await _active_run_for(request, spec.id)
+        if existing is not None:
+            return {"run_id": existing, "status": "already-running"}
+
         # Generate a URL-safe run_id and pass it into backfill() so both the
         # API polling endpoint and the RunsStore use the same identifier.
         # We use a short UUID (no slashes) instead of embedding spec.id which
@@ -688,6 +701,11 @@ def create_app(
         if spec.operation != "backfill":
             raise HTTPException(400, "Only backfill jobs can be triggered manually; use /api/streams/start for stream jobs")
 
+        # Idempotency guard: if the spec is already running, return the existing run_id.
+        existing = await _active_run_for(request, spec.id)
+        if existing is not None:
+            return {"run_id": existing, "status": "already-running", "job_id": job_id}
+
         run_id = str(_uuid.uuid4())
         _run_backfill_tracked(request, spec, run_id)
 
@@ -701,12 +719,17 @@ def create_app(
         backfill_specs = [s for s in specs if s.operation == "backfill" and s.enabled]
 
         run_ids = []
+        already_running = []
         for spec in backfill_specs:
+            existing = await _active_run_for(request, spec.id)
+            if existing is not None:
+                already_running.append({"run_id": existing, "job_id": spec.id})
+                continue
             run_id = str(_uuid.uuid4())
             run_ids.append({"run_id": run_id, "job_id": spec.id})
             _run_backfill_tracked(request, spec, run_id)
 
-        return {"started": len(run_ids), "runs": run_ids}
+        return {"started": len(run_ids), "runs": run_ids, "already_running": already_running}
 
     # -----------------------------------------------------------------------
     # Config
