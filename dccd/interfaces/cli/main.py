@@ -160,6 +160,13 @@ def cmd_start(
     cfg, cfg_path = _load_cfg(config)
     store = build_store(cfg.settings.data_path)
     runs_store = build_runs_store(cfg.settings.data_path)
+    # Sweep orphaned runs *before* the scheduler starts any stream workers so
+    # the lifespan (which opens the same DB) does not stale-out legitimate rows
+    # that the scheduler just created.  This is the correct boot-path call site
+    # warned about in RunsStore.mark_stale_running's docstring.
+    _stale = runs_store.mark_stale_running()
+    if _stale > 0:
+        typer.echo(f"Marked {_stale} orphaned run(s) stale (daemon restarted)")
     coverage_store = build_coverage_store(cfg.settings.data_path)
     registry = build_registry()
     bus = EventBus()
