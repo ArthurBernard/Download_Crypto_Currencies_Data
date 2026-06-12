@@ -8,14 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.5.2] - 2026-06-12
+
+### Added
+
 - Boot-time runs.db retention (`settings.runs_retention_days`, default 90,
   `0` disables): terminal non-failed runs (`succeeded`/`stale`/`cancelled`)
   older than the window are deleted and the database VACUUMed at daemon
   start, right after the orphan sweep; `failed` runs are kept as the
   long-term error journal. Verified on a copy of the production runs.db:
   1,770 old rows pruned, file size −67 %, `failed` rows untouched. (#154)
-
-### Changed
 
 ### Fixed
 
@@ -36,11 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   risks deleting the only copy of old data. The remote is now an archive
   superset (never deleted automatically; remote cleanup is manual).
   Verified live against a real rclone remote: purge → sync → file survives
-  → `restore()` returns byte-identical content. (#XX)
-
-### Deprecated
-
-### Removed
+  → `restore()` returns byte-identical content. (#152)
 
 ## [3.5.1] - 2026-06-12
 
