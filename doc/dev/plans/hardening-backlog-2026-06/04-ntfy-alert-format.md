@@ -1,7 +1,7 @@
 ---
 plan: hardening-backlog-2026-06/04-ntfy-alert-format
 kind: leaf
-status: planned
+status: executing
 complexity: medium
 depends: []
 parallel: false
