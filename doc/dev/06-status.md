@@ -27,16 +27,11 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
 
 ## Pending
 
-_(nothing release-blocking — the Epic D fixes are merged on `develop` and ready
-to `/release`; the production collector runs 3.3.1 and should be upgraded once
-that release ships)_
-
-- **arthurserver OKX OHLC history has 431 one-minute gaps per pair** (created by
-  the 2026-06-10 deep backfill through the page-boundary bug fixed on
-  `develop`). Repair after the next release is deployed: re-backfill the five
-  OKX pairs from 2026-05-11 (dedup makes this safe), then confirm inventory
-  `missing_rows == 0`. Tracked in
-  `doc/dev/plans/audit-fixes-2026-06-12/00-plan.md` Done criteria.
+_(nothing pending — v3.5.1 released 2026-06-12 and deployed on the production
+collector; the 2026-06-12 audit is fully closed: OKX history repaired by
+re-backfill — 46 528/46 528 bars, `missing_rows == 0` on all five pairs — and
+the boot orphan-sweep fix verified live, 20 stream runs `running` after
+restart)_
 
 ## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
 
