@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   older than the window are deleted and the database VACUUMed at daemon
   start, right after the orphan sweep; `failed` runs are kept as the
   long-term error journal. Verified on a copy of the production runs.db:
-  1,770 old rows pruned, file size −67 %, `failed` rows untouched. (#XX)
+  1,770 old rows pruned, file size −67 %, `failed` rows untouched. (#154)
 
 ### Changed
 

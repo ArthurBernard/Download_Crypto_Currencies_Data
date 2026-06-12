@@ -34,7 +34,7 @@ a later epic.
 
 - [x] 01 remote-copy-not-sync — fix/remote-copy-not-sync — medium
 - [x] 02 duplicate-run-guard — fix/duplicate-run-guard — medium
-- [ ] 03 runs-db-retention — feat/runs-db-retention — medium
+- [x] 03 runs-db-retention — feat/runs-db-retention — medium
 - [ ] 04 ntfy-alert-format — fix/ntfy-alert-format — medium
 
 ## Dependencies
