@@ -102,10 +102,12 @@ class OKXSource(
             return []
 
         pair = self.render_symbol(symbol)
+        # OKX `before`/`after` are exclusive bounds. Without `- 1` the bar
+        # exactly at each page-window start would be silently dropped.
         params: dict[str, Any] = {
             "instId": pair,
             "bar": bar,
-            "before": str(start_ns // 1_000_000),
+            "before": str(start_ns // 1_000_000 - 1),
             "after": str(end_ns // 1_000_000),
             "limit": min(limit, 100),
         }

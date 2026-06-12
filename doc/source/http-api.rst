@@ -59,6 +59,9 @@ Backfill
    * - ``GET``
      - ``/api/backfill/{run_id}``
      - Poll a run: ``state``, ``rows_written``, ``progress`` (time-based), ``log_tail``.
+       States: ``running``, ``succeeded``, ``failed``, ``cancelled``, and
+       ``stale`` — a run orphaned in ``running`` by a daemon crash, marked at
+       the next daemon boot (its ``error`` reads "orphaned by daemon restart").
    * - ``DELETE``
      - ``/api/backfill/{run_id}``
      - Cancel a running backfill (cooperative — stops at the next page, keeps collected rows).

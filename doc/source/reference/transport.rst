@@ -38,5 +38,16 @@ WebSocket base
 Rate limiter
 ============
 
+Rate limiting is **proactive**: a process-wide limiter keyed by exchange is
+awaited before every outbound REST request, so concurrent operations on the
+same exchange (e.g. "Run all" over many jobs) share one bucket and stay under
+the exchange's published rate. Conservative per-exchange defaults are built in
+(e.g. Kraken 1 req/s, Coinbase 3 req/s); reactive ``429``/``Retry-After``
+handling in the HTTP client remains as a backstop. The HTTP connection pool is
+held open for the whole paginated operation — one TLS session per backfill,
+not one per page.
+
 .. autoclass:: dccd.transport.ratelimit.RateLimiter
    :members:
+
+.. autofunction:: dccd.transport.ratelimit.shared_limiter

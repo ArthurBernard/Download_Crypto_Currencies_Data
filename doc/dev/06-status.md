@@ -31,6 +31,13 @@ _(nothing release-blocking — the Epic D fixes are merged on `develop` and read
 to `/release`; the production collector runs 3.3.1 and should be upgraded once
 that release ships)_
 
+- **arthurserver OKX OHLC history has 431 one-minute gaps per pair** (created by
+  the 2026-06-10 deep backfill through the page-boundary bug fixed on
+  `develop`). Repair after the next release is deployed: re-backfill the five
+  OKX pairs from 2026-05-11 (dedup makes this safe), then confirm inventory
+  `missing_rows == 0`. Tracked in
+  `doc/dev/plans/audit-fixes-2026-06-12/00-plan.md` Done criteria.
+
 ## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
 
 A production audit (arthurserver, 50 jobs) found the daemon at 97.7 % CPU and
@@ -75,11 +82,17 @@ ws-subscription-honesty):
   sync to stay above the floor, and **read-through restore** pulls a purged
   dataset back from the remote on read. **Epic C (tiered storage) is complete** —
   provisioning, restore and integrity are documented in
-  `doc/source/how-to/sync-remote.rst`. **Production caveat**: arthurserver has
-  **no rclone remote and no alert webhook configured yet** (pending the user's
-  choice of destination + webhook URL) — prod data is not backed up off-box.
-  The systemd unit limits are in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`,
-  drop-in verified live 2026-06-11).
+  `doc/source/how-to/sync-remote.rst`. **Production (2026-06-11)**: off-box
+  backup is live — hourly rclone sync from arthurserver to the main PC over
+  Tailscale (sftp, service-owned key under `/var/lib/dccd` because
+  `ProtectHome=yes`; `.dccd/**` excluded — live SQLite WAL files can't be
+  copied consistently mid-write), first cycle verified `succeeded`. Systemd
+  limits in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`). Alert webhook
+  live (ntfy.sh private topic, test delivered). Server upgraded to v3.5.0
+  on 2026-06-11; its first boot marked 491 crash-orphaned runs `stale`.
+  Note: under `dccd start` ≤ 3.5.0 that boot sweep also staled the daemon's
+  *own* just-started stream runs (Dashboard "Active now" showed no streams);
+  fixed on `develop` — the sweep now runs before the scheduler starts.
 
 ## Tooling & infra present in the repo
 

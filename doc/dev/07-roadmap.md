@@ -60,13 +60,41 @@ wired rate limiter, systemd limits, honest coverage metric, CLI + adapter test
 suites, OpenAPI version + CI docs gate. ADR journal has the rationale; see
 `06-status.md`._
 
-## Prod ops — pending user input
+_Prod ops: **complete** (2026-06-11). Off-box backup (hourly rclone sync to
+the main PC over Tailscale), ntfy alert webhook (test delivered), systemd
+limits, and the server upgraded to v3.5.0 — whose first boot marked 491
+orphaned runs `stale`. See `06-status.md`._
 
-- [ ] **arthurserver: configure the rclone backup remote + alert webhook** —
-  everything else from the audit's prod hardening shipped (systemd limits
-  live, how-to checklist published); these two need the user's choice of
-  backup destination (provider + credentials) and webhook URL. Until then,
-  **prod data is not backed up off-box**.
+## Hardening backlog (post-audit follow-ups, 2026-06-11)
+
+Small, well-scoped items surfaced while operating v3.5.0 in production.
+
+- [ ] **Guard manual triggers against duplicate concurrent runs** — streams
+  and scheduled backfills are guarded (worker no-op / sequential interval
+  loop), but `POST /api/backfill`, `/api/jobs/run` and `run-all` happily
+  start a second run for a dataset that is already being backfilled
+  (manually or by the scheduler). Benign for data (store locks + dedup;
+  shared rate limiter since #130) but wastes requests and confuses
+  runs/progress. Fix: reject — or return the existing `run_id` — when
+  `active_runs()` already holds a run for the same spec id. One leaf.
+- [ ] **runs.db retention** — the run history is append-only with no purge:
+  ~800 runs/day in prod ≈ 180 MB/year, unbounded. Add a boot-time retention
+  (e.g. delete `succeeded`/`stale`/`cancelled` runs older than a configurable
+  N days — default 90 — keep `failed`, then `VACUUM`), alongside the
+  existing `mark_stale_running()` call. One leaf.
+- [ ] **ntfy-friendly alert formatting** — `HealthMonitor` POSTs
+  `{"text": msg}` JSON; on ntfy the phone shows the raw JSON blob. Send a
+  plain-text body (ntfy renders it as the message; optionally `X-Title`/
+  `X-Priority` headers), keeping a JSON mode for Slack-style endpoints if
+  trivially detectable. ~20 lines in `application/monitor.py` + test. One leaf.
+- [ ] **Config export / load (full file)** — round-trip the complete
+  effective configuration (settings + alerts + storage + all jobs): a
+  `dccd config export [-o file]` that dumps the validated running config as
+  YAML, and `dccd config load <file>` that validates, persists, and applies
+  it live (`sync_streams` + `sync_intervals`), plus the matching
+  `GET`/`POST /api/config/file` for registry parity. Use case: back up or
+  replicate a collector (e.g. arthurserver's 50 jobs) in one command. One
+  leaf.
 
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).

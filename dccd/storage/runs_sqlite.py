@@ -201,9 +201,12 @@ class RunsStore:
         clearly attributes the state change to a restart rather than a normal
         completion or a user-visible error.
 
-        This method must only be called from the daemon boot path (FastAPI
-        lifespan startup).  Calling it while a daemon is live would incorrectly
-        stale-out its legitimate active runs.
+        This method must only be called from the daemon boot path, before any
+        new runs are started: ``cmd_start`` for ``dccd start`` (called before
+        the scheduler starts stream workers); the FastAPI lifespan for
+        standalone ``dccd ui`` (called before the standalone scheduler is
+        created).  Calling it while workers are already running would
+        incorrectly stale-out their legitimate active runs.
         """
         import time
         now = int(time.time() * 1_000_000_000)
