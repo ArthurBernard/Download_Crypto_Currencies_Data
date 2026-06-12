@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Dashboard "Active now" never showed streams. The sweep now runs in
   `cmd_start` before the scheduler starts; the lifespan only sweeps in
   standalone `dccd ui`. Verified live across two daemon launches: the live
-  run stays `running`; a restart stales only the previous one. (#XX)
+  run stays `running`; a restart stales only the previous one. (#145)
 - OKX OHLC pagination silently dropped the bar at every 100-bar page
   boundary: OKX `before`/`after` cursors are exclusive, so passing
   `before=start_ms` excluded the bar exactly at each window start (observed
