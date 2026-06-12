@@ -90,6 +90,9 @@ ws-subscription-honesty):
   limits in place (`TimeoutStopSec=120`, `MemoryMax=1.5G`). Alert webhook
   live (ntfy.sh private topic, test delivered). Server upgraded to v3.5.0
   on 2026-06-11; its first boot marked 491 crash-orphaned runs `stale`.
+  Note: under `dccd start` ≤ 3.5.0 that boot sweep also staled the daemon's
+  *own* just-started stream runs (Dashboard "Active now" showed no streams);
+  fixed on `develop` — the sweep now runs before the scheduler starts.
 
 ## Tooling & infra present in the repo
 

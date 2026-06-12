@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes-2026-06-12/02-boot-orphan-sweep-order
 kind: leaf
-status: planned
+status: executing
 complexity: medium
 depends: []
 parallel: false

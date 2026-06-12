@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `dccd start` marked its own just-started stream runs `stale` at boot: the
+  orphan sweep (`mark_stale_running`) ran in the FastAPI lifespan *after*
+  `cmd_start` had already started the scheduler's stream workers, so their
+  fresh `running` rows were swept as "orphaned by daemon restart" and the
+  Dashboard "Active now" never showed streams. The sweep now runs in
+  `cmd_start` before the scheduler starts; the lifespan only sweeps in
+  standalone `dccd ui`. Verified live across two daemon launches: the live
+  run stays `running`; a restart stales only the previous one. (#XX)
 - OKX OHLC pagination silently dropped the bar at every 100-bar page
   boundary: OKX `before`/`after` cursors are exclusive, so passing
   `before=start_ms` excluded the bar exactly at each window start (observed
