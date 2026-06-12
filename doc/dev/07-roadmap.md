@@ -69,11 +69,6 @@ orphaned runs `stale`. See `06-status.md`._
 
 Small, well-scoped items surfaced while operating v3.5.0 in production.
 
-- [ ] **ntfy-friendly alert formatting** — `HealthMonitor` POSTs
-  `{"text": msg}` JSON; on ntfy the phone shows the raw JSON blob. Send a
-  plain-text body (ntfy renders it as the message; optionally `X-Title`/
-  `X-Priority` headers), keeping a JSON mode for Slack-style endpoints if
-  trivially detectable. ~20 lines in `application/monitor.py` + test. One leaf.
 - [ ] **Config export / load (full file)** — round-trip the complete
   effective configuration (settings + alerts + storage + all jobs): a
   `dccd config export [-o file]` that dumps the validated running config as

@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Webhook alerts send a plain-text body with `X-Title: dccd` /
+  `X-Priority: high` headers for ntfy-style endpoints — the phone showed a
+  raw JSON blob before; Slack webhooks (`hooks.slack.com`) keep the JSON
+  `{"text": …}` payload. Verified live: one test message delivered to the
+  production ntfy topic (HTTP 200) rendered as plain text. (#155)
 - Manual backfill triggers (`POST /api/backfill`, `/api/jobs/run`,
   `/api/jobs/run-all`) are idempotent: a spec that is already being
   backfilled returns the existing `run_id` (`status: already-running`) —
