@@ -99,6 +99,25 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
+## Audit fixes (2026-06-12)
+
+Two bugs found auditing the production collector on 2026-06-12. Plan tree:
+`doc/dev/plans/audit-fixes-2026-06-12/`.
+
+- [ ] **OKX OHLC loses one bar per pagination page** — `fetch_ohlc_page` passes
+  `before = start_ms`, but OKX `before`/`after` cursors are *exclusive*: the bar
+  exactly at each 100-bar window start is dropped (431 one-minute gaps per OKX
+  pair on the server, spaced exactly 100 min, from the deep backfill). Fix
+  `before = start_ms - 1` + boundary regression test; repair server data with a
+  re-backfill after deploy. One leaf.
+- [ ] **`dccd start` boot race marks live stream runs stale** — `cmd_start`
+  starts the scheduler (streams create their `running` rows) *before* the
+  FastAPI lifespan calls `mark_stale_running()`, which sweeps the legit rows to
+  `stale` ("orphaned by daemon restart") a second after creation; Dashboard
+  "Active now" never shows streams under `dccd start`. Sweep orphans in
+  `cmd_start` before `scheduler.start()`; skip the lifespan sweep when a
+  scheduler is injected. One leaf.
+
 ## Deferred — M3 (post-3.0)
 
 Larger axes intentionally parked until after the 3.0 release. Not started; do not
