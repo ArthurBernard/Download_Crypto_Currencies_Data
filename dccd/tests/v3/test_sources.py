@@ -20,6 +20,7 @@ from dccd.sources.binance import BinanceSource
 from dccd.sources.bybit import BybitSource
 from dccd.sources.coinbase import CoinbaseSource
 from dccd.sources.kraken import KrakenSource
+from dccd.sources.okx import OKXSource
 from dccd.sources.registry import SourceRegistry
 
 BTC_USDT = Symbol(base="BTC", quote="USDT")
@@ -279,6 +280,124 @@ class TestOrderBookWSParsing:
         assert snap.is_snapshot is True
         assert snap.bids[0].price == 100.0 and snap.asks[0].price == 101.0
         assert snap.bids[0].price < snap.asks[0].price
+
+
+class TestOKXOHLCWindowBoundary:
+    """OKX OHLC pagination must not drop the bar at each page-window start.
+
+    OKX ``before``/``after`` params are *exclusive*: passing ``before=start_ms``
+    causes the bar exactly at the window start to be silently dropped on every
+    forward-pagination step. ``fetch_ohlc_page`` must send ``before=start_ms-1``
+    to include that bar.
+    """
+
+    def _make_stub_http(self, captured: list[dict], response_factory):
+        """Return a fake AsyncHTTPClient context manager.
+
+        ``captured`` is a list that will receive the ``params`` dict from each
+        ``get()`` call.  ``response_factory(params)`` returns the canned OKX
+        JSON dict for that call.
+        """
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append(dict(params))
+                return response_factory(params)
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    @staticmethod
+    def _okx_response(bars_ms_newest_first: list[int]) -> dict:
+        """Build a canned OKX candles response from a list of bar timestamps (ms)."""
+        data = [
+            [str(ts_ms), "50000", "50100", "49900", "50000", "1.0", "50000.0"]
+            for ts_ms in bars_ms_newest_first
+        ]
+        return {"code": "0", "data": data}
+
+    @pytest.mark.asyncio
+    async def test_before_param_is_exclusive_adjusted(self):
+        """fetch_ohlc_page must send before=start_ms-1 and after=end_ms."""
+        span = 60  # 1-minute bars
+        start_ns = 1_700_000_000 * NS
+        end_ns = start_ns + 100 * 60 * NS  # 100-bar window
+        captured: list[dict] = []
+
+        src = OKXSource(http=self._make_stub_http(
+            captured,
+            lambda p: self._okx_response([]),
+        ))
+
+        await src.fetch_ohlc_page(Symbol(base="BTC", quote="USDT"), span, start_ns, end_ns, 100)
+
+        assert len(captured) == 1
+        params = captured[0]
+        assert params["before"] == str(start_ns // 1_000_000 - 1)
+        assert params["after"] == str(end_ns // 1_000_000)
+
+    @pytest.mark.asyncio
+    async def test_no_bar_lost_at_page_boundary(self):
+        """Regression: paginate_ohlc over ≥150 min must include every minute.
+
+        The stub emulates OKX exclusive semantics: bars with
+        ``before_ms < ts_ms`` and ``ts_ms <= after_ms`` are NOT included when
+        ``ts_ms == before_ms``.  Without the ``-1`` adjustment the bar at each
+        100-bar boundary would be absent; with it, every bar is present.
+        """
+        from dccd.transport.paginate import paginate_ohlc
+
+        span = 60  # 1-minute candles
+        # Use a window of 160 minutes so we cross at least one 100-bar boundary.
+        start_ns = 1_700_000_000 * NS
+        n_bars = 160
+        end_ns = start_ns + n_bars * 60 * NS
+
+        # Build the full synthetic series (ms timestamps, oldest to newest).
+        all_ts_ms = [start_ns // 1_000_000 + i * 60_000 for i in range(n_bars)]
+
+        def _response_factory(params):
+            before_ms = int(params["before"])
+            after_ms = int(params["after"])
+            # OKX exclusive semantics: before_ms < ts_ms < after_ms is wrong;
+            # correct OKX semantics: "before" means newer-than (ts > before)
+            # and "after" means older-than (ts < after).  Both are exclusive.
+            selected = [
+                ts for ts in all_ts_ms
+                if before_ms < ts < after_ms
+            ]
+            # OKX returns newest-first, up to 100 items.
+            selected_sorted = sorted(selected, reverse=True)[:100]
+            return self._okx_response(selected_sorted)
+
+        captured: list[dict] = []
+        src = OKXSource(http=self._make_stub_http(captured, _response_factory))
+
+        cap = src.capability_for(DataType.OHLC, "rest", "historical")
+        assert cap is not None
+
+        sym = Symbol(base="BTC", quote="USDT")
+
+        async def _fetch(s_ns, e_ns, limit):
+            return await src.fetch_ohlc_page(sym, span, s_ns, e_ns, limit)
+
+        collected = []
+        async for bar in paginate_ohlc(_fetch, cap, start_ns, end_ns, span):
+            collected.append(bar)
+
+        collected_ts_ms = sorted(b.ts // 1_000_000 for b in collected)
+        expected_ts_ms = all_ts_ms  # one bar per minute
+
+        # No missing minute, no duplicate.
+        assert collected_ts_ms == expected_ts_ms, (
+            f"Expected {len(expected_ts_ms)} bars, got {len(collected_ts_ms)}; "
+            f"missing: {set(expected_ts_ms) - set(collected_ts_ms)}"
+        )
 
 
 class TestKrakenOHLCWSParsing:
