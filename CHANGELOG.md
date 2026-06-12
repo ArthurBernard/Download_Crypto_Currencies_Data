@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backfilled returns the existing `run_id` (`status: already-running`) —
   run-all skips busy jobs and lists them under `already_running` — instead
   of starting a duplicate concurrent run that wasted exchange requests and
-  confused runs/progress. (#XX)
+  confused runs/progress. (#153)
 - Off-box sync no longer mirrors deletions: `RemoteStorage` runs
   `rclone copy` instead of `rclone sync`, so locally purged files survive
   on the remote for read-through restore — enabling `min_free_gb` no longer
