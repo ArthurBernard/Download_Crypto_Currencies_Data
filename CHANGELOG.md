@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+### Deprecated
+
+### Removed
+
+## [3.5.1] - 2026-06-12
+
+### Fixed
+
 - `dccd start` marked its own just-started stream runs `stale` at boot: the
   orphan sweep (`mark_stale_running`) ran in the FastAPI lifespan *after*
   `cmd_start` had already started the scheduler's stream workers, so their
@@ -28,10 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test drives the paginator across a page boundary under faithful exclusive
   semantics. Verified live: a 12 h OKX 1m backfill lands with 0 gaps and
   all 7 boundary bars present. (#144)
-
-### Deprecated
-
-### Removed
 
 ## [3.5.0] - 2026-06-11
 
