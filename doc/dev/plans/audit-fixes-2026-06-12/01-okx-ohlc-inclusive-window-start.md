@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes-2026-06-12/01-okx-ohlc-inclusive-window-start
 kind: leaf
-status: planned
+status: executing
 complexity: medium
 depends: []
 parallel: false

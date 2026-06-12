@@ -31,6 +31,13 @@ _(nothing release-blocking — the Epic D fixes are merged on `develop` and read
 to `/release`; the production collector runs 3.3.1 and should be upgraded once
 that release ships)_
 
+- **arthurserver OKX OHLC history has 431 one-minute gaps per pair** (created by
+  the 2026-06-10 deep backfill through the page-boundary bug fixed on
+  `develop`). Repair after the next release is deployed: re-backfill the five
+  OKX pairs from 2026-05-11 (dedup makes this safe), then confirm inventory
+  `missing_rows == 0`. Tracked in
+  `doc/dev/plans/audit-fixes-2026-06-12/00-plan.md` Done criteria.
+
 ## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
 
 A production audit (arthurserver, 50 jobs) found the daemon at 97.7 % CPU and

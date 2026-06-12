@@ -364,9 +364,8 @@ class TestOKXOHLCWindowBoundary:
         def _response_factory(params):
             before_ms = int(params["before"])
             after_ms = int(params["after"])
-            # OKX exclusive semantics: before_ms < ts_ms < after_ms is wrong;
-            # correct OKX semantics: "before" means newer-than (ts > before)
-            # and "after" means older-than (ts < after).  Both are exclusive.
+            # OKX semantics: "before" means newer-than (ts > before) and
+            # "after" means older-than (ts < after) — both bounds exclusive.
             selected = [
                 ts for ts in all_ts_ms
                 if before_ms < ts < after_ms
