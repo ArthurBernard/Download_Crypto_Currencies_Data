@@ -453,7 +453,7 @@ def create_app(
         active = await asyncio.to_thread(_runs(request).active_runs)
         for row in active:
             if row.get("spec_id") == spec_id:
-                return row["run_id"]
+                return str(row["run_id"])
         return None
 
     def _run_backfill_tracked(request: Request, spec: JobSpec, run_id: str) -> None:
