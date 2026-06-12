@@ -69,11 +69,6 @@ orphaned runs `stale`. See `06-status.md`._
 
 Small, well-scoped items surfaced while operating v3.5.0 in production.
 
-- [ ] **runs.db retention** — the run history is append-only with no purge:
-  ~800 runs/day in prod ≈ 180 MB/year, unbounded. Add a boot-time retention
-  (e.g. delete `succeeded`/`stale`/`cancelled` runs older than a configurable
-  N days — default 90 — keep `failed`, then `VACUUM`), alongside the
-  existing `mark_stale_running()` call. One leaf.
 - [ ] **ntfy-friendly alert formatting** — `HealthMonitor` POSTs
   `{"text": msg}` JSON; on ntfy the phone shows the raw JSON blob. Send a
   plain-text body (ntfy renders it as the message; optionally `X-Title`/
