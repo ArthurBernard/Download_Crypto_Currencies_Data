@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-12 — Remote is an archive superset, not a mirror (PR #XX)  [accepted]
+- **Choice**: `RemoteStorage.sync_one` uploads with `rclone copy` (add/update
+  only) instead of `rclone sync` (mirror that deletes remote extras).
+- **Why**: the Epic C tiered-storage contract — free-space purge deletes old
+  *local* files and read-through restore pulls them back from the remote —
+  silently relied on the remote retaining what local drops. With `rclone
+  sync`, the hourly cycle after a purge would delete the only remaining copy.
+  Latent while `min_free_gb` was 0.0, but the production store now carries the
+  full 2020→present history, so the failure mode became "lose the archive".
+  Copy semantics make the invariant structural: local = hot tier, remote =
+  complete monotonic archive.
+- **Rejected alternatives**: `rclone sync --backup-dir` (purged files land in
+  a side path; restore would need a second lookup and the layout contract
+  breaks); purge-aware exclude lists fed to sync (stateful, fragile, easy to
+  desynchronise from what purge actually deleted). Accepted trade-off:
+  deleting data from the remote is now a deliberate manual operation.
+
 ### 2026-06-11 — Sphinx -W in CI, with docutils warnings suppressed (PR #133)  [accepted]
 - **Choice**: a separate CI `docs` job builds with `sphinx-build -W`
   (warnings = errors), and `conf.py` adds

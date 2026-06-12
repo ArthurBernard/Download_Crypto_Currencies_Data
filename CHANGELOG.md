@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Off-box sync no longer mirrors deletions: `RemoteStorage` runs
+  `rclone copy` instead of `rclone sync`, so locally purged files survive
+  on the remote for read-through restore — enabling `min_free_gb` no longer
+  risks deleting the only copy of old data. The remote is now an archive
+  superset (never deleted automatically; remote cleanup is manual).
+  Verified live against a real rclone remote: purge → sync → file survives
+  → `restore()` returns byte-identical content. (#XX)
+
 ### Deprecated
 
 ### Removed
