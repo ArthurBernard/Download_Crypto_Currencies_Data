@@ -623,3 +623,81 @@ class TestStart:
             f"mark_stale_running (pos {sweep_idx}) must precede scheduler.start (pos {start_idx}); "
             f"order was: {call_order}"
         )
+
+    def test_start_prunes_runs_after_stale_sweep(self, tmp_path):
+        """cmd_start must call prune_old_runs after mark_stale_running and before Scheduler.start."""
+        from dccd.storage.coverage_sqlite import CoverageStore
+        from dccd.storage.parquet import ParquetStore
+        from dccd.storage.runs_sqlite import RunsStore
+
+        data_dir = tmp_path / "data_prune"
+        real_store = ParquetStore(data_dir)
+        runs_store = RunsStore(data_dir / ".dccd" / "runs.db")
+        coverage_store = CoverageStore(data_dir / ".dccd" / "coverage.db")
+
+        call_order: list[str] = []
+
+        original_mark_stale = RunsStore.mark_stale_running
+        original_prune = RunsStore.prune_old_runs
+
+        def _recording_mark_stale(self):
+            call_order.append("mark_stale_running")
+            return original_mark_stale(self)
+
+        def _recording_prune(self, retention_days: int) -> int:
+            call_order.append("prune_old_runs")
+            return original_prune(self, retention_days)
+
+        mock_server = MagicMock()
+
+        async def _serve():
+            pass
+
+        mock_server.serve = _serve
+
+        mock_scheduler = MagicMock()
+
+        async def _start(specs):
+            call_order.append("scheduler.start")
+
+        async def _stop():
+            pass
+
+        mock_scheduler.start = _start
+        mock_scheduler.stop = _stop
+
+        cfg_path = tmp_path / "config_prune.yml"
+        cfg_path.write_text(f"settings:\n  data_path: {data_dir}\n")
+
+        with (
+            patch("dccd.application.service_factory.build_store", return_value=real_store),
+            patch("dccd.application.service_factory.build_runs_store", return_value=runs_store),
+            patch("dccd.application.service_factory.build_coverage_store", return_value=coverage_store),
+            patch("dccd.application.service_factory.build_registry", return_value=MagicMock()),
+            patch("dccd.application.service_factory.build_remote", return_value=None),
+            patch("dccd.interfaces.api.app.create_app", return_value=MagicMock()),
+            patch("dccd.application.scheduler.Scheduler", return_value=mock_scheduler),
+            patch("uvicorn.Server", return_value=mock_server),
+            patch("uvicorn.Config", return_value=MagicMock()),
+            patch.object(RunsStore, "mark_stale_running", _recording_mark_stale),
+            patch.object(RunsStore, "prune_old_runs", _recording_prune),
+        ):
+            result = runner.invoke(app, ["start", "--config", str(cfg_path)])
+
+        assert result.exit_code == 0, result.output
+        assert "mark_stale_running" in call_order, "mark_stale_running was never called"
+        assert "prune_old_runs" in call_order, "prune_old_runs was never called"
+        assert "scheduler.start" in call_order, "scheduler.start was never called"
+
+        stale_idx = call_order.index("mark_stale_running")
+        prune_idx = call_order.index("prune_old_runs")
+        start_idx = call_order.index("scheduler.start")
+
+        assert stale_idx < prune_idx, (
+            f"mark_stale_running (pos {stale_idx}) must precede prune_old_runs (pos {prune_idx}); "
+            f"order was: {call_order}"
+        )
+        assert prune_idx < start_idx, (
+            f"prune_old_runs (pos {prune_idx}) must precede scheduler.start (pos {start_idx}); "
+            f"order was: {call_order}"
+        )

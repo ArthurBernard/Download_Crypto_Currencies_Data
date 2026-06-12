@@ -566,6 +566,48 @@ class TestRunsEndpoint:
                 f"lifespan must NOT sweep runs when a scheduler is injected; got {run['state']!r}"
             )
 
+    def test_lifespan_prunes_old_runs(self, tmp_data_path):
+        """Standalone lifespan must prune old terminal runs at boot (runs_retention_days > 0)."""
+        import time
+
+        from dccd.application.service_factory import build_runs_store
+
+        # Seed a succeeded row ~100 days old
+        pre_runs = build_runs_store(tmp_data_path)
+        old_ns = int(time.time() * 1_000_000_000) - int(100 * 86400 * 1_000_000_000)
+        pre_runs.create_run("old-boot-run", "spec-prune", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+        pre_runs.finish_run("old-boot-run", "succeeded")
+        assert pre_runs.get_run("old-boot-run") is not None
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.settings.runs_retention_days = 90  # default but explicit
+
+        with TestClient(create_app(config=cfg)):
+            run = build_runs_store(tmp_data_path).get_run("old-boot-run")
+            assert run is None, "old succeeded run must be pruned on standalone boot"
+
+    def test_lifespan_prune_disabled(self, tmp_data_path):
+        """Standalone lifespan must NOT prune runs when runs_retention_days = 0."""
+        import time
+
+        from dccd.application.service_factory import build_runs_store
+
+        pre_runs = build_runs_store(tmp_data_path)
+        old_ns = int(time.time() * 1_000_000_000) - int(200 * 86400 * 1_000_000_000)
+        pre_runs.create_run("old-no-prune", "spec-noprune", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+        pre_runs.finish_run("old-no-prune", "succeeded")
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.settings.runs_retention_days = 0  # disabled
+
+        with TestClient(create_app(config=cfg)):
+            run = build_runs_store(tmp_data_path).get_run("old-no-prune")
+            assert run is not None, "row must survive when runs_retention_days=0"
+
 
 class TestDuplicateRunGuard:
     """Idempotent backfill triggers — duplicate concurrent runs are blocked."""
