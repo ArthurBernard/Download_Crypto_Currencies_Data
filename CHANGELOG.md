@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- OKX OHLC pagination silently dropped the bar at every 100-bar page
+  boundary: OKX `before`/`after` cursors are exclusive, so passing
+  `before=start_ms` excluded the bar exactly at each window start (observed
+  in production as 431 one-minute gaps per OKX pair, spaced exactly
+  100 min). `fetch_ohlc_page` now sends `before=start_ms-1`; regression
+  test drives the paginator across a page boundary under faithful exclusive
+  semantics. Verified live: a 12 h OKX 1m backfill lands with 0 gaps and
+  all 7 boundary bars present. (#144)
+
 ### Deprecated
 
 ### Removed

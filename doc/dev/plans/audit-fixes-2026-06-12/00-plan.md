@@ -1,7 +1,7 @@
 ---
 plan: audit-fixes-2026-06-12
 kind: global
-status: planning
+status: executing
 roadmap: "## Audit fixes (2026-06-12)"
 release_on_done: true
 ---
@@ -37,7 +37,7 @@ Fix the two bugs found auditing the production collector (arthurserver) on
 
 ## Leaf checklist
 
-- [ ] 01 okx-ohlc-inclusive-window-start — fix/okx-ohlc-boundary-bar — medium
+- [x] 01 okx-ohlc-inclusive-window-start — fix/okx-ohlc-boundary-bar — medium
 - [ ] 02 boot-orphan-sweep-order — fix/boot-orphan-sweep — medium
 
 ## Dependencies
