@@ -1,7 +1,7 @@
 ---
 plan: hardening-backlog-2026-06/02-duplicate-run-guard
 kind: leaf
-status: planned
+status: executing
 complexity: medium
 depends: []
 parallel: false
