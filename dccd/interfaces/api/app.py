@@ -202,6 +202,9 @@ def create_app(
             _stale_count = app.state.runs_store.mark_stale_running()
             if _stale_count:
                 logger.warning("marked %d orphaned run(s) stale (daemon restarted)", _stale_count)
+            _pruned_count = app.state.runs_store.prune_old_runs(cfg.settings.runs_retention_days)
+            if _pruned_count:
+                logger.info("pruned %d old terminal run(s) from runs.db (retention: %dd)", _pruned_count, cfg.settings.runs_retention_days)
         app.state.coverage_store = build_coverage_store(cfg.settings.data_path)
         app.state.event_bus = EventBus()
         app.state.registry = build_registry()

@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Boot-time runs.db retention (`settings.runs_retention_days`, default 90,
+  `0` disables): terminal non-failed runs (`succeeded`/`stale`/`cancelled`)
+  older than the window are deleted and the database VACUUMed at daemon
+  start, right after the orphan sweep; `failed` runs are kept as the
+  long-term error journal. Verified on a copy of the production runs.db:
+  1,770 old rows pruned, file size −67 %, `failed` rows untouched. (#154)
+
 ### Changed
 
 ### Fixed

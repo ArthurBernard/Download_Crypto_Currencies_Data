@@ -178,6 +178,59 @@ class RunsStore:
         """Runs currently ``running`` or ``reconnecting``."""
         return self.list_runs(state="running") + self.list_runs(state="reconnecting")
 
+    def prune_old_runs(self, retention_days: int) -> int:
+        """Delete terminal non-failed runs older than *retention_days* days.
+
+        Runs in states ``succeeded``, ``stale``, and ``cancelled`` that started
+        more than *retention_days* days ago are removed.  ``failed`` rows are
+        intentionally kept as the long-term error journal.  The database is
+        ``VACUUM``-ed after any deletion to reclaim disk space.
+
+        Parameters
+        ----------
+        retention_days : int
+            Number of days to retain terminal non-failed runs.  Pass ``0`` (or
+            any value ``<= 0``) to disable pruning; the method returns ``0``
+            immediately without touching the database.
+
+        Returns
+        -------
+        int
+            Number of rows deleted (0 when pruning is disabled or when no rows
+            match the cutoff).
+
+        Notes
+        -----
+        ``VACUUM`` cannot run inside a transaction.  This method opens a
+        separate connection (outside the :meth:`_conn` context manager) for the
+        ``VACUUM`` statement, which is executed only when at least one row was
+        deleted.
+
+        This method must be called from the daemon boot path *after*
+        :meth:`mark_stale_running` so that freshly-staled orphans age normally
+        rather than being immediately pruned on the next boot.
+        """
+        if retention_days <= 0:
+            return 0
+        import time
+        cutoff_ns = int(time.time() * 1_000_000_000) - int(retention_days * 86400 * 1_000_000_000)
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """DELETE FROM runs
+                   WHERE state IN ('succeeded', 'stale', 'cancelled')
+                   AND started_at < ?""",
+                (cutoff_ns,),
+            )
+            deleted = cursor.rowcount
+        if deleted > 0:
+            # VACUUM cannot run inside a transaction — open a plain connection.
+            conn2 = sqlite3.connect(str(self._path))
+            try:
+                conn2.execute("VACUUM")
+            finally:
+                conn2.close()
+        return deleted
+
     def mark_stale_running(self) -> int:
         """Transition all ``running`` rows to ``stale`` at daemon boot.
 
