@@ -191,12 +191,17 @@ def create_app(
         app.state.config_path = config_path
         app.state.store = build_store(cfg.settings.data_path)
         app.state.runs_store = build_runs_store(cfg.settings.data_path)
-        # Mark any runs left in 'running' state as 'stale' — they were
-        # orphaned by the previous daemon crash/SIGKILL and would otherwise
-        # pollute active_runs() and the Dashboard forever.
-        _stale_count = app.state.runs_store.mark_stale_running()
-        if _stale_count:
-            logger.warning("marked %d orphaned run(s) stale (daemon restarted)", _stale_count)
+        # Mark any runs left in 'running' state as 'stale'.  For standalone
+        # `dccd ui` (scheduler is None) this is the right call site — no
+        # scheduler has started any workers yet.  For `dccd start` the sweep
+        # happens in cmd_start *before* the scheduler starts, so we must skip
+        # it here: sweeping at this point would stale-out the stream-worker
+        # rows the scheduler just created (the exact misuse warned about in
+        # RunsStore.mark_stale_running's docstring).
+        if scheduler is None:
+            _stale_count = app.state.runs_store.mark_stale_running()
+            if _stale_count:
+                logger.warning("marked %d orphaned run(s) stale (daemon restarted)", _stale_count)
         app.state.coverage_store = build_coverage_store(cfg.settings.data_path)
         app.state.event_bus = EventBus()
         app.state.registry = build_registry()

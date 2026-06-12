@@ -519,6 +519,53 @@ class TestRunsEndpoint:
             assert orphan["state"] == "stale", f"expected stale, got {orphan['state']!r}"
             assert orphan["error"] == "orphaned by daemon restart"
 
+    def test_lifespan_sweeps_orphans_standalone(self, tmp_data_path):
+        """Standalone dccd ui (no scheduler injected): lifespan must sweep orphaned rows."""
+        from dccd.application.service_factory import build_runs_store
+
+        pre_runs = build_runs_store(tmp_data_path)
+        pre_runs.create_run("orphan-standalone", "spec-s", "stream", "binance", "BTC/USDT", "trades")
+        assert pre_runs.get_run("orphan-standalone")["state"] == "running"
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        # No scheduler= argument → standalone mode
+        with TestClient(create_app(config=cfg)):
+            run = build_runs_store(tmp_data_path).get_run("orphan-standalone")
+            assert run is not None
+            assert run["state"] == "stale", f"expected stale, got {run['state']!r}"
+
+    def test_lifespan_skips_orphan_sweep_when_scheduler_injected(self, tmp_data_path):
+        """With a scheduler injected (dccd start path) the lifespan must NOT sweep runs."""
+        from dccd.application.scheduler import Scheduler
+        from dccd.application.service_factory import build_runs_store
+
+        pre_runs = build_runs_store(tmp_data_path)
+        pre_runs.create_run("live-run", "spec-live", "stream", "binance", "BTC/USDT", "trades")
+        assert pre_runs.get_run("live-run")["state"] == "running"
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+
+        # Build a minimal real Scheduler (not started — just wired up so the
+        # lifespan can assign it to app.state.scheduler).
+        from dccd.application.events import EventBus
+        from dccd.application.service_factory import build_registry, build_store
+        store = build_store(tmp_data_path)
+        runs_store = build_runs_store(tmp_data_path)
+        bus = EventBus()
+        registry = build_registry()
+        sched = Scheduler(registry, store, runs_store, bus)
+
+        with TestClient(create_app(config=cfg, scheduler=sched)):
+            run = build_runs_store(tmp_data_path).get_run("live-run")
+            assert run is not None
+            assert run["state"] == "running", (
+                f"lifespan must NOT sweep runs when a scheduler is injected; got {run['state']!r}"
+            )
+
 
 class TestMigrateEndpoint:
     def test_migrate_endpoint_removed(self, client):
