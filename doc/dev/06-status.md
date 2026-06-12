@@ -40,9 +40,9 @@ colliding year files); the server is now the *single writer* of one continuous
 2020→present store (57 datasets), and the existing hourly mirror gives the
 main PC a complete off-box copy with no manual reconciliation. Legacy-only
 datasets (coinbase/bybit USDT pairs, early-June trades/order-book test
-captures) live on as static archive datasets. Caveat: the purge × destructive
-sync interaction is now a data-loss risk if `min_free_gb` is ever enabled —
-see the roadmap entry; purge stays off until fixed.
+captures) live on as static archive datasets. The off-box copy is
+non-destructive (`rclone copy`, archive-superset semantics) so enabling the
+free-space purge (`min_free_gb`) is safe.
 
 ## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
 

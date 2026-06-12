@@ -96,19 +96,6 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
   replicate a collector (e.g. arthurserver's 50 jobs) in one command. One
   leaf.
 
-- [ ] **Free-space purge can destroy the only copy (purge × destructive sync)**
-  — `RemoteStorage.sync_one` runs `rclone sync` (a *mirror*: it deletes remote
-  files absent locally), while the Epic C free-space purge deletes old
-  already-synced *local* files expecting the remote to keep them for
-  read-through restore. Purge a file, and the next hourly sync deletes it from
-  the remote too — the data is gone. Latent today (`min_free_gb: 0.0` in prod,
-  purge off) but armed the moment purge is enabled — and worse now that the
-  production store carries the full 2020→present history. Fix: make the
-  off-box copy non-destructive for purged files (`rclone copy`, or
-  `sync --backup-dir`, or exclude purge-tracked paths from deletion) + a test
-  that proves purge→sync→restore round-trips. One leaf. **Blocks ever setting
-  `min_free_gb > 0`.**
-
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 

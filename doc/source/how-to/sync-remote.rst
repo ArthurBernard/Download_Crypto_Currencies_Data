@@ -2,7 +2,7 @@
 Sync data to a remote (S3, GCS, …)
 ==================================
 
-dccd can mirror your local Parquet store to off-box storage so a server loss
+dccd can copy your local Parquet store to off-box storage so a server loss
 doesn't lose data — and, optionally, **drop old local files** once they're safely
 copied, pulling them back on demand. The whole chain is built on
 `rclone <https://rclone.org/>`_.
@@ -36,8 +36,9 @@ Configure sync
      min_free_gb: 0             # >0 enables the free-space purge (see below)
 
 With at least one remote configured, ``dccd start`` runs a periodic loop that
-mirrors the store every ``sync_interval`` seconds (one-way ``rclone sync`` —
-remote becomes a mirror of local). Each cycle is recorded as a ``sync`` run, so
+copies the store every ``sync_interval`` seconds (``rclone copy`` — files are
+added to the remote but never deleted from it; the remote is an *archive
+superset* of the local store). Each cycle is recorded as a ``sync`` run, so
 the **Storage** page shows the last/next sync, status and synced volume, with a
 **Sync now** button (``POST /api/storage/sync``). On failure the loop backs off
 exponentially.
@@ -64,9 +65,10 @@ Two mechanisms make this safe:
 Restore and integrity
 ======================
 
-``rclone sync`` is a one-way mirror (local → remote); the remote is a faithful
-copy, deduplicated by dccd before upload. To rehydrate a fresh machine, pull the
-whole tree back:
+``rclone copy`` copies new and changed files from local to remote without
+removing anything on the remote.  The remote therefore accumulates the full
+history — including files purged locally to reclaim disk — and is deduplicated
+by dccd before upload.  To rehydrate a fresh machine, pull the whole tree back:
 
 .. code-block:: bash
 
