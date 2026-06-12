@@ -27,16 +27,22 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
 
 ## Pending
 
-_(nothing release-blocking — the Epic D fixes are merged on `develop` and ready
-to `/release`; the production collector runs 3.3.1 and should be upgraded once
-that release ships)_
+_(nothing pending — v3.5.1 released 2026-06-12 and deployed on the production
+collector; the 2026-06-12 audit is fully closed: OKX history repaired by
+re-backfill — 46 528/46 528 bars, `missing_rows == 0` on all five pairs — and
+the boot orphan-sweep fix verified live, 20 stream runs `running` after
+restart)_
 
-- **arthurserver OKX OHLC history has 431 one-minute gaps per pair** (created by
-  the 2026-06-10 deep backfill through the page-boundary bug fixed on
-  `develop`). Repair after the next release is deployed: re-backfill the five
-  OKX pairs from 2026-05-11 (dedup makes this safe), then confirm inventory
-  `missing_rows == 0`. Tracked in
-  `doc/dev/plans/audit-fixes-2026-06-12/00-plan.md` Done criteria.
+**Data architecture (2026-06-12): the production collector is the canonical
+store.** The full deep history (OHLC 1m back to 2020, ~2 GB) was seeded onto
+the server (one-time `rclone copy` + a daemon-paused dedup merge of the
+colliding year files); the server is now the *single writer* of one continuous
+2020→present store (57 datasets), and the existing hourly mirror gives the
+main PC a complete off-box copy with no manual reconciliation. Legacy-only
+datasets (coinbase/bybit USDT pairs, early-June trades/order-book test
+captures) live on as static archive datasets. The off-box copy is
+non-destructive (`rclone copy`, archive-superset semantics) so enabling the
+free-space purge (`min_free_gb`) is safe.
 
 ## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
 

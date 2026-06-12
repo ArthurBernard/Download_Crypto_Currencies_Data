@@ -566,6 +566,179 @@ class TestRunsEndpoint:
                 f"lifespan must NOT sweep runs when a scheduler is injected; got {run['state']!r}"
             )
 
+    def test_lifespan_prunes_old_runs(self, tmp_data_path):
+        """Standalone lifespan must prune old terminal runs at boot (runs_retention_days > 0)."""
+        import time
+
+        from dccd.application.service_factory import build_runs_store
+
+        # Seed a succeeded row ~100 days old
+        pre_runs = build_runs_store(tmp_data_path)
+        old_ns = int(time.time() * 1_000_000_000) - int(100 * 86400 * 1_000_000_000)
+        pre_runs.create_run("old-boot-run", "spec-prune", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+        pre_runs.finish_run("old-boot-run", "succeeded")
+        assert pre_runs.get_run("old-boot-run") is not None
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.settings.runs_retention_days = 90  # default but explicit
+
+        with TestClient(create_app(config=cfg)):
+            run = build_runs_store(tmp_data_path).get_run("old-boot-run")
+            assert run is None, "old succeeded run must be pruned on standalone boot"
+
+    def test_lifespan_prune_disabled(self, tmp_data_path):
+        """Standalone lifespan must NOT prune runs when runs_retention_days = 0."""
+        import time
+
+        from dccd.application.service_factory import build_runs_store
+
+        pre_runs = build_runs_store(tmp_data_path)
+        old_ns = int(time.time() * 1_000_000_000) - int(200 * 86400 * 1_000_000_000)
+        pre_runs.create_run("old-no-prune", "spec-noprune", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+        pre_runs.finish_run("old-no-prune", "succeeded")
+
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        cfg.settings.runs_retention_days = 0  # disabled
+
+        with TestClient(create_app(config=cfg)):
+            run = build_runs_store(tmp_data_path).get_run("old-no-prune")
+            assert run is not None, "row must survive when runs_retention_days=0"
+
+
+class TestDuplicateRunGuard:
+    """Idempotent backfill triggers — duplicate concurrent runs are blocked."""
+
+    def _make_app(self, tmp_data_path):
+        cfg = AppConfig()
+        cfg.settings.data_path = tmp_data_path
+        cfg.storage.local_path = tmp_data_path
+        return create_app(config=cfg)
+
+    def test_backfill_duplicate_returns_existing_run(self, tmp_data_path):
+        """POST /api/backfill for an already-running spec returns the existing run_id."""
+        from dccd.application.jobs import JobSpec, JobTarget
+        from dccd.application.service_factory import build_runs_store
+        from dccd.domain.symbol import Symbol
+        from dccd.domain.types import DataType
+
+        # Pre-create the 'running' row that simulates an in-flight backfill.
+        runs = build_runs_store(tmp_data_path)
+        target = JobTarget(
+            exchange="binance",
+            symbol=Symbol.parse("BTC/USDT"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        spec_id = JobSpec.make_id("backfill", target)
+        pre_run_id = "pre-existing-run-id"
+        runs.create_run(pre_run_id, spec_id, "backfill", "binance", "BTC/USDT", "ohlc")
+
+        with TestClient(self._make_app(tmp_data_path)) as c:
+            # The lifespan marks orphaned rows stale — re-seed after boot.
+            runs2 = build_runs_store(tmp_data_path)
+            run_id_2 = "active-run-after-boot"
+            runs2.create_run(run_id_2, spec_id, "backfill", "binance", "BTC/USDT", "ohlc")
+
+            resp = c.post("/api/backfill", json={
+                "exchange": "binance",
+                "symbol": "BTC/USDT",
+                "data_type": "ohlc",
+                "span": 3600,
+                "start": "last",
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "already-running"
+            assert data["run_id"] == run_id_2
+
+            # No new running row should have been added.
+            active = runs2.active_runs()
+            matching = [r for r in active if r["spec_id"] == spec_id]
+            assert len(matching) == 1, f"expected 1 active run, got {len(matching)}: {matching}"
+
+    def test_jobs_run_duplicate_returns_existing_run(self, tmp_data_path):
+        """POST /api/jobs/run for an already-running job returns the existing run_id."""
+        from dccd.application.service_factory import build_runs_store
+
+        with TestClient(self._make_app(tmp_data_path)) as c:
+            # Create a backfill job via the API.
+            r = c.post("/api/jobs/create", json={
+                "operation": "backfill",
+                "exchange": "binance",
+                "symbol": "ETH/USDT",
+                "data_type": "ohlc",
+                "span": 3600,
+                "trigger_kind": "manual",
+            })
+            assert r.status_code == 200
+            job_id = r.json()["job_id"]
+
+            # Seed an active run for this spec.
+            runs = build_runs_store(tmp_data_path)
+            active_run_id = "job-active-run"
+            runs.create_run(active_run_id, job_id, "backfill", "binance", "ETH/USDT", "ohlc")
+
+            resp = c.post("/api/jobs/run", json={"job_id": job_id})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "already-running"
+            assert data["run_id"] == active_run_id
+            assert data["job_id"] == job_id
+
+            # No new row.
+            active = runs.active_runs()
+            matching = [r for r in active if r["spec_id"] == job_id]
+            assert len(matching) == 1
+
+    def test_run_all_skips_active_jobs(self, tmp_data_path):
+        """POST /api/jobs/run-all starts only jobs without an active run."""
+        from dccd.application.service_factory import build_runs_store
+
+        with TestClient(self._make_app(tmp_data_path)) as c:
+            # Create two backfill jobs.
+            r1 = c.post("/api/jobs/create", json={
+                "operation": "backfill",
+                "exchange": "binance",
+                "symbol": "BTC/USDT",
+                "data_type": "ohlc",
+                "span": 3600,
+                "trigger_kind": "manual",
+            })
+            job_id_busy = r1.json()["job_id"]
+
+            r2 = c.post("/api/jobs/create", json={
+                "operation": "backfill",
+                "exchange": "binance",
+                "symbol": "ETH/USDT",
+                "data_type": "ohlc",
+                "span": 3600,
+                "trigger_kind": "manual",
+            })
+            job_id_free = r2.json()["job_id"]
+
+            # Seed an active run for the first job only.
+            runs = build_runs_store(tmp_data_path)
+            busy_run_id = "busy-run-id"
+            runs.create_run(busy_run_id, job_id_busy, "backfill", "binance", "BTC/USDT", "ohlc")
+
+            resp = c.post("/api/jobs/run-all")
+            assert resp.status_code == 200
+            data = resp.json()
+
+            # Only the free job was started.
+            assert data["started"] == 1
+            assert any(r["job_id"] == job_id_free for r in data["runs"])
+
+            # The busy job appears in already_running.
+            assert len(data["already_running"]) == 1
+            skipped = data["already_running"][0]
+            assert skipped["job_id"] == job_id_busy
+            assert skipped["run_id"] == busy_run_id
+
 
 class TestMigrateEndpoint:
     def test_migrate_endpoint_removed(self, client):

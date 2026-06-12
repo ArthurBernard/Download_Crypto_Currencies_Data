@@ -69,24 +69,6 @@ orphaned runs `stale`. See `06-status.md`._
 
 Small, well-scoped items surfaced while operating v3.5.0 in production.
 
-- [ ] **Guard manual triggers against duplicate concurrent runs** — streams
-  and scheduled backfills are guarded (worker no-op / sequential interval
-  loop), but `POST /api/backfill`, `/api/jobs/run` and `run-all` happily
-  start a second run for a dataset that is already being backfilled
-  (manually or by the scheduler). Benign for data (store locks + dedup;
-  shared rate limiter since #130) but wastes requests and confuses
-  runs/progress. Fix: reject — or return the existing `run_id` — when
-  `active_runs()` already holds a run for the same spec id. One leaf.
-- [ ] **runs.db retention** — the run history is append-only with no purge:
-  ~800 runs/day in prod ≈ 180 MB/year, unbounded. Add a boot-time retention
-  (e.g. delete `succeeded`/`stale`/`cancelled` runs older than a configurable
-  N days — default 90 — keep `failed`, then `VACUUM`), alongside the
-  existing `mark_stale_running()` call. One leaf.
-- [ ] **ntfy-friendly alert formatting** — `HealthMonitor` POSTs
-  `{"text": msg}` JSON; on ntfy the phone shows the raw JSON blob. Send a
-  plain-text body (ntfy renders it as the message; optionally `X-Title`/
-  `X-Priority` headers), keeping a JSON mode for Slack-style endpoints if
-  trivially detectable. ~20 lines in `application/monitor.py` + test. One leaf.
 - [ ] **Config export / load (full file)** — round-trip the complete
   effective configuration (settings + alerts + storage + all jobs): a
   `dccd config export [-o file]` that dumps the validated running config as

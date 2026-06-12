@@ -26,6 +26,17 @@ class HealthMonitor:
     job does not flood a webhook.  The count (and cooldown) reset on the first
     success.
 
+    Webhook format
+    --------------
+    - **Slack** (hostname is or ends with ``hooks.slack.com``): JSON body
+      ``{"text": msg}`` with ``Content-Type: application/json`` — the current
+      behaviour.
+    - **All other endpoints** (e.g. ntfy): plain-text body with headers
+      ``Content-Type: text/plain``, ``X-Title: dccd``, and
+      ``X-Priority: high``.  ntfy renders the raw body as the notification
+      message; the old JSON blob caused the phone to show ``{"text": "…"}``
+      instead of the actual alert.
+
     Parameters
     ----------
     runs_store : RunsStore
@@ -77,25 +88,43 @@ class HealthMonitor:
             self._last_alert_ts.pop(key, None)
             self._last_webhook_err_ts.pop(key, None)
 
+    def _post_webhook(self, msg: str, run_id: str) -> None:
+        """Send *msg* to ``self._webhook``, choosing the right payload format.
+
+        Slack endpoints (hostname ``hooks.slack.com`` or subdomains) receive
+        ``{"text": msg}`` JSON.  All other endpoints (ntfy, custom) receive a
+        plain-text body so the notification shows the message directly.
+        """
+        import json
+        import urllib.parse
+        import urllib.request
+
+        assert self._webhook is not None  # caller (_alert) guards this
+        hostname: str = urllib.parse.urlsplit(self._webhook).hostname or ""
+        if hostname == "hooks.slack.com" or hostname.endswith(".hooks.slack.com"):
+            data = json.dumps({"text": msg}).encode()
+            headers: dict[str, str] = {"Content-Type": "application/json"}
+        else:
+            data = msg.encode()
+            headers = {
+                "Content-Type": "text/plain",
+                "X-Title": "dccd",
+                "X-Priority": "high",
+            }
+        req = urllib.request.Request(self._webhook, data=data, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+        except Exception as exc:
+            # Log webhook-send failures at most once per cooldown window.
+            last_err = self._last_webhook_err_ts.get(run_id, 0.0)
+            if time.monotonic() - last_err >= _ALERT_COOLDOWN_S:
+                logger.warning("Webhook alert failed: %s", exc)
+                self._last_webhook_err_ts[run_id] = time.monotonic()
+
     def _alert(self, run_id: str, count: int) -> None:
         msg = f"dccd alert: {run_id} failed {count} times consecutively."
         logger.error(msg)
         self._last_alert_ts[run_id] = time.monotonic()
         if self._webhook:
-            try:
-                import json
-                import urllib.request
-                data = json.dumps({"text": msg}).encode()
-                req = urllib.request.Request(
-                    self._webhook,
-                    data=data,
-                    headers={"Content-Type": "application/json"},
-                )
-                with urllib.request.urlopen(req, timeout=5):
-                    pass
-            except Exception as exc:
-                # Log webhook-send failures at most once per cooldown window.
-                last_err = self._last_webhook_err_ts.get(run_id, 0.0)
-                if time.monotonic() - last_err >= _ALERT_COOLDOWN_S:
-                    logger.warning("Webhook alert failed: %s", exc)
-                    self._last_webhook_err_ts[run_id] = time.monotonic()
+            self._post_webhook(msg, run_id)

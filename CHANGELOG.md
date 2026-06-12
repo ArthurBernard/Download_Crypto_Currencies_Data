@@ -16,6 +16,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.5.2] - 2026-06-12
+
+### Added
+
+- Boot-time runs.db retention (`settings.runs_retention_days`, default 90,
+  `0` disables): terminal non-failed runs (`succeeded`/`stale`/`cancelled`)
+  older than the window are deleted and the database VACUUMed at daemon
+  start, right after the orphan sweep; `failed` runs are kept as the
+  long-term error journal. Verified on a copy of the production runs.db:
+  1,770 old rows pruned, file size −67 %, `failed` rows untouched. (#154)
+
+### Fixed
+
+- Webhook alerts send a plain-text body with `X-Title: dccd` /
+  `X-Priority: high` headers for ntfy-style endpoints — the phone showed a
+  raw JSON blob before; Slack webhooks (`hooks.slack.com`) keep the JSON
+  `{"text": …}` payload. Verified live: one test message delivered to the
+  production ntfy topic (HTTP 200) rendered as plain text. (#155)
+- Manual backfill triggers (`POST /api/backfill`, `/api/jobs/run`,
+  `/api/jobs/run-all`) are idempotent: a spec that is already being
+  backfilled returns the existing `run_id` (`status: already-running`) —
+  run-all skips busy jobs and lists them under `already_running` — instead
+  of starting a duplicate concurrent run that wasted exchange requests and
+  confused runs/progress. (#153)
+- Off-box sync no longer mirrors deletions: `RemoteStorage` runs
+  `rclone copy` instead of `rclone sync`, so locally purged files survive
+  on the remote for read-through restore — enabling `min_free_gb` no longer
+  risks deleting the only copy of old data. The remote is now an archive
+  superset (never deleted automatically; remote cleanup is manual).
+  Verified live against a real rclone remote: purge → sync → file survives
+  → `restore()` returns byte-identical content. (#152)
+
 ## [3.5.1] - 2026-06-12
 
 ### Fixed

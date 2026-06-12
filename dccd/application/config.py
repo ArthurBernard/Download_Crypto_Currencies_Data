@@ -46,6 +46,9 @@ class SettingsConfig(BaseModel):
     - ``ui_trusted_proxy`` — trust ``X-Forwarded-For`` as the rate-limit client key.
       Enable **only** behind a reverse proxy that overwrites the header, else a direct
       client can forge it and bypass the limit.
+    - ``runs_retention_days`` — delete terminal non-failed runs (``succeeded``,
+      ``stale``, ``cancelled``) older than this many days at daemon boot.  ``0``
+      disables the sweep (rows accumulate indefinitely).  Default ``90``.
     """
     data_path: str = "./data/crypto"
     timezone: str = "local"
@@ -56,6 +59,7 @@ class SettingsConfig(BaseModel):
     ui_readonly: bool = False
     ui_rate_limit: int = 0
     ui_trusted_proxy: bool = False
+    runs_retention_days: int = 90
 
     @field_validator("data_path")
     @classmethod
@@ -67,6 +71,13 @@ class SettingsConfig(BaseModel):
     def _non_negative(cls, v: int) -> int:
         if v < 0:
             raise ValueError("ui_rate_limit must be >= 0")
+        return v
+
+    @field_validator("runs_retention_days")
+    @classmethod
+    def _non_negative_retention(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("runs_retention_days must be >= 0")
         return v
 
     @field_validator("timezone")

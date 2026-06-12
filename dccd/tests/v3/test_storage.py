@@ -204,3 +204,50 @@ class TestRunsStore:
         """Calling mark_stale_running on a clean store returns 0."""
         count = runs_store.mark_stale_running()
         assert count == 0
+
+    def test_prune_old_runs(self, runs_store):
+        """prune_old_runs(90) deletes old terminal non-failed rows; keeps old failed + recent."""
+        import time
+        now_ns = int(time.time() * 1_000_000_000)
+        old_ns = now_ns - int(100 * 86400 * 1_000_000_000)  # 100 days ago
+        recent_ns = now_ns - int(1 * 86400 * 1_000_000_000)   # 1 day ago
+
+        # Old terminal non-failed rows — should be pruned
+        for run_id, state in [
+            ("old-succeeded", "succeeded"),
+            ("old-stale", "stale"),
+            ("old-cancelled", "cancelled"),
+        ]:
+            runs_store.create_run(run_id, "spec1", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+            runs_store.finish_run(run_id, state)
+
+        # Old failed row — must NOT be pruned (kept as error journal)
+        runs_store.create_run("old-failed", "spec1", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+        runs_store.finish_run("old-failed", "failed", error="something went wrong")
+
+        # Recent succeeded row — must NOT be pruned (within retention window)
+        runs_store.create_run("recent-succeeded", "spec1", "backfill", "binance", "BTC/USDT", "ohlc", started_at=recent_ns)
+        runs_store.finish_run("recent-succeeded", "succeeded")
+
+        deleted = runs_store.prune_old_runs(90)
+
+        assert deleted == 3, f"expected 3 pruned rows, got {deleted}"
+        assert runs_store.get_run("old-succeeded") is None, "old succeeded must be pruned"
+        assert runs_store.get_run("old-stale") is None, "old stale must be pruned"
+        assert runs_store.get_run("old-cancelled") is None, "old cancelled must be pruned"
+        assert runs_store.get_run("old-failed") is not None, "old failed must be kept"
+        assert runs_store.get_run("recent-succeeded") is not None, "recent succeeded must be kept"
+
+    def test_prune_old_runs_disabled(self, runs_store):
+        """prune_old_runs(0) deletes nothing."""
+        import time
+        now_ns = int(time.time() * 1_000_000_000)
+        old_ns = now_ns - int(200 * 86400 * 1_000_000_000)  # 200 days ago
+
+        runs_store.create_run("old-r1", "spec1", "backfill", "binance", "BTC/USDT", "ohlc", started_at=old_ns)
+        runs_store.finish_run("old-r1", "succeeded")
+
+        deleted = runs_store.prune_old_runs(0)
+
+        assert deleted == 0, "prune_old_runs(0) must return 0"
+        assert runs_store.get_run("old-r1") is not None, "row must survive when pruning is disabled"

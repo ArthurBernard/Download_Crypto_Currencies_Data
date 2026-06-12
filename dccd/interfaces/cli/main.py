@@ -167,6 +167,9 @@ def cmd_start(
     _stale = runs_store.mark_stale_running()
     if _stale > 0:
         typer.echo(f"Marked {_stale} orphaned run(s) stale (daemon restarted)")
+    _pruned = runs_store.prune_old_runs(cfg.settings.runs_retention_days)
+    if _pruned > 0:
+        typer.echo(f"Pruned {_pruned} old terminal run(s) from runs.db (retention: {cfg.settings.runs_retention_days}d)")
     coverage_store = build_coverage_store(cfg.settings.data_path)
     registry = build_registry()
     bus = EventBus()
