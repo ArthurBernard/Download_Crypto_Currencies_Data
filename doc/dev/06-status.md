@@ -33,6 +33,17 @@ re-backfill — 46 528/46 528 bars, `missing_rows == 0` on all five pairs — an
 the boot orphan-sweep fix verified live, 20 stream runs `running` after
 restart)_
 
+**Data architecture (2026-06-12): the production collector is the canonical
+store.** The full deep history (OHLC 1m back to 2020, ~2 GB) was seeded onto
+the server (one-time `rclone copy` + a daemon-paused dedup merge of the
+colliding year files); the server is now the *single writer* of one continuous
+2020→present store (57 datasets), and the existing hourly mirror gives the
+main PC a complete off-box copy with no manual reconciliation. Legacy-only
+datasets (coinbase/bybit USDT pairs, early-June trades/order-book test
+captures) live on as static archive datasets. Caveat: the purge × destructive
+sync interaction is now a data-loss risk if `min_free_gb` is ever enabled —
+see the roadmap entry; purge stays off until fixed.
+
 ## Done & working (recent) — Epic D, performance & robustness (2026-06-10)
 
 A production audit (arthurserver, 50 jobs) found the daemon at 97.7 % CPU and
