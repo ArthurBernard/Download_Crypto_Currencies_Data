@@ -2,9 +2,11 @@
 pressure.
 
 **Safety contract**: this deletes local data that is recoverable only from the
-remote, so it must be called **only when the remote mirror is up to date** — in
+remote, so it must be called **only when the remote archive is up to date** — in
 practice, right after a successful :func:`~dccd.application.operations.sync_remote`
-cycle. The coverage manifest (``CoverageStore``) preserves the resume cursor, so a
+cycle.  Because :class:`~dccd.storage.remote.RemoteStorage` uses ``rclone copy``
+(never ``rclone sync``), purged files remain on the remote and can be pulled
+back by :meth:`~dccd.storage.remote.RemoteStorage.restore`. The coverage manifest (``CoverageStore``) preserves the resume cursor, so a
 later ``backfill(start="last")`` still continues from where collection left off;
 reads of purged ranges return what's local until read-through restore pulls them
 back.
@@ -41,7 +43,7 @@ def purge_to_free_space(
     """Delete oldest Parquet files until free space reaches ``min_free_gb``.
 
     Files are removed oldest-first (by mtime), so recent data stays local while
-    old data — already mirrored off-box — is dropped. The ``.dccd`` directory is
+    old data — already copied off-box — is dropped. The ``.dccd`` directory is
     excluded. No-op when ``min_free_gb <= 0`` or free space is already above the
     threshold.
 

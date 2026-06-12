@@ -1,4 +1,17 @@
-"""Remote storage sync via rclone."""
+"""Remote storage copy via rclone.
+
+The remote is an *archive superset* of the local store: files are copied
+off-box but never deleted remotely.  Local = hot tier (fast access, space
+pressure managed by the purge subsystem); remote = complete history archive.
+This means:
+
+- A local file that is purged to free disk space still exists on the remote
+  and can be pulled back by :meth:`RemoteStorage.restore` (read-through
+  restore).
+- Remote cleanup (removing datasets you no longer want) is a **manual**
+  operation — use ``rclone delete`` or the provider console.  dccd will
+  never delete from the remote automatically.
+"""
 
 from __future__ import annotations
 
@@ -13,12 +26,18 @@ logger = logging.getLogger(__name__)
 
 
 class RemoteStorage:
-    """Sync local data to one or more rclone remotes.
+    """Copy local data to one or more rclone remotes (non-destructive).
+
+    Each sync cycle runs ``rclone copy`` (not ``rclone sync``) so that files
+    present on the remote but absent locally — e.g. files purged from the hot
+    tier to reclaim disk — are **never deleted**.  The remote grows
+    monotonically and acts as a complete off-box archive; :meth:`restore` pulls
+    individual dataset directories back on demand.
 
     Parameters
     ----------
     local_path : str or Path
-        Local data directory to sync.
+        Local data directory to copy from.
     remotes : list of dicts
         Each dict has ``provider`` and ``remote`` keys.
     """
@@ -32,24 +51,30 @@ class RemoteStorage:
         self._remotes = remotes or []
 
     def sync_one(self, remote: str) -> bool:
-        """Sync to a single rclone remote. Returns True on success."""
+        """Copy local store to a single rclone remote.  Returns True on success.
+
+        Uses ``rclone copy`` (not ``rclone sync``) so files that exist on the
+        remote but are absent locally are preserved.  This guarantees that
+        files purged from the local hot tier remain available on the remote for
+        read-through :meth:`restore`.
+        """
         try:
             result = subprocess.run(
-                ["rclone", "sync", str(self._local), remote, "--quiet"],
+                ["rclone", "copy", str(self._local), remote, "--quiet"],
                 capture_output=True,
                 text=True,
                 timeout=300,
             )
             if result.returncode != 0:
-                logger.error("rclone sync to %s failed: %s", remote, result.stderr)
+                logger.error("rclone copy to %s failed: %s", remote, result.stderr)
                 return False
-            logger.info("Synced to %s", remote)
+            logger.info("Copied to %s", remote)
             return True
         except FileNotFoundError:
             logger.error("rclone not found in PATH")
             return False
         except subprocess.TimeoutExpired:
-            logger.error("rclone sync to %s timed out", remote)
+            logger.error("rclone copy to %s timed out", remote)
             return False
 
     def restore(self, rel_path: str) -> bool:
