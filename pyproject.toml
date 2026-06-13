@@ -85,8 +85,11 @@ Changelog = "https://github.com/ArthurBernard/Download_Crypto_Currencies_Data/bl
 include = ["dccd*"]
 
 [tool.setuptools.package-data]
-"dccd.interfaces.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
-"dccd.daemon.ui" = ["templates/*.html", "templates/partials/*.html", "static/*"]
+# `static/*` matches only the top level — nested asset dirs (e.g. self-hosted
+# `static/fonts/*.woff2`) must be listed explicitly or the wheel ships without
+# them and the UI 404s on its fonts.
+"dccd.interfaces.ui" = ["templates/*.html", "templates/partials/*.html", "static/*", "static/fonts/*"]
+"dccd.daemon.ui" = ["templates/*.html", "templates/partials/*.html", "static/*", "static/fonts/*"]
 
 [tool.pytest.ini_options]
 addopts = "--exitfirst -vv --capture=no --ignore=doc --ignore=examples --ignore=env --cov=dccd --cov-report=term-missing -m 'not network'"
