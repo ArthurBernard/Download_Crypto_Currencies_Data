@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when a configured job matches, else a deep-link to Historical — plus a
   compact Active-now, recent runs, and a per-exchange Data summary with
   freshness dots. Client-side only (inventory + runs + jobs); no API change.
+  The Needs-attention panel intentionally treats OHLC coverage gaps as
+  actionable (revising the scope of #132 for the triage surface). (#157)
 
 ### Fixed
 
