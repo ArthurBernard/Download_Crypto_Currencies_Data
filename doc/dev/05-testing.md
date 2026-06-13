@@ -10,7 +10,7 @@
 
 | Layer | Command | Catches |
 |-------|---------|---------|
-| **Unit** | `pytest` | logic, schema, regressions (~191 tests; network excluded) |
+| **Unit** | `pytest` | logic, schema, regressions (~480 tests; network excluded) |
 | **Network E2E** | `pytest -m network` | real exchange APIs: pagination drains, symbol mapping, round-trip |
 | **Type** | `mypy dccd/` | strict on `domain/`, lenient glue (Success = green) |
 | **Lint** | `ruff check dccd/` | style, dead imports |
