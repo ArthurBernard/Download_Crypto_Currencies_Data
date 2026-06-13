@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (latin subset) — no external font CDN, works fully offline and leaks nothing;
   tabular figures in tables/chips/totals, machined-panel card depth, a faint
   top glow, and one staggered page-load reveal (`prefers-reduced-motion`
-  respected).
+  respected). (#158)
 
 ### Fixed
 
