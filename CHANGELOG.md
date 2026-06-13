@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   freshness dots. Client-side only (inventory + runs + jobs); no API change.
   The Needs-attention panel intentionally treats OHLC coverage gaps as
   actionable (revising the scope of #132 for the triage surface). (#157)
+- Web UI visual refresh ("instrument panel" direction), all in `base.html`
+  tokens so every page inherits it: **self-hosted** Martian Mono (wordmark +
+  section labels) and Spline Sans (body) woff2 served from `/static/fonts`
+  (latin subset) — no external font CDN, works fully offline and leaks nothing;
+  tabular figures in tables/chips/totals, machined-panel card depth, a faint
+  top glow, and one staggered page-load reveal (`prefers-reduced-motion`
+  respected). (#158)
 
 ### Fixed
 
