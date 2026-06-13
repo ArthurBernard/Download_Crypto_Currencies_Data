@@ -120,6 +120,29 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-13 — Dashboard triages candle-coverage gaps; revises the scope of #132 (PR #157)  [accepted]
+- **Choice**: the health-first Dashboard *does* alarm on OHLC `missing_rows>0`
+  — a "with gaps" health chip and a **Needs attention** item with a one-click
+  Retry/Fill action. #132 still governs the **Data** page (neutral "candle
+  coverage", no threshold) and the API fields; this entry narrows #132's "no
+  alarm *anywhere*" to "no alarm on the neutral *browse* surface".
+- **Why**: the two surfaces have different jobs. Data answers "what's on disk?"
+  (browse — must not cry wolf on a sparse-but-complete pair); the Dashboard
+  answers "what should I act on?" (triage — an operator watching 50 jobs wants
+  gaps pulled to the top). Splitting them lets each be honest about its purpose
+  instead of forcing one neutral rendering everywhere. The action is
+  non-destructive (a bounded backfill re-run), so acting on a false positive is
+  cheap, which is what makes the alarm acceptable here but not on Data.
+- **Known limit (inherited from #132)**: footer stats alone can't tell "no
+  empty candle emitted" from "collection hole", so an illiquid pair *will*
+  occasionally surface as a Dashboard "gap". Accepted with eyes open — the
+  operator explicitly wanted the signal over the silence.
+- **Rejected alternatives**: keep the Dashboard neutral too (defeats the
+  triage value the redesign exists for); a warn-below-X% threshold on Data
+  (the false-alarm-by-construction #132 already rejected); liquidity-aware
+  expectations from trade data (per-row I/O, breaks the footer-stats
+  constraint from #119 — same reason #132 rejected it).
+
 ### 2026-06-12 — Remote is an archive superset, not a mirror (PR #152)  [accepted]
 - **Choice**: `RemoteStorage.sync_one` uploads with `rclone copy` (add/update
   only) instead of `rclone sync` (mirror that deletes remote extras).
