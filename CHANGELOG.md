@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.6.0] - 2026-06-13
+
+### Added
+
+### Changed
+
 - The web UI **Dashboard** is now a health-first operations view: a status-chip
   line (fresh `<24h` / coverage gaps / failures-24h / last-collection), a
   **Needs attention** panel that surfaces failed runs (with their error reason)
