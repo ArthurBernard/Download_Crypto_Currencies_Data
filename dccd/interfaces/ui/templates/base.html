@@ -6,11 +6,39 @@
   <title>{% block title %}dccd{% endblock %} — dccd UI</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <style>
-    :root { --bg:#0f1419; --fg:#e6e6e6; --muted:#8b98a5; --accent:#4a9eff;
-            --border:#2a3038; --card:#161b22; --ok:#3fb950; --err:#f85149; }
+    /* Self-hosted fonts (woff2, latin subset) — the daemon serves them from
+       /static itself, so the UI needs no external network and leaks nothing to
+       a font CDN. Display = Martian Mono (instrument-label wordmark + headings,
+       tabular by nature); body = Spline Sans. */
+    @font-face { font-family:'Martian Mono'; font-style:normal; font-weight:600;
+      font-display:swap; src:url('/static/fonts/martian-mono-600.woff2') format('woff2'); }
+    @font-face { font-family:'Martian Mono'; font-style:normal; font-weight:700;
+      font-display:swap; src:url('/static/fonts/martian-mono-700.woff2') format('woff2'); }
+    @font-face { font-family:'Spline Sans'; font-style:normal; font-weight:400;
+      font-display:swap; src:url('/static/fonts/spline-sans-400.woff2') format('woff2'); }
+    @font-face { font-family:'Spline Sans'; font-style:normal; font-weight:500;
+      font-display:swap; src:url('/static/fonts/spline-sans-500.woff2') format('woff2'); }
+    @font-face { font-family:'Spline Sans'; font-style:normal; font-weight:600;
+      font-display:swap; src:url('/static/fonts/spline-sans-600.woff2') format('woff2'); }
+    @font-face { font-family:'Spline Sans'; font-style:normal; font-weight:700;
+      font-display:swap; src:url('/static/fonts/spline-sans-700.woff2') format('woff2'); }
+    :root { --bg:#0a0d13; --fg:#e8eaed; --muted:#8a96a3; --accent:#5ea2ff;
+            --border:#222a33; --card:#131922; --ok:#3fb950; --err:#f85149;
+            --warn:#d6a132;
+            --panel-hi:rgba(255,255,255,.045);
+            --font-body:'Spline Sans', system-ui, sans-serif;
+            --font-display:'Martian Mono', ui-monospace, monospace;
+            --font-mono:'Martian Mono', ui-monospace, monospace; }
     * { box-sizing: border-box; }
-    body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg);
-           color:var(--fg); }
+    body { margin:0; font:14px/1.55 var(--font-body); color:var(--fg);
+           /* faint cool glow off the top edge — atmosphere, not noise */
+           background:
+             radial-gradient(1100px 520px at 50% -8%, rgba(94,162,255,.06), transparent 62%),
+             var(--bg);
+           background-attachment:fixed;
+           -webkit-font-smoothing:antialiased; }
+    /* Figures line up in tables, KPIs and chips — instrument-grade legibility. */
+    table, .chip, .totals, .ver { font-variant-numeric:tabular-nums; }
     nav { display:flex; gap:.25rem; align-items:center; flex-wrap:wrap;
           padding:.4rem 1rem; background:var(--card);
           border-bottom:1px solid var(--border);
@@ -18,8 +46,9 @@
     nav .brand-group { display:flex; align-items:center; gap:.5rem;
             margin-right:auto; }
     nav .brand-group img { height:28px; width:auto; display:block; }
-    nav .brand-group .brand { font-size:1.1rem; font-weight:700;
-            letter-spacing:.02em; color:var(--fg); }
+    nav .brand-group .brand { font-family:var(--font-display); font-size:1rem;
+            font-weight:700; letter-spacing:.18em; text-transform:uppercase;
+            color:var(--fg); }
     nav .brand-group .ver { color:var(--muted); font-size:.78rem;
             font-family:ui-monospace,monospace; }
     nav a { color:var(--muted); text-decoration:none; padding:.4rem .8rem;
@@ -83,8 +112,12 @@
     footer { color:var(--muted); font-size:.8rem; text-align:center;
             padding:1.5rem 1rem; }
     footer a { color:var(--muted); }
-    h1 { font-size:1.3rem; margin:0 0 1rem; }
-    h2 { font-size:1.05rem; margin:1.5rem 0 .5rem; }
+    h1 { font-family:var(--font-display); font-size:1.25rem; font-weight:600;
+         letter-spacing:-.01em; margin:0 0 1rem; }
+    /* Section headers read like labels stamped on an instrument panel. */
+    h2 { font-family:var(--font-display); font-size:.78rem; font-weight:600;
+         letter-spacing:.13em; text-transform:uppercase; color:var(--muted);
+         margin:1.5rem 0 .5rem; }
     table { width:100%; border-collapse:collapse; margin:.5rem 0; }
     th, td { text-align:left; padding:.4rem .6rem; border-bottom:1px solid var(--border); }
     th { color:var(--muted); font-weight:600; }
@@ -102,7 +135,9 @@
           padding:.8rem; overflow:auto; max-height:70vh; white-space:pre-wrap;
           word-break:break-word; }
     .card { background:var(--card); border:1px solid var(--border);
-            border-radius:8px; padding:1rem; margin:.5rem 0; }
+            border-radius:8px; padding:1rem; margin:.5rem 0;
+            /* machined-panel depth: a hairline top highlight + soft drop */
+            box-shadow:inset 0 1px 0 var(--panel-hi), 0 1px 2px rgba(0,0,0,.35); }
     .row { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
     .muted { color:var(--muted); }
     .ok { color:var(--ok); } .err { color:var(--err); }
@@ -134,6 +169,21 @@
     .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:100%; }
     /* Mobile / narrow viewport: bigger tap targets, tighter chrome, no page-wide
        horizontal scroll. Desktop layout above the breakpoint is untouched. */
+    /* One orchestrated page-load: top-level sections rise + fade in, staggered.
+       Containers exist at load (JS fills them after), so this never blocks data. */
+    @keyframes rise { from { opacity:0; transform:translateY(9px); }
+                      to   { opacity:1; transform:none; } }
+    main > * { animation:rise .5s cubic-bezier(.2,.7,.2,1) both; }
+    main > *:nth-child(1){ animation-delay:.03s; }
+    main > *:nth-child(2){ animation-delay:.08s; }
+    main > *:nth-child(3){ animation-delay:.13s; }
+    main > *:nth-child(4){ animation-delay:.18s; }
+    main > *:nth-child(5){ animation-delay:.23s; }
+    main > *:nth-child(6){ animation-delay:.28s; }
+    main > *:nth-child(n+7){ animation-delay:.33s; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; }
+    }
     @media (max-width: 640px) {
       nav { padding:.4rem .6rem; gap:.15rem; }
       nav a, nav .nav-menu-btn, nav .nav-logout button { padding:.55rem .7rem; }
