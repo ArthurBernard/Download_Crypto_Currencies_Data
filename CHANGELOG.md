@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The web UI **Dashboard** is now a health-first operations view: a status-chip
+  line (fresh `<24h` / coverage gaps / failures-24h / last-collection), a
+  **Needs attention** panel that surfaces failed runs (with their error reason)
+  and datasets with coverage gaps — each with a one-click **Retry/Fill gaps**
+  when a configured job matches, else a deep-link to Historical — plus a
+  compact Active-now, recent runs, and a per-exchange Data summary with
+  freshness dots. Client-side only (inventory + runs + jobs); no API change.
+
 ### Fixed
 
 ### Deprecated
