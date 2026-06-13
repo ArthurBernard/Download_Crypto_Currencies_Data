@@ -32,7 +32,11 @@ let JOBS = [], RUNNING = {}, INV = [], openExchanges = {};
 // spec_id -> { value|bid|ask, ts(ns), live }. `live` marks a real-time SSE
 // sample; entries without it are seeded from on-disk data (last stored point).
 const samples = {};
-let lastSig = '';
+// `null`, not '' — with zero stream jobs the structure signature is also '',
+// so an '' sentinel made the very first load() match and short-circuit before
+// renderPane ever ran, leaving both panes stuck on "Loading…". null guarantees
+// the first load always renders (then the real signature governs later polls).
+let lastSig = null;
 
 function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
 function invFor(j) {
