@@ -1,26 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
-<p class="muted" style="margin:.2rem 0 .8rem">
-  An at-a-glance view: key totals, what's running right now, the latest runs, and
-  what's stored. Use <a href="/historical">Historical</a> / <a href="/live">Live</a>
-  to collect, <a href="/data">Data</a> to inspect.
-</p>
+<style>
+  /* Dashboard-only chrome: a health line of status chips, an attention card,
+     and a compact activity area. Everything else reuses base.html. */
+  .dash-head { display:flex; align-items:baseline; justify-content:space-between;
+               flex-wrap:wrap; gap:.5rem; }
+  .dash-head .status { font-size:.8rem; color:var(--muted); }
+  .dash-head .status .dot { display:inline-block; width:.5rem; height:.5rem;
+               border-radius:50%; background:var(--ok); margin-right:.3rem;
+               vertical-align:middle; }
+  .dash-head .status.down .dot { background:var(--err); }
+  .health { display:flex; flex-wrap:wrap; gap:.5rem; margin:.3rem 0 .5rem; }
+  .chip { display:inline-flex; align-items:center; gap:.4rem; font-size:.85rem;
+          padding:.35rem .7rem; border-radius:999px; border:1px solid var(--border);
+          background:var(--card); }
+  .chip b { font-weight:700; }
+  .chip.good { border-color:rgba(63,185,80,.4); }
+  .chip.warn { border-color:rgba(210,153,34,.45); }
+  .chip.bad  { border-color:rgba(248,81,73,.45); }
+  .chip .ic { font-size:.9rem; line-height:1; }
+  .chip.good .ic { color:var(--ok); }
+  .chip.warn .ic { color:#d29922; }
+  .chip.bad  .ic { color:var(--err); }
+  .totals { color:var(--muted); font-size:.82rem; margin:.1rem 0 1rem; }
+  .attn-item { display:flex; align-items:flex-start; gap:.6rem; padding:.55rem 0;
+               border-bottom:1px solid var(--border); }
+  .attn-item:last-child { border-bottom:0; }
+  .attn-item .ic { font-size:1rem; line-height:1.3; }
+  .attn-item.fail .ic { color:var(--err); }
+  .attn-item.gap  .ic { color:#d29922; }
+  .attn-item .body { flex:1; min-width:0; }
+  .attn-item .body .sub { color:var(--muted); font-size:.8rem; margin-top:.1rem;
+               overflow-wrap:anywhere; }
+  .attn-item .act { flex:none; }
+  .attn-item .act a, .attn-item .act button { font-size:.8rem; }
+  .attn-item .act a { color:var(--accent); text-decoration:none; white-space:nowrap; }
+  .all-clear { color:var(--ok); }
+</style>
 
-<!-- KPIs -->
-<div id="kpis" class="row" style="gap:.6rem;margin-bottom:1rem"></div>
+<div class="dash-head">
+  <h1 style="margin:0">Dashboard</h1>
+  <span id="conn" class="status"><span class="dot"></span>auto-refresh 15s</span>
+</div>
 
-<!-- Active now -->
-<h2 style="font-size:1.05rem;margin:.6rem 0 .3rem">Active now</h2>
-<div class="muted" style="font-size:.82rem;margin-bottom:.4rem">Runs in progress and live streams.</div>
+<!-- System health -->
+<div id="health" class="health"><span class="muted">Loading…</span></div>
+<div id="totals" class="totals"></div>
+
+<!-- Needs attention -->
+<h2 style="margin:.9rem 0 .3rem">Needs attention</h2>
+<div class="card" id="attention"><span class="muted">Loading…</span></div>
+
+<!-- Active now (collapses to a slim line when idle) -->
+<h2 style="margin:1.1rem 0 .4rem">Active now</h2>
 <div id="active-now"><span class="muted">Loading…</span></div>
 
 <div class="row" style="gap:1rem;align-items:flex-start;margin-top:1rem">
   <!-- Recent runs -->
   <div style="flex:2;min-width:280px">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
-      <h2 style="font-size:1.05rem;margin:0">Recent runs</h2>
+      <h2 style="margin:0">Recent runs</h2>
       <a href="/logs" style="font-size:.8rem;color:var(--muted)">All logs →</a>
     </div>
     <div id="runs-body"><span class="muted">Loading…</span></div>
@@ -29,7 +69,7 @@
   <!-- Data -->
   <div style="flex:1;min-width:200px">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.3rem">
-      <h2 style="font-size:1.05rem;margin:0">Data</h2>
+      <h2 style="margin:0">Data</h2>
       <a href="/data" style="font-size:.8rem;color:var(--muted)">Browse →</a>
     </div>
     <div class="card"><div id="data-summary"><span class="muted">Loading…</span></div></div>
@@ -38,35 +78,160 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function kpi(label, value) {
-  return `<div class="card" style="flex:1;min-width:8rem;padding:.7rem .9rem;margin:0">
-    <div style="font-size:1.4rem;font-weight:700">${value}</div>
-    <div class="muted" style="font-size:.78rem">${label}</div></div>`;
+const DAY_NS = 86_400 * 1e9;
+
+// Build a lookup of configured jobs keyed by exchange|symbol|data_type so a
+// failed run or a gapped dataset can be mapped back to a one-click "Run". The
+// API's /api/jobs/run wants the *job* id (with its span suffix), which a run's
+// spec_id and an inventory row don't carry — so we match on the tuple instead.
+function jobIndex(jobs) {
+  const idx = {};
+  for (const j of jobs) {
+    if (j.operation !== 'backfill') continue;
+    const k = `${j.exchange}|${normSym(j.symbol)}|${j.data_type}`;
+    // Prefer a span-specific match when available, else fall back to the tuple.
+    idx[k + '|' + (j.span || '')] = j.id;
+    if (!(k in idx)) idx[k] = j.id;   // first job for this tuple wins
+  }
+  return idx;
+}
+// Inventory pairs are "BTC-USDT"; runs/jobs symbols are "BTC/USDT". Normalise.
+function normSym(s) { return String(s || '').replace('-', '/'); }
+function findJob(idx, exchange, symbol, data_type, span) {
+  const k = `${exchange}|${normSym(symbol)}|${data_type}`;
+  return idx[k + '|' + (span || '')] || idx[k] || null;
+}
+// Deep-link to the Historical tab for a data type (where a Run lives).
+function histLink(dt) {
+  return dt === 'trades' ? '/historical#trades' : '/historical#ohlc';
+}
+// Action cell: one-click Run when we can map to a configured job, else a link
+// to Historical. Order books have no REST backfill — never offer a run there.
+function actionCell(jobId, dt, label) {
+  if (dt === 'orderbook') return `<a href="/live">Live →</a>`;
+  if (jobId) return `<button class="ghost" style="padding:.25rem .6rem"
+      onclick="runJob('${escapeHtml(jobId)}', this)">${label}</button>`;
+  return `<a href="${histLink(dt)}">Fix →</a>`;
+}
+async function runJob(jobId, btn) {
+  btn.disabled = true;
+  try {
+    const r = await api('POST', '/api/jobs/run', { job_id: jobId });
+    toast(r.status === 'already-running' ? 'Already running' : 'Backfill started', 'ok');
+    setTimeout(load, 600);
+  } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
+}
+
+function chip(kind, ic, label, value) {
+  return `<span class="chip ${kind}"><span class="ic">${ic}</span>
+    ${value !== undefined ? `<b>${value}</b> ` : ''}${label}</span>`;
 }
 
 async function load() {
-  // Fetch everything we need once — in parallel: serial awaits cost 3×RTT,
-  // which is what a remote (Tailscale/TLS) client actually feels.
-  const [runsR, streamsR, invR] = await Promise.allSettled([
-    api('GET','/api/runs?limit=50'), api('GET','/api/streams'), api('GET','/api/inventory')]);
+  const conn = document.getElementById('conn');
+  const [runsR, streamsR, invR, jobsR] = await Promise.allSettled([
+    api('GET','/api/runs?limit=50'), api('GET','/api/streams'),
+    api('GET','/api/inventory'), api('GET','/api/jobs')]);
+  if (runsR.status !== 'fulfilled' && invR.status !== 'fulfilled') {
+    conn.className = 'status down';
+    conn.innerHTML = '<span class="dot"></span>can\'t reach API';
+    return;
+  }
+  conn.className = 'status';
+  conn.innerHTML = '<span class="dot"></span>auto-refresh 15s';
+
   const runs = runsR.status === 'fulfilled' ? (runsR.value.runs || []) : [];
   const streams = streamsR.status === 'fulfilled' ? (streamsR.value.streams || []) : [];
   const datasets = invR.status === 'fulfilled' ? (invR.value.datasets || []) : [];
+  const jobs = jobsR.status === 'fulfilled' ? (jobsR.value.jobs || []) : [];
+  const idx = jobIndex(jobs);
 
   const liveStreams = streams.filter(s => s.running);
   const activeRuns = runs.filter(r => r.state === 'running' || r.state === 'reconnecting');
   const totRows = datasets.reduce((a,d)=>a+(d.rows||0),0);
   const totBytes = datasets.reduce((a,d)=>a+(d.bytes||0),0);
+  const now = Date.now() * 1e6;
 
-  // KPIs
-  document.getElementById('kpis').innerHTML =
-    kpi('datasets', datasets.length) +
-    kpi('rows stored', fmtNum(totRows)) +
-    kpi('on disk', fmtBytes(totBytes)) +
-    kpi('live streams', liveStreams.length) +
-    kpi('runs in progress', activeRuns.length);
+  // ---- System health -------------------------------------------------------
+  const freshN = datasets.filter(d => d.max_ts != null && now - d.max_ts < DAY_NS).length;
+  const gapped = datasets.filter(d => (d.missing_rows || 0) > 0);
+  // Failed runs in the last 24h, most-recent-first, de-duplicated per spec so a
+  // repeatedly-failing job shows once.
+  const failed24 = [];
+  const seenFail = new Set();
+  for (const r of runs) {
+    if (r.state !== 'failed' || r.started_at == null || now - r.started_at > DAY_NS) continue;
+    if (seenFail.has(r.spec_id)) continue;
+    seenFail.add(r.spec_id); failed24.push(r);
+  }
+  // Last collection: the most recent successful run's end (truthful regardless
+  // of whether a scheduler is actually running).
+  const lastEnd = runs.filter(r => r.state === 'succeeded' && r.ended_at != null)
+                      .reduce((m,r)=>Math.max(m, r.ended_at), 0);
 
-  // Active now: running runs (with progress) + live streams.
+  const chips = [];
+  if (datasets.length)
+    chips.push(chip(freshN === datasets.length ? 'good' : 'warn', '●',
+      `fresh <span class="muted">(&lt;24h)</span>`, `${freshN}/${datasets.length}`));
+  chips.push(gapped.length
+    ? chip('warn', '◐', 'with gaps', gapped.length)
+    : chip('good', '✓', 'no gaps'));
+  chips.push(failed24.length
+    ? chip('bad', '✗', 'failed <span class="muted">(24h)</span>', failed24.length)
+    : chip('good', '✓', 'no failures <span class="muted">(24h)</span>'));
+  if (liveStreams.length)
+    chips.push(chip('good', '◉', 'live streams', liveStreams.length));
+  if (lastEnd) chips.push(chip('good', '↻', `last collection ${fmtAge(lastEnd)}`));
+  document.getElementById('health').innerHTML = chips.join('') ||
+    '<span class="muted">No data yet.</span>';
+
+  document.getElementById('totals').innerHTML =
+    `${fmtNum(datasets.length)} datasets · ${fmtNum(totRows)} rows · ${fmtBytes(totBytes)} on disk`;
+
+  // ---- Needs attention -----------------------------------------------------
+  const items = [];
+  for (const r of failed24) {
+    const jobId = findJob(idx, r.exchange, r.symbol, r.data_type);
+    const reason = r.error ? escapeHtml(r.error) : 'no error message recorded';
+    items.push(`<div class="attn-item fail">
+      <span class="ic">✗</span>
+      <div class="body">
+        <span class="muted" style="font-size:.85em">${escapeHtml(r.exchange)}</span>
+        <strong>${escapeHtml(r.symbol)}</strong> ${escapeHtml(r.data_type)} — backfill failed
+        <div class="sub">${reason} · ${fmtAge(r.started_at)}</div>
+      </div>
+      <div class="act">${actionCell(jobId, r.data_type, 'Retry')}</div>
+    </div>`);
+  }
+  for (const d of gapped) {
+    const exp = d.expected_rows || 0, miss = d.missing_rows || 0;
+    const pct = exp > 0 ? Math.round(miss / exp * 100) : 0;
+    const jobId = findJob(idx, d.exchange, d.pair, d.data_type, d.span);
+    const spanLbl = d.span ? `${d.span}s` : '';
+    items.push(`<div class="attn-item gap">
+      <span class="ic">◐</span>
+      <div class="body">
+        <span class="muted" style="font-size:.85em">${escapeHtml(d.exchange)}</span>
+        <strong>${escapeHtml(d.pair)}</strong> ${escapeHtml(spanLbl)} — ${pct}% coverage gap
+        <div class="sub">${fmtNum(miss)} missing of ${fmtNum(exp)} expected bars</div>
+      </div>
+      <div class="act">${actionCell(jobId, d.data_type, 'Fill gaps')}</div>
+    </div>`);
+  }
+  const attEl = document.getElementById('attention');
+  if (!items.length) {
+    attEl.innerHTML = datasets.length || runs.length
+      ? '<span class="all-clear">✓ All clear — nothing needs attention.</span>'
+      : '<span class="muted">Nothing collected yet. Start on <a href="/historical">Historical</a> or <a href="/live">Live</a>.</span>';
+  } else {
+    const shown = items.slice(0, 8);
+    attEl.innerHTML = shown.join('') +
+      (items.length > shown.length
+        ? `<div class="muted" style="font-size:.8rem;padding-top:.5rem">+ ${items.length - shown.length} more</div>`
+        : '');
+  }
+
+  // ---- Active now ----------------------------------------------------------
   const el = document.getElementById('active-now');
   const blocks = [];
   for (const r of activeRuns) {
@@ -90,10 +255,10 @@ async function load() {
     </div>`);
   }
   el.innerHTML = blocks.length ? blocks.join('')
-    : '<div class="card muted" style="text-align:center;padding:1.2rem">Nothing running. Start a job on <a href="/historical">Historical</a> or <a href="/live">Live</a>.</div>';
+    : '<div class="muted" style="font-size:.85rem">Idle — no run or stream in progress right now.</div>';
 
-  // Recent runs table
-  const recent = runs.slice(0, 12);
+  // ---- Recent runs (top 8) -------------------------------------------------
+  const recent = runs.slice(0, 8);
   const body = recent.map(r => {
     const cls = r.state === 'succeeded' ? 'ok' : r.state === 'failed' ? 'err' : 'muted';
     return `<tr>
@@ -101,21 +266,27 @@ async function load() {
       <td>${escapeHtml(r.data_type)}</td>
       <td><span class="${cls}">${escapeHtml(r.state)}</span></td>
       <td class="muted" style="font-size:.8em">${fmtNum(r.rows_written||0)}</td>
-      <td class="muted" style="font-size:.8em">${fmtNs(r.started_at)}</td>
+      <td class="muted" style="font-size:.8em">${fmtAge(r.started_at)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="muted">No runs yet</td></tr>';
   document.getElementById('runs-body').innerHTML =
     `<table><thead><tr><th>Symbol</th><th>Type</th><th>State</th><th>Rows</th><th>Started</th></tr></thead><tbody>${body}</tbody></table>`;
 
-  // Data summary by exchange
+  // ---- Data summary by exchange (with freshness dot) -----------------------
   if (!datasets.length) {
     document.getElementById('data-summary').innerHTML = '<span class="muted">Empty — <a href="/historical">start a backfill</a></span>';
   } else {
     const byEx = {};
-    for (const d of datasets) byEx[d.exchange] = (byEx[d.exchange] || 0) + 1;
+    for (const d of datasets) {
+      const e = byEx[d.exchange] || (byEx[d.exchange] = { n:0, bytes:0, max:0 });
+      e.n++; e.bytes += d.bytes||0; e.max = Math.max(e.max, d.max_ts||0);
+    }
     document.getElementById('data-summary').innerHTML =
-      Object.entries(byEx).sort().map(([ex, n]) =>
-        `<div class="row" style="justify-content:space-between;font-size:.85em"><span>${escapeHtml(ex)}</span><span class="muted">${n} dataset(s)</span></div>`).join('');
+      Object.entries(byEx).sort().map(([ex, e]) =>
+        `<div class="row" style="justify-content:space-between;font-size:.85em;padding:.15rem 0">
+          <span><span class="live-dot ${stalenessClass(e.max)}"></span>${escapeHtml(ex)}</span>
+          <span class="muted">${e.n} · ${fmtBytes(e.bytes)}</span>
+        </div>`).join('');
   }
 }
 
