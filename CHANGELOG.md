@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The **Live** page no longer hangs on "Loading…" when no stream jobs are
+  configured (a fresh install, or a backfill-only setup): the structure-change
+  guard initialised `lastSig` to `''`, which equals the signature of an empty
+  job set, so the very first `load()` matched and returned before the panes
+  ever rendered their "No … streams yet" empty state. `lastSig` now starts at
+  `null` so the first render always runs. (#159)
+
 ### Deprecated
 
 ### Removed
