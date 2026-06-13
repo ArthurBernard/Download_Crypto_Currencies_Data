@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Self-hosted UI fonts are now actually packaged in the wheel: `package-data`
+  listed only `static/*` (top level), which excluded the `static/fonts/`
+  subdirectory added for the visual refresh — a pip-installed UI would 404 on
+  its `.woff2` and silently fall back to system fonts. Verified by inspecting
+  the built wheel (6 woff2 present). (#160)
 - The **Live** page no longer hangs on "Loading…" when no stream jobs are
   configured (a fresh install, or a backfill-only setup): the structure-change
   guard initialised `lastSig` to `''`, which equals the signature of an empty
