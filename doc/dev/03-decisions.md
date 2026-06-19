@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-19 — Reject invalid timestamps (TS<=0) at the storage write boundary (PR #XX)  [accepted]
+### 2026-06-19 — Reject invalid timestamps (TS<=0) at the storage write boundary (PR #165)  [accepted]
 - **Choice**: guard against corrupt timestamps **centrally in `ParquetStore.save()`**,
   filtering out rows whose `TS` is null or `<= 0` for every data type, rather than
   validating per-adapter. Drop the rows and log a warning — do not raise.

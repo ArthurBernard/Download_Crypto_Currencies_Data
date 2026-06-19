@@ -12,16 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+### Deprecated
+
+### Removed
+
+## [3.6.1] - 2026-06-19
+
+### Fixed
+
 - `ParquetStore.save()` now rejects rows whose timestamp is null or `<= 0` at the
   storage write boundary (one central guard for every adapter and data type), so a
   lost/epoch-0 timestamp can no longer be persisted or poison gap detection — a
   single `TS=0` bar otherwise dragged `inventory()` `min_ts` to `1970` and inflated
   `expected_rows`/`missing_rows` to a bogus ~89 %. Dropped rows are logged, not
-  raised, so one bad bar can't abort a good page. (#XX)
-
-### Deprecated
-
-### Removed
+  raised, so one bad bar can't abort a good page. (#165)
 
 ## [3.6.0] - 2026-06-13
 
