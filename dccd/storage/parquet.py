@@ -288,6 +288,20 @@ class ParquetStore:
         if len(df) == 0:
             return 0
 
+        # Reject bars with an invalid timestamp (null or <= 0). TS is ns UTC
+        # int64; 0 is the Unix epoch (1970) — always corrupt for crypto market
+        # data (real history starts ~2009). One such row poisons gap detection
+        # (inventory min_ts → 1970, expected_rows balloons). Drop, don't raise,
+        # so one bad bar can't abort a good page. Seen in prod: a Kraken OHLC bar
+        # with a null time parsed to 0 (audit 2026-06-19).
+        n_before = len(df)
+        df = df.filter(pl.col("TS").is_not_null() & (pl.col("TS") > 0))
+        dropped = n_before - len(df)
+        if dropped:
+            logger.warning("save(%s): dropped %d row(s) with invalid TS<=0", ds, dropped)
+        if len(df) == 0:
+            return 0
+
         fmt = self._period_fmt(ds)
         df_with_period = df.with_columns(
             pl.from_epoch("TS", time_unit="ns").dt.strftime(fmt).alias("_period")
