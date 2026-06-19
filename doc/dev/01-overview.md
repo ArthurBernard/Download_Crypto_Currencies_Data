@@ -17,12 +17,13 @@ Three ways to drive it, all over the same core:
 
 ## Current state (snapshot)
 
-- **Version `3.0.0`** (in `pyproject.toml`), living on `develop`. The v3 work is a
-  full hexagonal rewrite that replaced the v2 daemon. **Not yet tagged/released**
-  on `master` — last published tag is `v2.4.0`.
+- **Version `3.6.0`** (in `pyproject.toml`), released on `master` and published to
+  PyPI (2026-06-13). The v3 work is a full hexagonal rewrite that replaced the v2
+  daemon; the v3 line began at `v3.0.0` (2026-06-07). `develop` and `master` are
+  level.
 - **Python 3.11–3.13** (CI matrix). `mypy` runs under 3.12 semantics (see
   `CLAUDE.md`), strict on `domain/`.
-- **~191 unit tests** (+3 network E2E, opt-in) — green; `ruff` and `mypy` clean;
+- **~480 unit tests** (+3 network E2E, opt-in) — green; `ruff` and `mypy` clean;
   Sphinx builds with 0 warnings.
 - **Seven exchanges**: binance, coinbase, kraken, bybit, okx, bitfinex, bitmex.
 - The web UI was reworked (2026-06) into **Data / Historical / Live** pages with

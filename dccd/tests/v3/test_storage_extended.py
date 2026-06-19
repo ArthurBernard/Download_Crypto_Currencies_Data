@@ -50,10 +50,11 @@ class TestMissingIntervalsPartialYear:
         assert leading, f"Expected leading gap starting at 0, got: {gaps}"
 
     def test_trailing_gap_detected(self, store: ParquetStore, ohlc_ds: DatasetId) -> None:
-        """Save bars [0, 4]; request [0, 10] → trailing gap after last bar."""
+        """Save bars [1, 5]; request [0, 10] → trailing gap after last bar."""
+        # Start at 1 — TS=0 is the Unix epoch and is rejected by the store guard.
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)
-            for i in range(5)
+            for i in range(1, 6)
         ]
         store.save(ohlc_ds, bars)
 
@@ -64,17 +65,18 @@ class TestMissingIntervalsPartialYear:
         assert trailing, f"Expected trailing gap ending at {end_ns}, got: {gaps}"
 
     def test_no_gap_when_complete(self, store: ParquetStore, ohlc_ds: DatasetId) -> None:
-        """Exact coverage → no gaps."""
+        """Exact coverage → no gaps within stored range."""
+        # Start at 1 — TS=0 is the Unix epoch and is rejected by the store guard.
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)
-            for i in range(5)
+            for i in range(1, 6)
         ]
         store.save(ohlc_ds, bars)
-        end_ns = 4 * 3600 * NS
-        gaps = store.missing_intervals(ohlc_ds, 0, end_ns)
+        end_ns = 5 * 3600 * NS
+        gaps = store.missing_intervals(ohlc_ds, 1 * 3600 * NS, end_ns)
         # May still have a trailing gap if end_ns > last bar
-        # No gap should start after the last bar within the stored range
-        assert all(g[0] >= 4 * 3600 * NS for g in gaps), f"Unexpected gap: {gaps}"
+        # No gap should start before the last stored bar
+        assert all(g[0] >= 5 * 3600 * NS for g in gaps), f"Unexpected gap: {gaps}"
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +208,10 @@ class TestFileStatsCache:
         self, store: ParquetStore, ohlc_ds: DatasetId, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """After save() (mtime changes) the cache is invalidated and new rows appear."""
+        # Start at 1 — TS=0 is the Unix epoch and is rejected by the store guard.
         bars_first = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)
-            for i in range(5)
+            for i in range(1, 6)
         ]
         store.save(ohlc_ds, bars_first)
 
@@ -228,7 +231,7 @@ class TestFileStatsCache:
         monkeypatch.undo()
         bars_second = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)
-            for i in range(5, 10)
+            for i in range(6, 11)  # non-overlapping with first batch (1..5)
         ]
         store.save(ohlc_ds, bars_second)
 
@@ -343,17 +346,18 @@ class TestFileStatsValueIdentity:
         self, store: ParquetStore, ohlc_ds: DatasetId
     ) -> None:
         """inventory() rows/min_ts/max_ts/expected_rows/missing_rows match stored data."""
-        # 10 hourly bars with index 5 missing → 9 rows, expected=10, missing=1
+        # 10 hourly bars (indices 1..10) with index 6 missing → 9 rows, expected=10, missing=1.
+        # Start at 1 — TS=0 is the Unix epoch and is rejected by the store guard.
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)
-            for i in range(10) if i != 5
+            for i in range(1, 11) if i != 6
         ]
         store.save(ohlc_ds, bars)
         entry = next(d for d in store.inventory() if d["data_type"] == "ohlc")
 
         assert entry["rows"] == 9
-        assert entry["min_ts"] == 0
-        assert entry["max_ts"] == 9 * 3600 * NS
+        assert entry["min_ts"] == 1 * 3600 * NS
+        assert entry["max_ts"] == 10 * 3600 * NS
         assert entry["expected_rows"] == 10
         assert entry["missing_rows"] == 1
         assert entry["bytes"] > 0
@@ -362,16 +366,17 @@ class TestFileStatsValueIdentity:
         self, store: ParquetStore, trades_ds: DatasetId
     ) -> None:
         """Trades inventory has no gap fields, correct rows/min_ts/max_ts."""
+        # Start at 1 — TS=0 is the Unix epoch and is rejected by the store guard.
         trades = [
             Trade(ts=i * 1000 * NS, price=50000.0, amount=0.1, side="buy")
-            for i in range(5)
+            for i in range(1, 6)
         ]
         store.save(trades_ds, trades)
         entry = next(d for d in store.inventory() if d["data_type"] == "trades")
 
         assert entry["rows"] == 5
-        assert entry["min_ts"] == 0
-        assert entry["max_ts"] == 4 * 1000 * NS
+        assert entry["min_ts"] == 1 * 1000 * NS
+        assert entry["max_ts"] == 5 * 1000 * NS
         assert entry["missing_rows"] is None
         assert entry["expected_rows"] is None
         assert entry["bytes"] > 0

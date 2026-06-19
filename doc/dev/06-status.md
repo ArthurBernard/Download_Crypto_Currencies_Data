@@ -16,22 +16,28 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
   **removed** — the data is migrated; new installs start on the v3 schema.
 - **Web UI** (PR #76 + polish): Data / Historical / Live / Dashboard / Logs /
   Config / Storage; inline job CRUD; SSE liveness; order-book best bid/ask +
-  cadence fixed across all WS adapters.
+  cadence fixed across all WS adapters. **v3.6.0 overhaul**: the Dashboard is now
+  a health-first operations view (status chips + a "Needs attention" panel for
+  failed runs and coverage gaps, with one-click Retry/Fill), and a global
+  "instrument panel" visual refresh ships **self-hosted** fonts (Martian Mono +
+  Spline Sans woff2 under `static/fonts/`, no external CDN) via `base.html`
+  tokens (#157–#160).
 - **Security**: Bearer auth on `/api/*` when `ui_auth_token` is set; non-wildcard
   CORS via `ui_allow_origins`.
-- **Quality gates**: ~191 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`
+- **Quality gates**: ~480 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`
   clean; Sphinx 0 warnings; CI matrix 3.11–3.13.
-- **Released**: `v3.0.0` tagged on `master` (2026-06-07), superseding `v2.4.0` —
-  GitHub Release published. `develop` and `master` are level; the next feature
-  merge into `develop` reopens the rolling release PR (`/release next-cycle`).
+- **Released**: `v3.6.0` tagged on `master` (2026-06-13) — the latest in the v3
+  line that began with `v3.0.0` (2026-06-07). GitHub Release + PyPI publish on
+  tag. `develop` and `master` are level; the next feature merge into `develop`
+  reopens the rolling release PR (`/release next-cycle`).
 
 ## Pending
 
-_(nothing pending — v3.5.1 released 2026-06-12 and deployed on the production
-collector; the 2026-06-12 audit is fully closed: OKX history repaired by
-re-backfill — 46 528/46 528 bars, `missing_rows == 0` on all five pairs — and
-the boot orphan-sweep fix verified live, 20 stream runs `running` after
-restart)_
+_(nothing pending — **v3.6.0 (UI overhaul) released 2026-06-13 and deployed on
+the production collector**: dashboard redesign + instrument-panel visual refresh
+with self-hosted fonts (#157–#160). Verified live on arthurserver — woff2 served
+`200 font/woff2`, new templates installed, `polars-lts-cpu` preserved via a
+`--no-deps` upgrade. The prior v3.5.x audits remain closed.)_
 
 **Data architecture (2026-06-12): the production collector is the canonical
 store.** The full deep history (OHLC 1m back to 2020, ~2 GB) was seeded onto

@@ -120,6 +120,24 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-19 — Reject invalid timestamps (TS<=0) at the storage write boundary (PR #165)  [accepted]
+- **Choice**: guard against corrupt timestamps **centrally in `ParquetStore.save()`**,
+  filtering out rows whose `TS` is null or `<= 0` for every data type, rather than
+  validating per-adapter. Drop the rows and log a warning — do not raise.
+- **Why**: `save()` is the single choke point every source's records flow through,
+  so one filter defends all exchanges and all data types at once. `TS` is ns UTC
+  int64 and real crypto history starts ~2009, so epoch-or-earlier is unambiguously
+  corrupt. Dropping (not raising) means one bad bar never aborts an otherwise-good
+  page write. Surfaced by the 2026-06-19 server audit: a Kraken OHLC bar with a
+  null-parsed time (`TS=0`) had been written and poisoned gap detection (a stray
+  `1970.parquet` made `inventory()` report ~89 % missing on that dataset; store
+  OHLC aggregate 32.7 % vs ~1.5 % real).
+- **Rejected alternatives**: (a) a Kraken-adapter-only guard — narrower, wouldn't
+  protect other adapters or a future regression; (b) filtering in `canonicalize()`
+  — that runs on reads/merges too and would silently rewrite history on read,
+  conflating ingestion validation with read normalisation; (c) raising on a bad
+  bar — would let one corrupt row abort a whole page of good data.
+
 ### 2026-06-13 — Dashboard triages candle-coverage gaps; revises the scope of #132 (PR #157)  [accepted]
 - **Choice**: the health-first Dashboard *does* alarm on OHLC `missing_rows>0`
   — a "with gaps" health chip and a **Needs attention** item with a one-click
