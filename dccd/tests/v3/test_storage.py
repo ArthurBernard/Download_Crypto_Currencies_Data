@@ -41,7 +41,7 @@ class TestParquetStore:
     def test_save_and_load_ohlc(self, tmp_store, ohlc_ds):
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)
-            for i in range(10)
+            for i in range(1, 11)  # start at 1 — TS=0 is the Unix epoch and is rejected
         ]
         n = tmp_store.save(ohlc_ds, bars)
         assert n > 0
@@ -53,7 +53,7 @@ class TestParquetStore:
     def test_save_and_load_trades(self, tmp_store, trades_ds):
         trades = [
             Trade(ts=i * 1000 * NS, price=50000.0 + i, amount=0.1, side="buy")
-            for i in range(5)
+            for i in range(1, 6)  # start at 1 — TS=0 is the Unix epoch and is rejected
         ]
         n = tmp_store.save(trades_ds, trades)
         assert n > 0
@@ -92,10 +92,11 @@ class TestParquetStore:
         assert any(d["exchange"] == "binance" for d in inv)
 
     def test_inventory_bytes_and_gaps(self, tmp_store, ohlc_ds):
-        # 10 hourly bars but with one hole (skip index 5) → 9 stored, 10 expected.
+        # 10 hourly bars but with one hole (skip index 6) → 9 stored, 10 expected.
+        # Start at 1 — TS=0 is the Unix epoch and is rejected by the store guard.
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)
-            for i in range(10) if i != 5
+            for i in range(1, 11) if i != 6
         ]
         tmp_store.save(ohlc_ds, bars)
         entry = next(d for d in tmp_store.inventory() if d["data_type"] == "ohlc")
@@ -114,7 +115,7 @@ class TestParquetStore:
     def test_load_with_range(self, tmp_store, ohlc_ds):
         bars = [
             OHLCBar(ts=i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)
-            for i in range(10)
+            for i in range(1, 11)  # start at 1 — TS=0 is the Unix epoch and is rejected
         ]
         tmp_store.save(ohlc_ds, bars)
         df = tmp_store.load(ohlc_ds, start_ns=3 * 3600 * NS, end_ns=6 * 3600 * NS)
@@ -132,10 +133,53 @@ class TestParquetStore:
                 bids=[OrderBookLevel(price=100.0, amount=1.0)],
                 asks=[OrderBookLevel(price=100.1, amount=0.5)],
             )
-            for i in range(3)
+            for i in range(1, 4)  # start at 1 — TS=0 is the Unix epoch and is rejected
         ]
         n = tmp_store.save(book_ds, snaps)
         assert n > 0
+
+    def test_save_rejects_nonpositive_ts(self, tmp_store, ohlc_ds, trades_ds):
+        """Bars with TS=0 or TS<0 are silently dropped; valid bars land on disk.
+
+        Regression guard for the 2026-06-19 prod incident: a Kraken OHLC bar
+        with a null-parsed timestamp (TS=0) inflated inventory expected_rows
+        to ~89% missing by dragging min_ts to 1970-01-01.
+        """
+        # Use timestamps well into BTC history (2017-ish, in ns).
+        base_ts = 1_500_000_000 * NS  # 2017-07-14 in ns
+
+        # OHLC: mix 3 valid bars with one TS=0 and one TS=-1.
+        bars = [
+            OHLCBar(ts=base_ts + i * 3600 * NS, open=1.0, high=2.0, low=0.5, close=1.5, volume=10.0)
+            for i in range(3)
+        ] + [
+            OHLCBar(ts=0, open=60882.4, high=60900.0, low=60800.0, close=60867.9, volume=5.0),
+            OHLCBar(ts=-1, open=1.0, high=2.0, low=0.5, close=1.5, volume=1.0),
+        ]
+        n = tmp_store.save(ohlc_ds, bars)
+
+        # Only the 3 valid rows should be counted.
+        assert n == 3
+
+        df = tmp_store.load(ohlc_ds)
+        assert len(df) == 3
+        assert df["TS"].min() > 0, "no TS<=0 row must reach disk"
+
+        # No 1970.parquet partition should exist.
+        ohlc_dir = tmp_store.directory(ohlc_ds)
+        assert not (ohlc_dir / "1970.parquet").exists()
+
+        # Trades: same guard applies — one valid trade + one with TS=0.
+        trades = [
+            Trade(ts=base_ts, price=50000.0, amount=0.1, side="buy"),
+            Trade(ts=0, price=60000.0, amount=0.2, side="sell"),
+        ]
+        n_trades = tmp_store.save(trades_ds, trades)
+        assert n_trades == 1
+
+        df_trades = tmp_store.load(trades_ds)
+        assert len(df_trades) == 1
+        assert df_trades["TS"].min() > 0
 
 
 class TestRunsStore:
