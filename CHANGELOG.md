@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+### Deprecated
+
+### Removed
+
+## [3.6.3] - 2026-06-20
+
+### Fixed
+
 - `POST /login` no longer returns a 500 on a non-ASCII submitted token:
   `secrets.compare_digest` raises `TypeError` on a `str` with non-ASCII
   characters, so the handler now compares UTF-8 bytes — a junk token (scanners POST
@@ -22,10 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a scheduled backfill could fail with `Cannot send a request, as the client
   has been closed` (observed ~1×/day across exchanges). The re-entrant user now
   builds a fresh client instead. (#173)
-
-### Deprecated
-
-### Removed
 
 ## [3.6.2] - 2026-06-20
 
