@@ -120,6 +120,25 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-20 — Null the shared HTTP client before awaiting `aclose()` (PR #173)  [accepted]
+- **Choice**: in `AsyncHTTPClient.__aexit__`, when the ref-count hits zero, capture
+  the client into a local, set `self._client = None` and `self._depth = 0`, **then**
+  `await client.aclose()` — null-before-await rather than the previous
+  null-after-await.
+- **Why**: `aclose()` awaits (yields control). With the old ordering, a concurrent
+  `__aenter__` during that window saw the still-set, closing client, skipped
+  creation, bumped the depth and issued a request on a dead pool → `Cannot send a
+  request, as the client has been closed` (~1 scheduled backfill/day on the server,
+  self-healing via the 3600 s backoff). Nulling first makes the re-entrant caller
+  build a fresh client, so the closing one is never reused. Refines the ref-count
+  pool from [2026-06-11 — HTTP pool lifetime = operation scope (PR #129)]; the
+  invariant "shared reference-counted HTTP client (concurrency-safe)" had this hole.
+- **Rejected alternatives**: an `asyncio.Lock` around enter/exit (heavier, and the
+  only contended region is the single `aclose()` await — a lock would serialise all
+  enters for no extra safety); never closing the client / keep-alive for daemon
+  lifetime (leaks a pool when the daemon idles and contradicts the operation-scope
+  decision of #129).
+
 ### 2026-06-20 — Map Kraken pairs by altname, not legacy X/Z codes (PR #169)  [accepted]
 - **Choice**: `_kraken_pair` builds the Kraken **altname** (`{base}{quote}` with a
   small alias map `BTC→XBT`, `DOGE→XDG`) instead of the legacy prefixed codes

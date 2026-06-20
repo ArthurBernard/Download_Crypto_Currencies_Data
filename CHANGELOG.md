@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `AsyncHTTPClient.__aexit__` now nulls the shared client reference **before**
+  awaiting `aclose()`, closing a reference-count race: `aclose()` yields, and a
+  concurrent `__aenter__` during that await previously reused the closing client,
+  so a scheduled backfill could fail with `Cannot send a request, as the client
+  has been closed` (observed ~1×/day across exchanges). The re-entrant user now
+  builds a fresh client instead. (#173)
+
 ### Deprecated
 
 ### Removed

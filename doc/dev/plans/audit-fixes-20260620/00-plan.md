@@ -28,7 +28,7 @@ housekeeping, done directly out-of-band, *not* part of this code plan.
    instead of a clean invalid-login (scanner/bot hits on the tailnet port).
 
 ## Leaf checklist
-- [ ] 01 http-client-close-race — fix/http-client-close-race — medium
+- [x] 01 http-client-close-race — fix/http-client-close-race — medium
 - [ ] 02 login-nonascii-token — fix/login-nonascii-token — low
 
 ## Dependencies
