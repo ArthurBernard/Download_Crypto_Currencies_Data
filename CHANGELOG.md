@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.6.2] - 2026-06-20
+
+### Fixed
+
+- Kraken adapter maps pairs by **altname** (`{base}{quote}`, with `BTC→XBT` and
+  `DOGE→XDG`) instead of legacy X/Z-prefixed codes, so OHLC and trades for modern
+  Kraken assets (TRX, DOT, BNB, …) and Dogecoin no longer fail with `Unknown asset
+  pair`. Legacy pairs are unaffected — Kraken accepts altnames universally and the
+  response is parsed by its code-key fallback. (#169)
+
 ## [3.6.1] - 2026-06-19
 
 ### Fixed
