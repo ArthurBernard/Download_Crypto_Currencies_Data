@@ -121,6 +121,15 @@ class TestAuthSession:
         )
         assert r.status_code == 401
 
+    def test_login_non_ascii_token_rejected_not_500(self, auth_client):
+        # A non-ASCII submitted token must be rejected cleanly (401), never crash
+        # with a 500 — ``secrets.compare_digest`` raises TypeError on non-ASCII
+        # ``str``; the handler compares UTF-8 bytes instead.
+        r = auth_client.post(
+            "/login", data={"token": "hé€llo", "next": "/"}, follow_redirects=False
+        )
+        assert r.status_code == 401
+
     def test_login_sets_httponly_lax_cookie_and_grants_access(self, cfg):
         with TestClient(create_app(config=cfg)) as c:
             r = c.post(

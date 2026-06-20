@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `POST /login` no longer returns a 500 on a non-ASCII submitted token:
+  `secrets.compare_digest` raises `TypeError` on a `str` with non-ASCII
+  characters, so the handler now compares UTF-8 bytes — a junk token (scanners POST
+  arbitrary bytes) is rejected cleanly with the usual invalid-login response. (#174)
 - `AsyncHTTPClient.__aexit__` now nulls the shared client reference **before**
   awaiting `aclose()`, closing a reference-count race: `aclose()` yields, and a
   concurrent `__aenter__` during that await previously reused the closing client,
