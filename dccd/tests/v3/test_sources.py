@@ -114,11 +114,11 @@ class TestKrakenCapabilities:
         self.src = KrakenSource()
 
     def test_render_symbol(self):
-        assert self.src.render_symbol(BTC_USD) == "XXBTZUSD"
+        assert self.src.render_symbol(BTC_USD) == "XBTUSD"
 
     def test_render_symbol_crypto_quote_btc(self):
-        # ETH/BTC: BTC→XBT for the *quote* too, else Kraken rejects "XETHXBTC".
-        assert self.src.render_symbol(Symbol(base="ETH", quote="BTC")) == "XETHXXBT"
+        # ETH/BTC: BTC→XBT via _KRAKEN_ALIASES on the quote side → ETHXBT.
+        assert self.src.render_symbol(Symbol(base="ETH", quote="BTC")) == "ETHXBT"
 
     def test_ohlc_cap_history_recent(self):
         cap = self.src.capability_for(DataType.OHLC, "rest", "historical")
@@ -130,6 +130,46 @@ class TestKrakenCapabilities:
         cap = self.src.capability_for(DataType.TRADES, "rest", "historical")
         assert cap is not None
         assert cap.history == "full"
+
+
+class TestKrakenPairMapping:
+    """Unit tests for _kraken_pair altname construction."""
+
+    def test_legacy_btc_usd(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="BTC", quote="USD")) == "XBTUSD"
+
+    def test_legacy_eth_btc(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="ETH", quote="BTC")) == "ETHXBT"
+
+    def test_legacy_xrp_usd(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="XRP", quote="USD")) == "XRPUSD"
+
+    def test_legacy_xrp_btc(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="XRP", quote="BTC")) == "XRPXBT"
+
+    def test_modern_trx_usd(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="TRX", quote="USD")) == "TRXUSD"
+
+    def test_modern_dot_btc(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="DOT", quote="BTC")) == "DOTXBT"
+
+    def test_modern_bnb_usd(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="BNB", quote="USD")) == "BNBUSD"
+
+    def test_doge_usd(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="DOGE", quote="USD")) == "XDGUSD"
+
+    def test_doge_btc(self):
+        from dccd.sources.kraken import _kraken_pair
+        assert _kraken_pair(Symbol(base="DOGE", quote="BTC")) == "XDGXBT"
 
 
 class TestBybitCapabilities:

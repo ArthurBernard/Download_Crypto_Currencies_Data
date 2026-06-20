@@ -37,28 +37,31 @@ logger = logging.getLogger(__name__)
 
 _BASE = "https://api.kraken.com/0/public"
 
+# Canonical symbol name → Kraken altname for assets whose ticker differs.
+_KRAKEN_ALIASES: dict[str, str] = {
+    "BTC": "XBT",
+    "DOGE": "XDG",
+}
+
 
 def _kraken_pair(symbol: Symbol) -> str:
-    """Convert a canonical Symbol to a Kraken REST pair string.
+    """Convert a canonical Symbol to a Kraken REST altname pair string.
+
+    Kraken accepts altnames (e.g. ``XBTUSD``, ``TRXUSD``) for all assets,
+    including modern ones that lack legacy X/Z-prefixed codes.  ``BTC`` is
+    aliased to ``XBT`` and ``DOGE`` to ``XDG`` on both base and quote.
 
     Examples
     --------
     >>> from dccd.domain.symbol import Symbol
     >>> _kraken_pair(Symbol(base='BTC', quote='USD'))
-    'XXBTZUSD'
+    'XBTUSD'
     >>> _kraken_pair(Symbol(base='ETH', quote='BTC'))
-    'XETHXXBT'
+    'ETHXBT'
     """
-    # Kraken names BTC as XBT — for the quote too, not just the base, so a
-    # crypto/crypto pair like ETH/BTC must become XETHXXBT (not XETHXBTC,
-    # which Kraken rejects with "Unknown asset pair").
-    base = "XBT" if symbol.base == "BTC" else symbol.base
-    quote = "XBT" if symbol.quote == "BTC" else symbol.quote
-    if base in ("BCH", "DASH"):
-        return f"{base}{quote}"
-    if quote in ("EUR", "USD", "CAD", "JPY", "GBP"):
-        return f"X{base}Z{quote}"
-    return f"X{base}X{quote}"
+    base = _KRAKEN_ALIASES.get(symbol.base, symbol.base)
+    quote = _KRAKEN_ALIASES.get(symbol.quote, symbol.quote)
+    return f"{base}{quote}"
 
 
 def _ws_pair(symbol: Symbol) -> str:
