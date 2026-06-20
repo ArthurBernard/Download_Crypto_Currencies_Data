@@ -41,6 +41,50 @@ async def test_concurrent_context_does_not_close_client_early():
 
 
 @pytest.mark.asyncio
+async def test_reentry_during_close_gets_fresh_client():
+    """A ``__aenter__`` while a previous ``__aexit__`` is awaiting ``aclose()``
+    must observe a FRESH client, never the closing one.
+
+    Reproduces the refcount race behind the production "Cannot send a request,
+    as the client has been closed" failures: ``__aexit__`` must null
+    ``self._client`` *before* awaiting ``aclose()`` (which yields), otherwise the
+    re-entrant user reuses the dying client. A fake client whose ``aclose()``
+    yields lets us interleave deterministically.
+    """
+    created: list[Any] = []
+
+    class FakeClient:
+        def __init__(self, **_: Any) -> None:
+            self.closed = False
+            created.append(self)
+
+        async def aclose(self) -> None:
+            await asyncio.sleep(0)  # yield so a concurrent __aenter__ can run
+            self.closed = True
+
+    with patch("httpx.AsyncClient", FakeClient):
+        http = AsyncHTTPClient()
+        await http.__aenter__()  # depth 1, client = fake #0
+        first = http._client
+        assert first is created[0]
+
+        # Start the exit (depth -> 0): it nulls the ref then awaits aclose().
+        exit_task = asyncio.create_task(http.__aexit__())
+        await asyncio.sleep(0)  # let __aexit__ reach the aclose() await
+
+        # Re-enter concurrently: must build a fresh, open client.
+        await http.__aenter__()
+        observed = http._client
+        assert observed is not None
+        assert not observed.closed  # the re-entrant user sees a live client
+        assert observed is not first  # and it is NOT the one being closed
+
+        await exit_task
+        assert first.closed  # the original client still got closed
+        await http.__aexit__()
+
+
+@pytest.mark.asyncio
 async def test_operation_level_context_one_pool_per_backfill(monkeypatch):
     """Operation-level ``async with adapter._http`` creates ONE httpx.AsyncClient.
 

@@ -72,8 +72,9 @@ class AsyncHTTPClient:
         # one) the first to finish would otherwise close the shared httpx client
         # mid-flight for the other ("Cannot send a request, as the client has
         # been closed"). Reference-count the context so the client is created on
-        # first entry and closed only when the last concurrent user exits. Safe
-        # under asyncio: the counter is mutated without intervening awaits.
+        # first entry and closed only when the last concurrent user exits. The
+        # counter is mutated without intervening awaits, but ``__aexit__`` must
+        # still null the reference *before* awaiting ``aclose()`` (see there).
         self._depth = 0
 
     async def __aenter__(self) -> "AsyncHTTPClient":
@@ -88,10 +89,17 @@ class AsyncHTTPClient:
 
     async def __aexit__(self, *args: Any) -> None:
         self._depth -= 1
-        if self._depth <= 0 and self._client:
+        if self._depth <= 0 and self._client is not None:
+            # Ordering matters: null the shared reference BEFORE awaiting
+            # ``aclose()``. ``aclose()`` yields, and a concurrent ``__aenter__``
+            # during that await would otherwise see the still-set (closing)
+            # client, skip creation, bump the depth and ``get()`` a dead client
+            # ("Cannot send a request, as the client has been closed"). Nulling
+            # first makes that re-entry build a FRESH client instead.
             self._depth = 0
-            await self._client.aclose()
+            client = self._client
             self._client = None
+            await client.aclose()
 
     async def get(self, url: str, params: dict[str, Any] | None = None) -> Any:
         """Perform a GET request with retry/backoff. Returns parsed JSON."""

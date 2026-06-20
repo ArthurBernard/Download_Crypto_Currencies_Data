@@ -918,7 +918,12 @@ def create_app(
             fields = parse_qs((await request.body()).decode("utf-8", "replace"))
             submitted = (fields.get("token") or [""])[0]
             nxt = _safe_next((fields.get("next") or ["/"])[0])
-            if not token or not secrets.compare_digest(submitted, token):
+            # Compare UTF-8 bytes: ``compare_digest`` raises ``TypeError`` on a
+            # ``str`` containing non-ASCII characters, so a junk token (scanners
+            # POST arbitrary bytes) must be rejected cleanly, not 500.
+            if not token or not secrets.compare_digest(
+                submitted.encode("utf-8"), token.encode("utf-8")
+            ):
                 try:
                     ver = _pkg_version("dccd")
                 except Exception:
