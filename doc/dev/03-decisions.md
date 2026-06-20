@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-06-20 — Map Kraken pairs by altname, not legacy X/Z codes (PR #XX)  [accepted]
+### 2026-06-20 — Map Kraken pairs by altname, not legacy X/Z codes (PR #169)  [accepted]
 - **Choice**: `_kraken_pair` builds the Kraken **altname** (`{base}{quote}` with a
   small alias map `BTC→XBT`, `DOGE→XDG`) instead of the legacy prefixed codes
   (`X{base}Z{quote}` / `X{base}X{quote}`).
