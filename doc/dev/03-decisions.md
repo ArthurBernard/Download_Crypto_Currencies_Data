@@ -120,6 +120,22 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-06-20 — Map Kraken pairs by altname, not legacy X/Z codes (PR #XX)  [accepted]
+- **Choice**: `_kraken_pair` builds the Kraken **altname** (`{base}{quote}` with a
+  small alias map `BTC→XBT`, `DOGE→XDG`) instead of the legacy prefixed codes
+  (`X{base}Z{quote}` / `X{base}X{quote}`).
+- **Why**: the legacy prefix convention only applies to Kraken's *old* assets;
+  modern listings (TRX, DOT, BNB, …) have no prefix and Dogecoin's code is `XDG`,
+  so the old formula produced `Unknown asset pair`. Kraken accepts altnames for
+  *every* asset, and both `fetch_ohlc_page` and `fetch_trades_page` already parse
+  the response with a code-key fallback (Kraken keys results by internal code, not
+  the altname sent), so the request form can change without touching parsing.
+  Verified live across legacy (incl. the EUR pairs the server already collects)
+  and modern pairs.
+- **Rejected alternatives**: (a) a hardcoded full asset→code map — brittle, needs
+  upkeep per listing; (b) a runtime `AssetPairs` lookup at adapter init — an extra
+  network call and cache for no benefit, since altnames already work universally.
+
 ### 2026-06-19 — Reject invalid timestamps (TS<=0) at the storage write boundary (PR #165)  [accepted]
 - **Choice**: guard against corrupt timestamps **centrally in `ParquetStore.save()`**,
   filtering out rows whose `TS` is null or `<= 0` for every data type, rather than
