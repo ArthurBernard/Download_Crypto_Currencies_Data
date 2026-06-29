@@ -107,16 +107,11 @@ checklist) → … per leaf … → last leaf removes the roadmap line → `/rel
 backward-compatible: a repo whose `.claude/workflow.json` has **no `plans_dir`**
 falls back to the older `/pick-task → plan mode → /finish-task` loop.
 
-**Model per task** (advisory — you set it via `/model`, a skill spawns a subagent
-with an explicit `model`, or a plan **leaf's `complexity` derives it**:
-`low→haiku`, `medium→sonnet`, `high→opus`; subagents otherwise *inherit* the
-parent):
-
-| Model | For |
-|-------|-----|
-| `opus` | judgement, design, decisions, planning, review |
-| `sonnet` | implementation — code, tests, docstrings |
-| `haiku` | mechanical fan-out (doc scans, checklists) — spawn it explicitly as a subagent |
+**Model: `opus`, always.** Per the maintainer's standing preference, **all work on
+this repo runs on `opus`** — interactive sessions *and* every spawned subagent
+(including `/execute-leaf`), regardless of a leaf's `complexity`. The `complexity`
+tag still records effort/risk and orders the execution queue, but it **does not
+downgrade the model**: treat `low | medium | high` all as `opus`.
 
 ## Architecture (v3 — hexagonal)
 
