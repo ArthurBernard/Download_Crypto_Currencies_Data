@@ -9,6 +9,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > [`doc/dev/README.md`](doc/dev/README.md) for a fuller picture than this file
 > gives. `CLAUDE.md` remains authoritative for commands and invariants.
 
+## Common conventions
+
+Shared across my repos, mirrored from `~/.claude/CLAUDE.md` (the single source of
+truth — if they ever disagree, the global file wins). Restated here so the repo
+stays self-contained:
+
+- **Git Flow** — `master` (tagged releases) ← `develop` (integration) ←
+  `feat|fix|chore|docs/<topic>`. **Never commit directly to `develop` or `master`**
+  — always a feature branch + PR into `develop`; `develop` → `master` only at release.
+- **Conventional Commits** — `feat:` `fix:` `chore:` `docs:`. **Never add
+  `Co-Authored-By` trailers** (personal repo).
+- **One PR = one concern**, small and disposable — a big plan ships as several small
+  atomic PRs, never one catch-all branch.
+- **Model: `opus`, always** — interactive sessions and every spawned subagent; a plan
+  leaf's `complexity` is effort/ordering only and never downgrades the model.
+- **Before every commit** — `pytest` and `ruff check dccd/` must pass.
+
 ## Commands
 
 ```bash
@@ -42,42 +59,7 @@ python doc/dev/ui_smoke.py http://127.0.0.1:8137
 > env ships Sphinx whose source uses 3.12 `type` statements, which made mypy
 > abort under 3.11. dccd supports 3.11–3.13, so 3.12 semantics are safe.
 
-## Git Flow
-
-**Branch model:**
-```
-master          ← stable releases only (tagged vX.Y.Z)
-  └── develop   ← integration branch
-        ├── feat/<topic>   new feature or modernization axis
-        ├── fix/<topic>    bug fix
-        ├── chore/<topic>  tooling, CI, deps
-        └── docs/<topic>   documentation only
-```
-
-**Rules — always follow these before committing or pushing:**
-1. **Never commit directly to `master`.**
-2. **Never commit directly to `develop`** — always use a feature branch + PR.
-3. Branch off `develop`: `git checkout develop && git checkout -b feat/my-topic`
-4. Open a PR into `develop` when done. `develop` → `master` only at release time.
-
-**Commit style (Conventional Commits):**
-```
-feat: add Bybit futures OHLC capability
-fix: correct paginator window for Coinbase
-chore: upgrade httpx to 0.28
-docs: update README for v3 install
-```
-
-Do not add `Co-Authored-By` trailers to commits — this is a personal repo.
-
-**Before every commit:** run `pytest`. It must pass.
-
-**One PR = one concern, small and disposable.** Even a large plan ships as
-*several* small atomic PRs — never one fourre-tout branch. A PR you couldn't throw
-away without losing unrelated good work is too big: split it. This is what makes
-`/abandon-task` (kill a bad PR, keep the lesson) viable.
-
-### Dev loop & docs of record
+## Dev loop & docs of record
 
 The iterative loop is tooled by skills, with four tracked docs as the sources of
 truth:
@@ -106,12 +88,6 @@ checklist) → … per leaf … → last leaf removes the roadmap line → `/rel
 [`doc/dev/plans/README.md`](doc/dev/plans/README.md). The workflow is
 backward-compatible: a repo whose `.claude/workflow.json` has **no `plans_dir`**
 falls back to the older `/pick-task → plan mode → /finish-task` loop.
-
-**Model: `opus`, always.** Per the maintainer's standing preference, **all work on
-this repo runs on `opus`** — interactive sessions *and* every spawned subagent
-(including `/execute-leaf`), regardless of a leaf's `complexity`. The `complexity`
-tag still records effort/risk and orders the execution queue, but it **does not
-downgrade the model**: treat `low | medium | high` all as `opus`.
 
 ## Architecture (v3 — hexagonal)
 
