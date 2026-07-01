@@ -78,6 +78,14 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
   replicate a collector (e.g. arthurserver's 50 jobs) in one command. One
   leaf.
 
+- [ ] **Backfill `BTC-USD` on Kraken, Jan–May 2026 (gap)** — the arthurserver Kraken
+  `BTC-USD` 1m store is missing **2026-01-01 → 2026-06-01** (only ~23 days of 2026,
+  June onward); the other Kraken USD majors have full 2026-H1. Consumer impact: it
+  **blocks fynance-research's ALLOC1 on Kraken** — BTC drives the trend/regime, so the
+  whole book (and the live signal) drop Jan–May 2026, voiding the 2026 crash validation
+  (`../fynance-research/DEPLOY_ALLOC1.md` §Kraken). Backfill the missing span (REST
+  history / re-collect). Data-only.
+
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
