@@ -78,6 +78,14 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
   replicate a collector (e.g. arthurserver's 50 jobs) in one command. One
   leaf.
 
+- [ ] **Collect `SOL-USD`, `ADA-USD`, `LINK-USD` on Kraken (1m, full history)** —
+  consumer-driven: the fynance-research **ALLOC1** strategy needs these three
+  Kraken USD pairs to reproduce its MN1 sleeve on Kraken (the store already has the
+  other 11 of MN1's 14 coins; only these are missing, and BNB-USD has ~2y). Add the
+  three collect jobs on the arthurserver collector and backfill history. Unblocks a
+  Kraken-venue ALLOC1 (see `../fynance-research/DEPLOY_ALLOC1.md` §Kraken — the other
+  half is a 0.26%-fee re-validation on the fynance-research side). Data-only; no code.
+
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
