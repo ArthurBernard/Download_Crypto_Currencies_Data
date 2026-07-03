@@ -120,6 +120,22 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-07-03 — Market lives on `Symbol`, honesty via `Capability.markets` (PR #183)  [accepted]
+- **Choice**: derivative addressing is a `Symbol.market` literal
+  (`spot|perp|quarter|next_quarter`, default `spot`) with a `:market` string
+  suffix, not a new `DatasetId` field or a separate symbol type. Capabilities
+  declare supported markets via `markets: list[str] | None` (`None` = spot-only)
+  plus `recent_window_s` for time-bound recent windows; `backfill()` rejects an
+  undeclared market (`_check_market`) before any fetch.
+- **Why**: market-on-Symbol flows through job ids (`str(symbol)`), storage slugs
+  (`pair_slug()` suffix) and adapters for free — one field, zero schema
+  migration, spot behaviour bit-for-bit unchanged. `markets=None` keeps every
+  existing declaration honest without touching the seven adapters.
+- **Rejected alternatives**: `DatasetId.market` (wouldn't reach adapters or job
+  ids without duplicating the field); a separate `PerpSymbol` type (fans out
+  through every signature); encoding the market in the quote (`USDT-PERP` —
+  collides with real tickers like PERP and breaks alias normalisation).
+
 ### 2026-06-20 — Null the shared HTTP client before awaiting `aclose()` (PR #173)  [accepted]
 - **Choice**: in `AsyncHTTPClient.__aexit__`, when the ref-count hits zero, capture
   the client into a local, set `self._client = None` and `self._depth = 0`, **then**

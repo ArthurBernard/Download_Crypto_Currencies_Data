@@ -2,6 +2,8 @@
 
 import pytest
 
+from dccd.application.config import JobConfig
+from dccd.application.jobs import JobSpec, JobTarget
 from dccd.domain.capability import Capability
 from dccd.domain.dataset import DatasetId, Provenance
 from dccd.domain.errors import CoverageError, NoCapability
@@ -62,6 +64,34 @@ class TestSymbol:
         s1 = Symbol(base="BTC", quote="USDT")
         s2 = Symbol(base="BTC", quote="USDT")
         assert hash(s1) == hash(s2)
+
+    @pytest.mark.parametrize("market", ["spot", "perp", "quarter", "next_quarter"])
+    def test_parse_str_roundtrip_all_markets(self, market):
+        raw = "BTC/USDT" if market == "spot" else f"BTC/USDT:{market}"
+        s = Symbol.parse(raw)
+        assert s.market == market
+        assert str(s) == raw
+        assert Symbol.parse(str(s)) == s
+
+    def test_parse_market_suffix(self):
+        s = Symbol.parse("BTC/USDT:perp")
+        assert s == Symbol(base="BTC", quote="USDT", market="perp")
+
+    def test_parse_unknown_market_suffix_raises(self):
+        with pytest.raises(ValueError):
+            Symbol.parse("BTC/USDT:margin")
+
+    def test_parse_xbt_alias_with_market_suffix(self):
+        s = Symbol.parse("XBT/USD:perp")
+        assert s.base == "BTC"
+        assert s.market == "perp"
+
+    def test_parse_suffix_wins_over_market_kwarg(self):
+        s = Symbol.parse("BTC/USDT:perp", market="quarter")
+        assert s.market == "perp"
+
+    def test_str_spot_unchanged(self):
+        assert str(Symbol(base="BTC", quote="USDT", market="spot")) == "BTC/USDT"
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +161,57 @@ class TestDatasetId:
     def test_provenance(self):
         prov = Provenance(source="binance:rest", derived_from=None)
         assert prov.source == "binance:rest"
+
+    def test_pair_slug_perp(self):
+        ds = DatasetId(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        assert ds.pair_slug() == "BTC-USDT_PERP"
+
+    def test_pair_slug_quarter(self):
+        ds = DatasetId(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT", market="quarter"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        assert ds.pair_slug() == "BTC-USDT_QUARTER"
+
+
+# ---------------------------------------------------------------------------
+# Symbol market — integration with JobSpec/JobConfig
+# ---------------------------------------------------------------------------
+
+class TestSymbolMarketIntegration:
+    def test_make_id_differs_spot_vs_perp(self):
+        spot_target = JobTarget(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        perp_target = JobTarget(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        spot_id = JobSpec.make_id("backfill", spot_target)
+        perp_id = JobSpec.make_id("backfill", perp_target)
+        assert spot_id != perp_id
+        assert ":perp" in perp_id
+
+    def test_job_config_accepts_perp_suffix(self):
+        jc = JobConfig(
+            exchange="binance", pairs=["BTC/USDT:perp"], data_type="ohlc", span=3600,
+        )
+        specs = jc.to_job_specs()
+        assert len(specs) == 1
+        assert specs[0].target.symbol.market == "perp"
+        assert ":perp" in specs[0].id
 
 
 # ---------------------------------------------------------------------------

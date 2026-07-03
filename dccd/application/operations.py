@@ -68,6 +68,21 @@ _DEFAULT_LOOKBACK_NS = {
 }
 
 
+def _check_market(cap: Any, target: JobTarget) -> None:
+    """Reject a non-spot target the capability has not declared.
+
+    ``Capability.markets`` defaults to ``None`` (spot-only) for every
+    existing declaration, so this preserves the capability-honesty invariant:
+    a source must opt in explicitly (``markets=[...]``) before a derivative
+    target is accepted, and rejection happens before any fetch is attempted.
+    """
+    market = target.symbol.market
+    if market != "spot" and market not in (cap.markets or []):
+        raise NoCapability(
+            target.exchange, f"{target.data_type.value}[{market}]", "historical"
+        )
+
+
 def _make_dataset_id(target: JobTarget) -> DatasetId:
     return DatasetId(
         exchange=target.exchange,
@@ -277,6 +292,7 @@ async def backfill(
                 cap = adapter.capability_for(DataType.OHLC, "rest", "historical")
                 if cap is None:
                     raise NoCapability(target.exchange, "ohlc", "historical")
+                _check_market(cap, target)
 
                 from dccd.transport.paginate import paginate_ohlc
 
@@ -328,6 +344,7 @@ async def backfill(
                 cap = adapter.capability_for(DataType.TRADES, "rest", "historical")
                 if cap is None:
                     raise NoCapability(target.exchange, "trades", "historical")
+                _check_market(cap, target)
 
                 from dccd.transport.paginate import paginate_trades
 
@@ -365,6 +382,10 @@ async def backfill(
             elif target.data_type == DataType.ORDERBOOK:
                 if not isinstance(adapter, OrderBookSnapshotREST):
                     raise NoCapability(target.exchange, "orderbook", "snapshot")
+                cap = adapter.capability_for(DataType.ORDERBOOK, "rest", "historical")
+                if cap is None:
+                    raise NoCapability(target.exchange, "orderbook", "historical")
+                _check_market(cap, target)
                 depth = params.depth or 50
                 snap = await adapter.fetch_orderbook(target.symbol, depth)
                 _track_ts(snap.ts)

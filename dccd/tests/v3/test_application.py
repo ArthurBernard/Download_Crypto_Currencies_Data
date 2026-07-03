@@ -5,9 +5,13 @@ import pytest
 from dccd.application.config import AppConfig, JobConfig
 from dccd.application.events import EventBus, LogEvent, ProgressEvent, StatusEvent
 from dccd.application.jobs import JobParams, JobSpec, JobTarget, RunState, Trigger
+from dccd.application.operations import backfill
 from dccd.application.registry import REGISTRY
+from dccd.domain.capability import Capability
 from dccd.domain.symbol import Symbol
 from dccd.domain.types import DataType
+from dccd.sources.base import OHLCHistory
+from dccd.storage.parquet import ParquetStore
 
 # ---------------------------------------------------------------------------
 # Config
@@ -268,6 +272,87 @@ class TestJobs:
     def test_run_state_enum(self):
         assert RunState.RUNNING == "running"
         assert RunState.SUCCEEDED == "succeeded"
+
+
+# ---------------------------------------------------------------------------
+# Backfill — market capability honesty
+# ---------------------------------------------------------------------------
+
+class _MarketFakeSource(OHLCHistory):
+    """Minimal OHLC-only adapter whose declared markets are injectable."""
+
+    exchange = "fake"
+
+    def __init__(self, markets: list[str] | None) -> None:
+        self._markets = markets
+        self.fetch_calls = 0
+
+    def capabilities(self) -> list[Capability]:
+        return [
+            Capability(
+                data_type=DataType.OHLC, transport="rest", mode="historical",
+                history="full", max_per_request=1000, page_direction="forward",
+                markets=self._markets,
+            ),
+        ]
+
+    async def fetch_ohlc_page(self, symbol, span, start_ns, end_ns, limit):
+        self.fetch_calls += 1
+        return []
+
+
+class _MarketFakeReg:
+    def __init__(self, src):
+        self._s = src
+
+    def get(self, ex):
+        return self._s
+
+
+class TestBackfillMarketCapability:
+    """A perp target must be rejected before any fetch unless the adapter's
+    capability declares it — the capability-honesty invariant extended to
+    non-spot markets."""
+
+    def _spec(self, market: str) -> JobSpec:
+        target = JobTarget(
+            exchange="fake",
+            symbol=Symbol(base="BTC", quote="USDT", market=market),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        return JobSpec(
+            id="x", operation="backfill", target=target,
+            trigger=Trigger(kind="once"), params=JobParams(start="last"),
+        )
+
+    @pytest.mark.asyncio
+    async def test_perp_rejected_when_capability_is_spot_only(self, tmp_path):
+        src = _MarketFakeSource(markets=None)
+        store = ParquetStore(tmp_path)
+        spec = self._spec("perp")
+        result = await backfill(spec, registry=_MarketFakeReg(src), store=store)
+        assert "error" in result
+        assert "perp" in result["error"]
+        assert src.fetch_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_perp_accepted_when_declared(self, tmp_path):
+        src = _MarketFakeSource(markets=["perp"])
+        store = ParquetStore(tmp_path)
+        spec = self._spec("perp")
+        result = await backfill(spec, registry=_MarketFakeReg(src), store=store)
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_spot_still_proceeds_unaffected(self, tmp_path):
+        # Regression: spot behaviour must stay untouched by the market check.
+        src = _MarketFakeSource(markets=None)
+        store = ParquetStore(tmp_path)
+        spec = self._spec("spot")
+        result = await backfill(spec, registry=_MarketFakeReg(src), store=store)
+        assert "error" not in result
+        assert src.fetch_calls >= 1
 
 
 # ---------------------------------------------------------------------------
