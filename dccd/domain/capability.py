@@ -39,6 +39,17 @@ class Capability(BaseModel, frozen=True):
         a "live" stream that never writes anything.
     auth_required : bool
         Whether this capability requires authentication.
+    markets : list[str] or None
+        Non-spot markets this capability serves (e.g. ``['perp']``,
+        ``['perp', 'quarter']``). ``None`` means spot-only — the honest
+        default for every existing declaration; a source must opt in
+        explicitly before a derivative-market target is accepted.
+    recent_window_s : int or None
+        Length, in seconds, of the recent window served when ``history``
+        is ``'recent'`` and that window is time-bound rather than
+        bar-count-bound (``max_per_request`` bars). ``None`` when the
+        recent window is bar-count-bound or not applicable. Used by the
+        Binance open-interest adapter.
 
     Examples
     --------
@@ -58,3 +69,5 @@ class Capability(BaseModel, frozen=True):
     max_depth: int | None = None
     depths: list[int] | None = None
     auth_required: bool = False
+    markets: list[str] | None = None
+    recent_window_s: int | None = None

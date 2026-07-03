@@ -28,8 +28,16 @@ class DatasetId(BaseModel, frozen=True):
     span: int | None = None
 
     def pair_slug(self) -> str:
-        """Return filesystem-safe pair string (e.g. ``'BTC-USDT'``)."""
-        return f"{self.symbol.base}-{self.symbol.quote}"
+        """Return filesystem-safe pair string.
+
+        Spot: ``'BTC-USDT'``. Non-spot markets append the upper-cased market
+        as a suffix so derivative datasets never collide with spot ones on
+        disk, e.g. ``'BTC-USDT_PERP'``, ``'BTC-USDT_QUARTER'``.
+        """
+        slug = f"{self.symbol.base}-{self.symbol.quote}"
+        if self.symbol.market != "spot":
+            slug += f"_{self.symbol.market.upper()}"
+        return slug
 
     def __str__(self) -> str:
         parts = [self.exchange, str(self.symbol), self.data_type.value]
