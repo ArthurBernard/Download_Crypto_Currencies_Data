@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Symbol.market` (`spot`/`perp`/`quarter`/`next_quarter`) with `:market` pair
+  syntax (`BTC/USDT:perp`), market-suffixed storage slugs (`BTC-USDT_PERP`), and
+  per-market capability declarations (`Capability.markets`, `recent_window_s`)
+  enforced by `backfill()` — the plumbing for the derivative-markets epic. (#183)
+
 ### Changed
 
 ### Fixed
