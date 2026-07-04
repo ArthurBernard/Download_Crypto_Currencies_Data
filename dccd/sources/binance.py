@@ -8,11 +8,18 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from dccd.domain.capability import Capability
-from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import binance_interval, s_to_ns
 from dccd.domain.types import DataType
 from dccd.sources.base import (
+    FundingHistory,
     OHLCHistory,
     OHLCLive,
     OrderBookLive,
@@ -95,20 +102,49 @@ def _parse_aggtrades_page(data: list[Any], end_ms: int | None = None) -> tuple[l
     return trades, next_cursor
 
 
+def _parse_funding_page(data: list[Any], limit: int) -> tuple[list[FundingRate], str | None]:
+    """Parse a raw Binance ``fundingRate`` response into :class:`~dccd.domain.records.FundingRate` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``fundingTime``
+        (ms), ``fundingRate`` (str), and ``markPrice`` (str, may be empty or
+        absent). The response is ascending by ``fundingTime``.
+    limit:
+        The *limit* passed to the request — used to detect a full page (the
+        signal that more data may follow).
+    """
+    if not data:
+        return [], None
+    rates = [
+        FundingRate(
+            ts=int(e["fundingTime"]) * 1_000_000,
+            rate=float(e["fundingRate"]),
+            mark_price=float(e["markPrice"]) if e.get("markPrice") else None,
+        )
+        for e in data
+    ]
+    next_cursor = str(int(data[-1]["fundingTime"]) + 1) if len(data) == limit else None
+    return rates, next_cursor
+
+
 class BinanceSource(
     OHLCHistory,
     TradesHistory,
     OrderBookSnapshotREST,
+    FundingHistory,
     OHLCLive,
     TradesLive,
     OrderBookLive,
 ):
-    """Binance source adapter (spot + USDS-M futures OHLC).
+    """Binance source adapter (spot + USDS-M futures OHLC and funding).
 
     The reference adapter — full historical depth and every live channel.
 
     - **Backfill**: OHLC (``klines``, 1 000/req), trades (``aggTrades``,
-      cursor-paginated by ``fromId``), order-book snapshot (``depth``, ≤ 5 000).
+      cursor-paginated by ``fromId``), order-book snapshot (``depth``, ≤ 5 000),
+      realized funding rate (USDS-M ``fundingRate``, ``perp`` market only).
     - **Stream**: OHLC (``kline``), trades (``aggTrade``), order book (``depth``).
     - **Derivative OHLC**: a non-spot :attr:`~dccd.domain.symbol.Symbol.market`
       (``perp``, ``quarter``, ``next_quarter``) routes ``fetch_ohlc_page`` to
@@ -128,7 +164,7 @@ class BinanceSource(
     --------
     >>> from dccd.sources.binance import BinanceSource
     >>> sorted({c.data_type.value for c in BinanceSource().capabilities()})
-    ['ohlc', 'orderbook', 'trades']
+    ['funding', 'ohlc', 'orderbook', 'trades']
     """
 
     exchange = "binance"
@@ -154,6 +190,11 @@ class BinanceSource(
             Capability(
                 data_type=DataType.ORDERBOOK, transport="rest", mode="historical",
                 max_per_request=1, max_depth=5000,
+            ),
+            Capability(
+                data_type=DataType.FUNDING, transport="rest", mode="historical",
+                history="full", max_per_request=1000, page_direction="forward",
+                markets=["perp"],
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
@@ -239,6 +280,31 @@ class BinanceSource(
             data = await client.get(f"{_BASE_REST}/aggTrades", params)
 
         return _parse_aggtrades_page(data, end_ms=end_ms if len(data) >= limit else None)
+
+    async def fetch_funding_page(
+        self,
+        symbol: Symbol,
+        start_ns: int,
+        end_ns: int,
+        limit: int,
+        cursor: str | None = None,
+    ) -> tuple[list[FundingRate], str | None]:
+        """Fetch one page of realized funding rates (cursor = next ``startTime`` in ms).
+
+        First call (``cursor=None``) is time-bounded on ``start_ns``; subsequent
+        calls advance ``startTime`` to the last event's ``fundingTime`` + 1 ms.
+        USDS-M futures only — ``fundingRate`` has no spot equivalent.
+        """
+        params: dict[str, Any] = {
+            "symbol": self.render_symbol(symbol),
+            "startTime": int(cursor) if cursor else start_ns // 1_000_000,
+            "endTime": end_ns // 1_000_000,
+            "limit": min(limit, 1000),
+        }
+        async with self._http as client:
+            data = await client.get(f"{_BASE_FAPI}/fundingRate", params)
+
+        return _parse_funding_page(data, min(limit, 1000))
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         """Fetch a current order-book snapshot up to *depth* levels."""

@@ -9,6 +9,7 @@ from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
 from dccd.sources.base import (
+    FundingHistory,
     OHLCHistory,
     OHLCLive,
     OrderBookLive,
@@ -583,3 +584,109 @@ class TestBinanceFuturesOHLCRouting:
         ws_caps = [c for c in src.capabilities() if c.transport == "ws"]
         assert ws_caps, "expected at least one WS capability"
         assert all(c.markets is None for c in ws_caps)
+
+
+class TestBinanceFundingHistory:
+    """USDS-M ``fundingRate`` — realized funding, ``perp`` market only."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], response):
+        """Return a fake ``AsyncHTTPClient`` context manager returning *response*."""
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return response
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_funding_history(self):
+        assert isinstance(BinanceSource(), FundingHistory)
+
+    def test_funding_cap_declares_perp_market(self):
+        src = BinanceSource()
+        cap = src.capability_for(DataType.FUNDING, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["perp"]
+        assert cap.max_per_request == 1000
+
+    @pytest.mark.asyncio
+    async def test_first_call_uses_start_ns_as_start_time(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"fundingTime": 1_600_000_000_000, "fundingRate": "0.00010000", "markPrice": "50000.00"},
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        rates, next_cursor = await src.fetch_funding_page(sym, START_NS, END_NS, 1000)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://fapi.binance.com/fapi/v1/fundingRate"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["startTime"] == START_NS // 1_000_000
+        assert params["endTime"] == END_NS // 1_000_000
+        assert len(rates) == 1
+        assert rates[0].ts == 1_600_000_000_000 * 1_000_000
+        assert rates[0].rate == 0.0001
+        assert rates[0].mark_price == 50000.0
+        assert next_cursor is None  # short page (1 item < limit=1000)
+
+    @pytest.mark.asyncio
+    async def test_followup_call_uses_cursor_as_start_time(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_funding_page(sym, START_NS, END_NS, 1000, cursor="1600003600001")
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["startTime"] == 1600003600001
+
+    @pytest.mark.asyncio
+    async def test_full_page_returns_next_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"fundingTime": 1_600_000_000_000 + i * 28_800_000, "fundingRate": "0.0001", "markPrice": "50000"}
+            for i in range(2)
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        rates, next_cursor = await src.fetch_funding_page(sym, START_NS, END_NS, 2)
+
+        assert len(rates) == 2
+        assert next_cursor == str(response[-1]["fundingTime"] + 1)
+
+    @pytest.mark.asyncio
+    async def test_empty_mark_price_becomes_none(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"fundingTime": 1_600_000_000_000, "fundingRate": "-0.0002", "markPrice": ""},
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        rates, _ = await src.fetch_funding_page(sym, START_NS, END_NS, 1000)
+
+        assert rates[0].mark_price is None
+        assert rates[0].rate == -0.0002
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_1000(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_funding_page(sym, START_NS, END_NS, 5000)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["limit"] == 1000

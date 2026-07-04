@@ -5,12 +5,15 @@ import pytest
 from dccd.application.config import AppConfig, JobConfig
 from dccd.application.events import EventBus, LogEvent, ProgressEvent, StatusEvent
 from dccd.application.jobs import JobParams, JobSpec, JobTarget, RunState, Trigger
-from dccd.application.operations import backfill
+from dccd.application.operations import _DEFAULT_LOOKBACK_NS, backfill
 from dccd.application.registry import REGISTRY
 from dccd.domain.capability import Capability
+from dccd.domain.dataset import DatasetId
+from dccd.domain.records import FundingRate
 from dccd.domain.symbol import Symbol
+from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
-from dccd.sources.base import OHLCHistory
+from dccd.sources.base import FundingHistory, OHLCHistory
 from dccd.storage.parquet import ParquetStore
 
 # ---------------------------------------------------------------------------
@@ -353,6 +356,115 @@ class TestBackfillMarketCapability:
         result = await backfill(spec, registry=_MarketFakeReg(src), store=store)
         assert "error" not in result
         assert src.fetch_calls >= 1
+
+
+# ---------------------------------------------------------------------------
+# Backfill — FUNDING (cursor-paginated, mirrors TRADES)
+# ---------------------------------------------------------------------------
+
+class _FundingFakeSource(FundingHistory):
+    """Cursor-paged FUNDING adapter, index-based cursor over a fixed list."""
+
+    exchange = "fake"
+
+    def __init__(self, rates: list[FundingRate], markets: list[str] | None, max_per_request: int = 2) -> None:
+        self._rates = rates
+        self._markets = markets
+        self._max_per_request = max_per_request
+        self.calls: list[tuple[int, int, int, str | None]] = []
+
+    def capabilities(self) -> list[Capability]:
+        return [
+            Capability(
+                data_type=DataType.FUNDING, transport="rest", mode="historical",
+                history="full", max_per_request=self._max_per_request,
+                page_direction="forward", markets=self._markets,
+            ),
+        ]
+
+    async def fetch_funding_page(self, symbol, start_ns, end_ns, limit, cursor=None):
+        self.calls.append((start_ns, end_ns, limit, cursor))
+        offset = int(cursor) if cursor else 0
+        page = self._rates[offset:offset + limit]
+        next_cursor = str(offset + limit) if offset + limit < len(self._rates) else None
+        return page, next_cursor
+
+
+class _FundingFakeReg:
+    def __init__(self, src):
+        self._s = src
+
+    def get(self, ex):
+        return self._s
+
+
+class TestBackfillFunding:
+    """FUNDING drives the fetch closure through paginate_trades (duck-typed on
+    ``.ts``), mirroring the TRADES branch: drains cursor pages, respects the
+    requested window, and enforces the market-capability-honesty invariant."""
+
+    def _spec(self, market: str = "perp", start: str = "2020-06-01") -> JobSpec:
+        target = JobTarget(
+            exchange="fake",
+            symbol=Symbol(base="BTC", quote="USDT", market=market),
+            data_type=DataType.FUNDING,
+            span=None,
+        )
+        return JobSpec(
+            id="x", operation="backfill", target=target,
+            trigger=Trigger(kind="once"), params=JobParams(start=start),
+        )
+
+    def test_default_lookback_has_funding_entry(self):
+        assert DataType.FUNDING in _DEFAULT_LOOKBACK_NS
+        # ~1 year — deep enough for a cheap ~1095-row default, still bounded.
+        assert _DEFAULT_LOOKBACK_NS[DataType.FUNDING] >= 300 * 86400 * NS
+
+    @pytest.mark.asyncio
+    async def test_drains_multiple_pages_and_respects_window(self, tmp_path):
+        # Ascending: one before the requested start, three inside the window,
+        # one far in the future (outside [start, now)). max_per_request=2
+        # forces 3 pages to drain the 5-item list.
+        rates = [
+            FundingRate(ts=1_577_836_800 * NS, rate=0.0001),   # 2020-01-01 — before start
+            FundingRate(ts=1_622_505_600 * NS, rate=0.0002),   # 2021-06-01
+            FundingRate(ts=1_625_097_600 * NS, rate=0.0003),   # 2021-07-01
+            FundingRate(ts=1_627_776_000 * NS, rate=0.0004),   # 2021-08-01
+            FundingRate(ts=1_893_456_000 * NS, rate=0.0005),   # 2030-01-01 — after "now"
+        ]
+        src = _FundingFakeSource(rates, markets=["perp"], max_per_request=2)
+        store = ParquetStore(tmp_path)
+        spec = self._spec(start="2020-06-01")
+
+        result = await backfill(spec, registry=_FundingFakeReg(src), store=store)
+
+        assert "error" not in result
+        assert len(src.calls) > 1, "expected multiple cursor pages to be drained"
+
+        ds = spec.target
+        loaded = store.load(DatasetId(exchange="fake", symbol=ds.symbol, data_type=DataType.FUNDING))
+        assert len(loaded) == 3, "only the 3 in-window events should land on disk"
+        assert loaded["TS"].min() == 1_622_505_600 * NS
+        assert loaded["TS"].max() == 1_627_776_000 * NS
+
+    @pytest.mark.asyncio
+    async def test_perp_rejected_when_capability_is_spot_only(self, tmp_path):
+        src = _FundingFakeSource([FundingRate(ts=NS, rate=0.0001)], markets=None)
+        store = ParquetStore(tmp_path)
+        spec = self._spec(market="perp")
+        result = await backfill(spec, registry=_FundingFakeReg(src), store=store)
+        assert "error" in result
+        assert "perp" in result["error"]
+        assert src.calls == []
+
+    @pytest.mark.asyncio
+    async def test_perp_accepted_when_declared(self, tmp_path):
+        src = _FundingFakeSource([FundingRate(ts=NS, rate=0.0001)], markets=["perp"])
+        store = ParquetStore(tmp_path)
+        spec = self._spec(market="perp", start="1970-01-01")
+        result = await backfill(spec, registry=_FundingFakeReg(src), store=store)
+        assert "error" not in result
+        assert src.calls
 
 
 # ---------------------------------------------------------------------------
