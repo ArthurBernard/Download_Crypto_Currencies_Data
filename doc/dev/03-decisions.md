@@ -120,6 +120,23 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-07-04 — Binance OI walk is endTime-bounded, not fullness-driven (PR #190)  [accepted]
+- **Choice**: `BinanceSource.fetch_oi_page` bounds every request to
+  `endTime = min(global_end, startTime + (limit−1)·span)`, continues on
+  *window-left* (`last_ts + span ≤ global_end`) rather than page fullness, and
+  floors `startTime` at now−30d plus a 5-minute margin (window entirely below
+  the floor → empty page, no request).
+- **Why**: two behaviours verified live against `futures/data/openInterestHist`
+  — (1) a `startTime` older than 30 days returns a hard HTTP 400
+  (`code -1130`), it does not trim, and the operations-level clamp is always
+  ~1 s stale by request time; (2) a window holding more than `limit`
+  observations returns the **newest** `limit` anchored on `endTime`, so the
+  naive funding-style forward walk silently kept only 500 of 720 hourly rows.
+  A "simplification" back to the naive walk would reintroduce silent data loss.
+- **Rejected alternatives**: page-fullness continuation (breaks on legitimately
+  short bounded pages); trusting the ops clamp alone (races the 400 boundary);
+  `history="full"` with best-effort trimming (dishonest — the cap is real).
+
 ### 2026-07-04 — Open interest is span-typed like OHLC; `recent_window_s` generalises the recent-clamp (PR #188)  [accepted]
 - **Choice**: `DataType.OPEN_INTEREST` reuses the OHLC shape end to end — span
   subdirectories (`open_interest/{pair}/{span}/YYYY.parquet`), span required at
@@ -143,6 +160,8 @@ Template:
   the clamp and letting Binance return empty pages silently (the exact
   "looks-collected-but-isn't" failure mode this repo's testing doctrine
   exists to prevent).
+
+### 2026-07-04 — Funding: flat annual storage, cursor pagination shared with trades (PR #185)  [accepted]
 - **Choice**: `DataType.FUNDING` stores flat annual files
   (`funding/{pair}/YYYY.parquet`, dedup `TS`, no span dir, no gap arithmetic) and
   is paginated by the **trades cursor contract** (`fetch_funding_page` returns
@@ -160,6 +179,8 @@ Template:
   `paginate_trades`); span-typed funding dirs like OHLC (interval is an exchange
   property, not a job parameter); `expected_rows` gap detection for funding
   (would need per-symbol interval knowledge the store doesn't have).
+
+### 2026-07-03 — Market lives on `Symbol`, honesty via `Capability.markets` (PR #183)  [accepted]
 - **Choice**: derivative addressing is a `Symbol.market` literal
   (`spot|perp|quarter|next_quarter`, default `spot`) with a `:market` string
   suffix, not a new `DatasetId` field or a separate symbol type. Capabilities
