@@ -91,7 +91,7 @@ explicit user override of the global "opus always" rule for this epic).
 - [x] 01 symbol-market — feat/symbol-market — medium
 - [x] 02 binance-futures-klines — feat/binance-futures-klines — medium (depends on 01)
 - [x] 03 funding-datatype — feat/funding-datatype — high (depends on 01, 02)
-- [ ] 04 bybit-funding — feat/bybit-funding — medium (depends on 03)
+- [x] 04 bybit-funding — feat/bybit-funding — medium (depends on 03)
 - [ ] 05 open-interest-datatype — feat/open-interest-datatype — high (depends on 03, 04)
 - [ ] 06 binance-oi-recent — feat/binance-oi-recent — medium (depends on 05)
 - [ ] 07 derivatives-ui-docs — feat/derivatives-ui-docs — medium (depends on 06)

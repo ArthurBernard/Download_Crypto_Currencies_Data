@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FundingHistory` cursor protocol, bounded 365-day default lookback, and
   Binance USDS-M as first source (full history; verified 2019-09→today on real
   data, values byte-identical to the exchange). (#185)
+- Bybit perp funding-rate history (paired `startTime`/`endTime` params,
+  newest-first backward pagination; depth probed to contract launch 2020-03 →
+  `history="full"` declared honestly) — cross-exchange funding spread now
+  computable. (#187)
 
 ### Changed
 
