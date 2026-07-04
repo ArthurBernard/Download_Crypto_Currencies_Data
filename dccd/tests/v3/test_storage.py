@@ -4,11 +4,17 @@
 import pytest
 
 from dccd.domain.dataset import DatasetId
-from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
-from dccd.storage.parquet import ParquetStore
+from dccd.storage.parquet import ParquetStore, canonicalize
 from dccd.storage.runs_sqlite import RunsStore
 
 
@@ -33,6 +39,16 @@ def trades_ds():
         exchange="binance",
         symbol=Symbol(base="BTC", quote="USDT"),
         data_type=DataType.TRADES,
+        span=None,
+    )
+
+
+@pytest.fixture
+def funding_ds():
+    return DatasetId(
+        exchange="binance",
+        symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+        data_type=DataType.FUNDING,
         span=None,
     )
 
@@ -180,6 +196,64 @@ class TestParquetStore:
         df_trades = tmp_store.load(trades_ds)
         assert len(df_trades) == 1
         assert df_trades["TS"].min() > 0
+
+
+class TestFundingStorage:
+    """Round-trip storage of FundingRate records — annual, flat, dedup on TS."""
+
+    def test_save_and_load(self, tmp_store, funding_ds):
+        rates = [
+            FundingRate(ts=i * 8 * 3600 * NS, rate=0.0001 * i, mark_price=50000.0 + i)
+            for i in range(1, 6)  # start at 1 — TS=0 is the Unix epoch and is rejected
+        ]
+        n = tmp_store.save(funding_ds, rates)
+        assert n == 5
+
+        df = tmp_store.load(funding_ds)
+        assert len(df) == 5
+        assert set(df.columns) == {"TS", "rate", "mark_price"}
+
+    def test_path_is_flat_and_annual(self, tmp_store, funding_ds):
+        rates = [FundingRate(ts=8 * 3600 * NS, rate=0.0001)]
+        tmp_store.save(funding_ds, rates)
+
+        d = tmp_store.directory(funding_ds)
+        assert d.name == "BTC-USDT_PERP"
+        assert d.parent.name == "funding"
+
+        year = "1970"  # 8h after epoch is still 1970
+        assert (d / f"{year}.parquet").exists()
+
+    def test_dedup_on_ts(self, tmp_store, funding_ds):
+        rates = [FundingRate(ts=8 * 3600 * NS, rate=0.0001, mark_price=50000.0)]
+        tmp_store.save(funding_ds, rates)
+        # Same funding event saved again — must dedup to one row.
+        tmp_store.save(funding_ds, rates)
+
+        df = tmp_store.load(funding_ds)
+        assert len(df) == 1
+
+    def test_canonicalize_idempotent(self, tmp_store, funding_ds):
+        rates = [FundingRate(ts=8 * 3600 * NS, rate=0.0001, mark_price=50000.0)]
+        tmp_store.save(funding_ds, rates)
+        df = tmp_store.load(funding_ds)
+
+        once = canonicalize(df, DataType.FUNDING)
+        twice = canonicalize(once, DataType.FUNDING)
+        assert once.equals(twice)
+        assert list(once.columns) == ["TS", "rate", "mark_price"]
+
+    def test_inventory_lists_funding(self, tmp_store, funding_ds):
+        rates = [FundingRate(ts=8 * 3600 * NS, rate=0.0001)]
+        tmp_store.save(funding_ds, rates)
+
+        entry = next(d for d in tmp_store.inventory() if d["data_type"] == "funding")
+        assert entry["exchange"] == "binance"
+        assert entry["pair"] == "BTC-USDT_PERP"
+        assert entry["rows"] == 1
+        assert entry["span"] is None
+        assert entry["expected_rows"] is None
+        assert entry["missing_rows"] is None
 
 
 class TestRunsStore:

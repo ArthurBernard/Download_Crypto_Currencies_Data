@@ -22,10 +22,15 @@ from dccd.application.events import RunEvents
 from dccd.application.jobs import JobSpec, JobTarget
 from dccd.domain.dataset import DatasetId, Provenance
 from dccd.domain.errors import NoCapability
-from dccd.domain.records import OHLCBar, Trade
+from dccd.domain.records import FundingRate, OHLCBar, Trade
 from dccd.domain.timeutils import NS, ns_now, ns_to_dt
 from dccd.domain.types import DataType
-from dccd.sources.base import OHLCHistory, OrderBookSnapshotREST, TradesHistory
+from dccd.sources.base import (
+    FundingHistory,
+    OHLCHistory,
+    OrderBookSnapshotREST,
+    TradesHistory,
+)
 from dccd.sources.registry import SourceRegistry
 from dccd.storage.coverage_sqlite import CoverageStore
 from dccd.storage.parquet import ParquetStore
@@ -65,6 +70,7 @@ _DEFAULT_LOOKBACK_NS = {
     DataType.OHLC: 30 * 86400 * NS,      # ~720 1h bars / 43k 1m bars
     DataType.TRADES: 3600 * NS,          # 1 hour of trades
     DataType.ORDERBOOK: 3600 * NS,       # single snapshot anyway
+    DataType.FUNDING: 365 * 86400 * NS,  # ~1095 events/yr at 8h cadence — cheap
 }
 
 
@@ -227,7 +233,12 @@ async def backfill(
             # short recent window (use a custom start date for deep history).
             lookback = _DEFAULT_LOOKBACK_NS.get(target.data_type, 30 * 86400 * NS)
             start_ns = end_ns - lookback
-            human = "1 hour" if target.data_type == DataType.TRADES else "30 days"
+            if target.data_type == DataType.TRADES:
+                human = "1 hour"
+            elif target.data_type == DataType.FUNDING:
+                human = "365 days"
+            else:
+                human = "30 days"
             _emit_log(events, runs_store, run_id,
                       f"No existing data — starting from {human} ago "
                       "(set a custom start date for more)")
@@ -376,6 +387,42 @@ async def backfill(
                         total_written += await _flush(store, ds, batch, prov_src)
 
                 total_written += await _flush(store, ds, batch, prov_src)
+                if not (stop_event and stop_event.is_set()):
+                    _emit_time(end_ns)
+
+            elif target.data_type == DataType.FUNDING:
+                if not isinstance(adapter, FundingHistory):
+                    raise NoCapability(target.exchange, "funding", "historical")
+                cap = adapter.capability_for(DataType.FUNDING, "rest", "historical")
+                if cap is None:
+                    raise NoCapability(target.exchange, "funding", "historical")
+                _check_market(cap, target)
+
+                # paginate_trades is duck-typed on ``.ts`` (see _get_ts in
+                # transport/paginate.py) and drives any cursor-paged record
+                # stream — funding events reuse it unchanged, no renaming.
+                from dccd.transport.paginate import paginate_trades
+
+                sym = target.symbol
+
+                async def _fetch_funding(
+                    s_ns: int, e_ns: int, limit: int, cursor: str | None,
+                ) -> tuple[list[FundingRate], str | None]:
+                    return await adapter.fetch_funding_page(sym, s_ns, e_ns, limit, cursor)
+
+                funding_batch: list[FundingRate] = []
+                async for rate in paginate_trades(_fetch_funding, cap, start_ns, end_ns):
+                    if stop_event and stop_event.is_set():
+                        break
+                    funding_batch.append(rate)
+                    _collected[0] += 1
+                    _track_ts(rate.ts)
+                    if _collected[0] % 200 == 0:
+                        _emit_time(rate.ts)
+                    if len(funding_batch) >= _FLUSH_BATCH:
+                        total_written += await _flush(store, ds, funding_batch, prov_src)
+
+                total_written += await _flush(store, ds, funding_batch, prov_src)
                 if not (stop_event and stop_event.is_set()):
                     _emit_time(end_ns)
 

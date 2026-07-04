@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-__all__ = ["OHLCBar", "Trade", "OrderBookLevel", "OrderBookSnapshot"]
+__all__ = ["OHLCBar", "Trade", "OrderBookLevel", "OrderBookSnapshot", "FundingRate"]
 
 
 class OHLCBar(BaseModel, frozen=True):
@@ -112,3 +112,27 @@ class OrderBookSnapshot(BaseModel, frozen=True):
     bids: list[OrderBookLevel]
     asks: list[OrderBookLevel]
     is_snapshot: bool = True
+
+
+class FundingRate(BaseModel, frozen=True):
+    """One realized perpetual-futures funding event.
+
+    Attributes
+    ----------
+    ts : int
+        Funding time, **nanoseconds UTC**.
+    rate : float
+        Realized funding rate for this event (e.g. ``0.0001`` = 0.01%).
+    mark_price : float or None
+        Mark price at funding time (not always available).
+
+    Examples
+    --------
+    >>> f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001)
+    >>> f.mark_price is None
+    True
+    """
+
+    ts: int
+    rate: float
+    mark_price: float | None = None

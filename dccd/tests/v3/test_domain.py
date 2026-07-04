@@ -7,7 +7,13 @@ from dccd.application.jobs import JobSpec, JobTarget
 from dccd.domain.capability import Capability
 from dccd.domain.dataset import DatasetId, Provenance
 from dccd.domain.errors import CoverageError, NoCapability
-from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import (
     NS,
@@ -103,6 +109,7 @@ class TestDataType:
         assert DataType("ohlc") == DataType.OHLC
         assert DataType("trades") == DataType.TRADES
         assert DataType("orderbook") == DataType.ORDERBOOK
+        assert DataType("funding") == DataType.FUNDING
 
     def test_invalid(self):
         with pytest.raises(ValueError):
@@ -132,6 +139,20 @@ class TestRecords:
         )
         assert snap.is_snapshot is True
         assert len(snap.bids) == 1
+
+    def test_funding_rate(self):
+        f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001, mark_price=50000.0)
+        assert f.rate == 0.0001
+        assert f.mark_price == 50000.0
+
+    def test_funding_rate_mark_price_defaults_none(self):
+        f = FundingRate(ts=1_000_000_000_000_000_000, rate=-0.0002)
+        assert f.mark_price is None
+
+    def test_funding_rate_frozen(self):
+        f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001)
+        with pytest.raises(Exception):
+            f.rate = 0.0002  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------

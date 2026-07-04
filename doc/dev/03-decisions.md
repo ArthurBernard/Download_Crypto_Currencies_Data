@@ -120,7 +120,24 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-07-03 — Market lives on `Symbol`, honesty via `Capability.markets` (PR #183)  [accepted]
+### 2026-07-04 — Funding: flat annual storage, cursor pagination shared with trades (PR #185)  [accepted]
+- **Choice**: `DataType.FUNDING` stores flat annual files
+  (`funding/{pair}/YYYY.parquet`, dedup `TS`, no span dir, no gap arithmetic) and
+  is paginated by the **trades cursor contract** (`fetch_funding_page` returns
+  `(items, next_cursor)`), driven by `paginate_trades` — whose type signature was
+  generalised to the module `TypeVar` (it was always duck-typed on `.ts`).
+  First `start=last` lookback is bounded at 365 days.
+- **Why**: funding intervals vary per symbol (8h mostly, but 4h/1h/2h dynamic
+  schedules exist) — a span-typed layout or fixed-window pagination would either
+  lie about cadence or silently drop overflow pages; the cursor drain is the
+  same failure-proof pattern that fixed trades. Annual files because ~1 095
+  rows/yr at 8h makes daily files pathological. 365-day default lookback is
+  ~1 100 records — cheap, and a year of funding is the minimum useful window for
+  carry research.
+- **Rejected alternatives**: a new `paginate_funding` (pure duplication of
+  `paginate_trades`); span-typed funding dirs like OHLC (interval is an exchange
+  property, not a job parameter); `expected_rows` gap detection for funding
+  (would need per-symbol interval knowledge the store doesn't have).
 - **Choice**: derivative addressing is a `Symbol.market` literal
   (`spot|perp|quarter|next_quarter`, default `spot`) with a `:market` string
   suffix, not a new `DatasetId` field or a separate symbol type. Capabilities

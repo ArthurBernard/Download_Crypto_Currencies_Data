@@ -50,10 +50,17 @@ _BOOK_SCHEMA = {
     "is_snapshot": pl.Boolean,
 }
 
+_FUNDING_SCHEMA = {
+    "TS": pl.Int64,
+    "rate": pl.Float64,
+    "mark_price": pl.Float64,
+}
+
 _SCHEMAS: dict[DataType, dict[str, Any]] = {
     DataType.OHLC: _OHLC_SCHEMA,
     DataType.TRADES: _TRADES_SCHEMA,
     DataType.ORDERBOOK: _BOOK_SCHEMA,
+    DataType.FUNDING: _FUNDING_SCHEMA,
 }
 
 # Legacy (v2) → canonical (v3) column renames. ``weightedAverage`` is dropped:
@@ -256,7 +263,12 @@ class ParquetStore:
         return d
 
     def _period_fmt(self, ds: DatasetId) -> str:
-        return "%Y" if ds.data_type == DataType.OHLC else "%Y-%m-%d"
+        # Annual files for OHLC and FUNDING (both low-frequency: ~1095
+        # funding events/year at 8h cadence); daily files for the rest
+        # (trades, order book) would be pathological for funding's sparsity.
+        if ds.data_type in (DataType.OHLC, DataType.FUNDING):
+            return "%Y"
+        return "%Y-%m-%d"
 
     def _file_path(self, ds: DatasetId, period: str) -> pathlib.Path:
         return self.directory(ds) / f"{period}.parquet"
@@ -416,7 +428,7 @@ class ParquetStore:
                 if not dtype_dir.is_dir():
                     continue
                 dtype = dtype_dir.name
-                if dtype not in ("ohlc", "trades", "orderbook"):
+                if dtype not in ("ohlc", "trades", "orderbook", "funding"):
                     continue
                 for pair_dir in sorted(dtype_dir.iterdir()):
                     if not pair_dir.is_dir():
@@ -549,6 +561,16 @@ class ParquetStore:
                 for r in records
             ]
             return pl.DataFrame(rows, schema=_TRADES_SCHEMA)
+        elif ds.data_type == DataType.FUNDING:
+            rows = [
+                {
+                    "TS": r.ts,
+                    "rate": r.rate,
+                    "mark_price": r.mark_price,
+                }
+                for r in records
+            ]
+            return pl.DataFrame(rows, schema=_FUNDING_SCHEMA)
         else:
             rows = []
             for snap in records:
@@ -578,9 +600,10 @@ class ParquetStore:
         Trades collide on TS (exchanges timestamp at ms → many share a ns), so
         deduping on TS would drop distinct trades; we key on the trade id when
         present, else a composite. Order-book rows share one TS across every
-        price level, so they key on (TS, side, price).
+        price level, so they key on (TS, side, price). Funding has one event
+        per instant, so TS alone is unique — same as OHLC.
         """
-        if ds.data_type == DataType.OHLC:
+        if ds.data_type in (DataType.OHLC, DataType.FUNDING):
             return ["TS"]
         if ds.data_type == DataType.TRADES:
             if "tid" in df.columns and df["tid"].null_count() == 0:
