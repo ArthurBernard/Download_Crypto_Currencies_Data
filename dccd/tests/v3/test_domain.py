@@ -10,6 +10,7 @@ from dccd.domain.errors import CoverageError, NoCapability
 from dccd.domain.records import (
     FundingRate,
     OHLCBar,
+    OpenInterest,
     OrderBookLevel,
     OrderBookSnapshot,
     Trade,
@@ -20,6 +21,7 @@ from dccd.domain.timeutils import (
     align_ns,
     binance_interval,
     bybit_interval,
+    bybit_oi_interval,
     coinbase_granularity,
     kraken_interval,
     ns_to_s,
@@ -110,6 +112,7 @@ class TestDataType:
         assert DataType("trades") == DataType.TRADES
         assert DataType("orderbook") == DataType.ORDERBOOK
         assert DataType("funding") == DataType.FUNDING
+        assert DataType("open_interest") == DataType.OPEN_INTEREST
 
     def test_invalid(self):
         with pytest.raises(ValueError):
@@ -153,6 +156,20 @@ class TestRecords:
         f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001)
         with pytest.raises(Exception):
             f.rate = 0.0002  # type: ignore[misc]
+
+    def test_open_interest(self):
+        oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0, open_interest_value=250_000_000.0)
+        assert oi.open_interest == 5000.0
+        assert oi.open_interest_value == 250_000_000.0
+
+    def test_open_interest_value_defaults_none(self):
+        oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0)
+        assert oi.open_interest_value is None
+
+    def test_open_interest_frozen(self):
+        oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0)
+        with pytest.raises(Exception):
+            oi.open_interest = 6000.0  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +285,18 @@ class TestTimeutils:
     def test_bybit_interval(self):
         assert bybit_interval(3600) == "60"
         assert bybit_interval(86400) == "D"
+
+    def test_bybit_oi_interval(self):
+        assert bybit_oi_interval(300) == "5min"
+        assert bybit_oi_interval(900) == "15min"
+        assert bybit_oi_interval(1800) == "30min"
+        assert bybit_oi_interval(3600) == "1h"
+        assert bybit_oi_interval(14400) == "4h"
+        assert bybit_oi_interval(86400) == "1d"
+
+    def test_bybit_oi_interval_unsupported_span(self):
+        assert bybit_oi_interval(60) is None
+        assert bybit_oi_interval(7200) is None
 
     def test_okx_interval(self):
         assert okx_interval(3600) == "1H"

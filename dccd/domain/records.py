@@ -6,7 +6,14 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-__all__ = ["OHLCBar", "Trade", "OrderBookLevel", "OrderBookSnapshot", "FundingRate"]
+__all__ = [
+    "OHLCBar",
+    "Trade",
+    "OrderBookLevel",
+    "OrderBookSnapshot",
+    "FundingRate",
+    "OpenInterest",
+]
 
 
 class OHLCBar(BaseModel, frozen=True):
@@ -136,3 +143,31 @@ class FundingRate(BaseModel, frozen=True):
     ts: int
     rate: float
     mark_price: float | None = None
+
+
+class OpenInterest(BaseModel, frozen=True):
+    """One open-interest observation for a derivative instrument.
+
+    Span-typed like OHLC: one row per fixed-cadence bucket (e.g. hourly),
+    rather than one row per event like :class:`FundingRate`.
+
+    Attributes
+    ----------
+    ts : int
+        Observation time, **nanoseconds UTC**, aligned to the requested span.
+    open_interest : float
+        Open interest in contracts/base units.
+    open_interest_value : float or None
+        Open interest expressed as notional value (quote units), when the
+        exchange provides it. ``None`` when not available.
+
+    Examples
+    --------
+    >>> oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0)
+    >>> oi.open_interest_value is None
+    True
+    """
+
+    ts: int
+    open_interest: float
+    open_interest_value: float | None = None

@@ -22,12 +22,13 @@ from dccd.application.events import RunEvents
 from dccd.application.jobs import JobSpec, JobTarget
 from dccd.domain.dataset import DatasetId, Provenance
 from dccd.domain.errors import NoCapability
-from dccd.domain.records import FundingRate, OHLCBar, Trade
+from dccd.domain.records import FundingRate, OHLCBar, OpenInterest, Trade
 from dccd.domain.timeutils import NS, ns_now, ns_to_dt
 from dccd.domain.types import DataType
 from dccd.sources.base import (
     FundingHistory,
     OHLCHistory,
+    OpenInterestHistory,
     OrderBookSnapshotREST,
     TradesHistory,
 )
@@ -67,10 +68,11 @@ _STREAM_FLUSH_INTERVAL_S = 60.0
 # Bounds the very first backfill so it can't silently run for millions of rows
 # (trades) or from epoch 0. Deep history is opt-in via an explicit start date.
 _DEFAULT_LOOKBACK_NS = {
-    DataType.OHLC: 30 * 86400 * NS,      # ~720 1h bars / 43k 1m bars
-    DataType.TRADES: 3600 * NS,          # 1 hour of trades
-    DataType.ORDERBOOK: 3600 * NS,       # single snapshot anyway
-    DataType.FUNDING: 365 * 86400 * NS,  # ~1095 events/yr at 8h cadence — cheap
+    DataType.OHLC: 30 * 86400 * NS,           # ~720 1h bars / 43k 1m bars
+    DataType.TRADES: 3600 * NS,               # 1 hour of trades
+    DataType.ORDERBOOK: 3600 * NS,            # single snapshot anyway
+    DataType.FUNDING: 365 * 86400 * NS,       # ~1095 events/yr at 8h cadence — cheap
+    DataType.OPEN_INTEREST: 30 * 86400 * NS,  # ~720 1h observations — same as OHLC
 }
 
 
@@ -423,6 +425,64 @@ async def backfill(
                         total_written += await _flush(store, ds, funding_batch, prov_src)
 
                 total_written += await _flush(store, ds, funding_batch, prov_src)
+                if not (stop_event and stop_event.is_set()):
+                    _emit_time(end_ns)
+
+            elif target.data_type == DataType.OPEN_INTEREST:
+                if not isinstance(adapter, OpenInterestHistory):
+                    raise NoCapability(target.exchange, "open_interest", "historical")
+                cap = adapter.capability_for(DataType.OPEN_INTEREST, "rest", "historical")
+                if cap is None:
+                    raise NoCapability(target.exchange, "open_interest", "historical")
+                _check_market(cap, target)
+
+                span = target.span or 3600
+                if cap.spans and span not in cap.spans:
+                    raise ValueError(
+                        f"Span {span}s not supported by {target.exchange}. "
+                        f"Supported spans: {sorted(cap.spans)}"
+                    )
+
+                # Honour a time-bound "recent" window (used by Binance, leaf
+                # 06): paginating further back just re-fetches the same recent
+                # observations — clamp + warn instead, mirroring the Kraken
+                # OHLC clamp above.
+                if cap.history == "recent" and cap.recent_window_s:
+                    earliest = end_ns - cap.recent_window_s * NS
+                    if start_ns < earliest:
+                        _emit_log(
+                            events, runs_store, run_id,
+                            f"{target.exchange} open interest serves only the "
+                            f"last {cap.recent_window_s}s; clamping start "
+                            f"to {ns_to_dt(earliest).isoformat()}.",
+                            level="warning",
+                        )
+                        start_ns = earliest
+
+                # Span-typed like OHLC but cursor-paged like TRADES/FUNDING —
+                # paginate_trades is duck-typed on ``.ts`` and drives it unchanged.
+                from dccd.transport.paginate import paginate_trades
+
+                sym = target.symbol
+
+                async def _fetch_oi(
+                    s_ns: int, e_ns: int, limit: int, cursor: str | None,
+                ) -> tuple[list[OpenInterest], str | None]:
+                    return await adapter.fetch_oi_page(sym, span, s_ns, e_ns, limit, cursor)
+
+                oi_batch: list[OpenInterest] = []
+                async for oi in paginate_trades(_fetch_oi, cap, start_ns, end_ns):
+                    if stop_event and stop_event.is_set():
+                        break
+                    oi_batch.append(oi)
+                    _collected[0] += 1
+                    _track_ts(oi.ts)
+                    if _collected[0] % 200 == 0:
+                        _emit_time(oi.ts)
+                    if len(oi_batch) >= _FLUSH_BATCH:
+                        total_written += await _flush(store, ds, oi_batch, prov_src)
+
+                total_written += await _flush(store, ds, oi_batch, prov_src)
                 if not (stop_event and stop_event.is_set()):
                     _emit_time(end_ns)
 

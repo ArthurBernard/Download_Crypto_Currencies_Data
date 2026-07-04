@@ -7,6 +7,7 @@ from dccd.domain.dataset import DatasetId
 from dccd.domain.records import (
     FundingRate,
     OHLCBar,
+    OpenInterest,
     OrderBookLevel,
     OrderBookSnapshot,
     Trade,
@@ -50,6 +51,16 @@ def funding_ds():
         symbol=Symbol(base="BTC", quote="USDT", market="perp"),
         data_type=DataType.FUNDING,
         span=None,
+    )
+
+
+@pytest.fixture
+def oi_ds():
+    return DatasetId(
+        exchange="bybit",
+        symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+        data_type=DataType.OPEN_INTEREST,
+        span=3600,
     )
 
 
@@ -254,6 +265,79 @@ class TestFundingStorage:
         assert entry["span"] is None
         assert entry["expected_rows"] is None
         assert entry["missing_rows"] is None
+
+
+class TestOpenInterestStorage:
+    """Round-trip storage of OpenInterest records — span-typed like OHLC."""
+
+    def test_save_and_load(self, tmp_store, oi_ds):
+        obs = [
+            OpenInterest(ts=i * 3600 * NS, open_interest=5000.0 + i)
+            for i in range(1, 11)  # start at 1 — TS=0 is the Unix epoch and is rejected
+        ]
+        n = tmp_store.save(oi_ds, obs)
+        assert n == 10
+
+        df = tmp_store.load(oi_ds)
+        assert len(df) == 10
+        assert set(df.columns) == {"TS", "open_interest", "open_interest_value"}
+
+    def test_path_is_span_typed_like_ohlc(self, tmp_store, oi_ds):
+        obs = [OpenInterest(ts=3600 * NS, open_interest=5000.0)]
+        tmp_store.save(oi_ds, obs)
+
+        d = tmp_store.directory(oi_ds)
+        assert d.name == "1h"
+        assert d.parent.name == "BTC-USDT_PERP"
+        assert d.parent.parent.name == "open_interest"
+
+        year = "1970"  # 1h after epoch is still 1970
+        assert (d / f"{year}.parquet").exists()
+
+    def test_directory_raises_when_span_none(self, tmp_store):
+        ds = DatasetId(
+            exchange="bybit",
+            symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+            data_type=DataType.OPEN_INTEREST,
+            span=None,
+        )
+        with pytest.raises(ValueError, match="span"):
+            tmp_store.directory(ds)
+
+    def test_dedup_on_ts(self, tmp_store, oi_ds):
+        obs = [OpenInterest(ts=3600 * NS, open_interest=5000.0)]
+        tmp_store.save(oi_ds, obs)
+        # Same observation saved again — must dedup to one row.
+        tmp_store.save(oi_ds, obs)
+
+        df = tmp_store.load(oi_ds)
+        assert len(df) == 1
+
+    def test_canonicalize_idempotent(self, tmp_store, oi_ds):
+        obs = [OpenInterest(ts=3600 * NS, open_interest=5000.0, open_interest_value=250_000_000.0)]
+        tmp_store.save(oi_ds, obs)
+        df = tmp_store.load(oi_ds)
+
+        once = canonicalize(df, DataType.OPEN_INTEREST)
+        twice = canonicalize(once, DataType.OPEN_INTEREST)
+        assert once.equals(twice)
+        assert list(once.columns) == ["TS", "open_interest", "open_interest_value"]
+
+    def test_inventory_reports_span_and_gaps(self, tmp_store, oi_ds):
+        # 10 hourly observations but with one hole (skip index 6) → 9 stored, 10 expected.
+        obs = [
+            OpenInterest(ts=i * 3600 * NS, open_interest=5000.0 + i)
+            for i in range(1, 11) if i != 6
+        ]
+        tmp_store.save(oi_ds, obs)
+
+        entry = next(d for d in tmp_store.inventory() if d["data_type"] == "open_interest")
+        assert entry["exchange"] == "bybit"
+        assert entry["pair"] == "BTC-USDT_PERP"
+        assert entry["span"] == 3600
+        assert entry["rows"] == 9
+        assert entry["expected_rows"] == 10
+        assert entry["missing_rows"] == 1
 
 
 class TestRunsStore:

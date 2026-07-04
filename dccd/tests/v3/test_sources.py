@@ -12,6 +12,7 @@ from dccd.sources.base import (
     FundingHistory,
     OHLCHistory,
     OHLCLive,
+    OpenInterestHistory,
     OrderBookLive,
     OrderBookSnapshotREST,
     TradesHistory,
@@ -303,6 +304,154 @@ class TestBybitFundingHistory:
         await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 5000)
 
         assert captured[0][1]["limit"] == 200
+
+
+class TestBybitOpenInterestHistory:
+    """``linear`` ``perp`` open interest — span-typed, real ``nextPageCursor``."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], responses):
+        """Return a fake ``AsyncHTTPClient`` returning *responses* in sequence.
+
+        *responses* may be a single dict (returned on every call) or a list of
+        dicts consumed in order (the last entry repeats once exhausted).
+        """
+        seq = responses if isinstance(responses, list) else None
+
+        class _FakeClient:
+            def __init__(self) -> None:
+                self._calls = 0
+
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                if seq is not None:
+                    resp = seq[min(self._calls, len(seq) - 1)]
+                    self._calls += 1
+                    return resp
+                return responses
+
+        client = _FakeClient()
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return client
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_open_interest_history(self):
+        assert isinstance(BybitSource(), OpenInterestHistory)
+
+    def test_oi_cap_declares_perp_market_full_history_and_spans(self):
+        src = BybitSource()
+        cap = src.capability_for(DataType.OPEN_INTEREST, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["perp"]
+        assert cap.history == "full"
+        assert cap.max_per_request == 200
+        assert cap.page_direction == "backward"
+        assert cap.spans == [300, 900, 1800, 3600, 14400, 86400]
+
+    @pytest.mark.asyncio
+    async def test_request_params(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [], "nextPageCursor": ""}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://api.bybit.com/v5/market/open-interest"
+        assert params["category"] == "linear"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["intervalTime"] == "1h"
+        assert params["startTime"] == START_NS // 1_000_000
+        assert params["endTime"] == END_NS // 1_000_000
+        assert params["limit"] == 200
+        assert "cursor" not in params
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_200(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 5000)
+
+        assert captured[0][1]["limit"] == 200
+
+    @pytest.mark.asyncio
+    async def test_cursor_sent_only_when_set(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200, cursor="abc123")
+
+        assert captured[0][1]["cursor"] == "abc123"
+
+    @pytest.mark.asyncio
+    async def test_next_page_cursor_passthrough_when_present(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [], "nextPageCursor": "next-token"}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert next_cursor == "next-token"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("result", [{"list": []}, {"list": [], "nextPageCursor": ""}])
+    async def test_next_page_cursor_none_when_empty_or_missing(self, result):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": result}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_newest_first_parsing(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [
+            {"openInterest": "5100.0", "timestamp": "1698768000000"},
+            {"openInterest": "5000.0", "timestamp": "1698764400000"},
+        ]}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        oi, _ = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert len(oi) == 2
+        assert oi[0].ts == 1_698_768_000_000 * 1_000_000
+        assert oi[0].open_interest == 5100.0
+        assert oi[0].open_interest_value is None
+        assert oi[1].ts == 1_698_764_400_000 * 1_000_000
+
+    @pytest.mark.asyncio
+    async def test_ret_code_error_returns_empty_no_crash(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 10001, "retMsg": "params error"}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        oi, next_cursor = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert oi == []
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_unsupported_span_returns_empty_no_request(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        oi, next_cursor = await src.fetch_oi_page(BTC_USDT, 60, START_NS, END_NS, 200)
+
+        assert oi == []
+        assert next_cursor is None
+        assert captured == []
 
 
 class TestStreamCapabilityHonesty:

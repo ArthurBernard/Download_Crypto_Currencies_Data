@@ -1,4 +1,4 @@
-"""Bybit source adapter — OHLC full history, trades recent only (60), order book, funding."""
+"""Bybit source adapter — OHLC full history, trades recent only (60), order book, funding, open interest."""
 
 from __future__ import annotations
 
@@ -14,17 +14,19 @@ from dccd.domain.capability import Capability
 from dccd.domain.records import (
     FundingRate,
     OHLCBar,
+    OpenInterest,
     OrderBookLevel,
     OrderBookSnapshot,
     Trade,
 )
 from dccd.domain.symbol import Symbol
-from dccd.domain.timeutils import bybit_interval
+from dccd.domain.timeutils import bybit_interval, bybit_oi_interval
 from dccd.domain.types import DataType
 from dccd.sources.base import (
     FundingHistory,
     OHLCHistory,
     OHLCLive,
+    OpenInterestHistory,
     OrderBookLive,
     OrderBookSnapshotREST,
     TradesLive,
@@ -41,12 +43,14 @@ _BASE = "https://api.bybit.com/v5/market"
 
 
 class BybitSource(
-    OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, OrderBookLive, FundingHistory,
+    OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, OrderBookLive,
+    FundingHistory, OpenInterestHistory,
 ):
-    """Bybit source adapter (spot + USDT-perpetual funding).
+    """Bybit source adapter (spot + USDT-perpetual funding/open interest).
 
     - **Backfill**: OHLC (full), order-book snapshot, realized funding
-      (``linear`` ``perp`` market only). **No trades** (see Notes).
+      (``linear`` ``perp`` market only), open interest (``linear`` ``perp``,
+      full history back to symbol launch). **No trades** (see Notes).
     - **Stream**: OHLC, trades, order book.
 
     Notes
@@ -61,6 +65,12 @@ class BybitSource(
     must always be sent), and pages come back **newest-first** — the adapter
     walks backward, using each page's oldest timestamp minus one millisecond
     as the next page's ``endTime``.
+
+    Open interest (``GET /v5/market/open-interest``) is span-typed (``5min``
+    to ``1d`` buckets via :func:`~dccd.domain.timeutils.bybit_oi_interval`)
+    and, unlike funding, exposes a **real** ``nextPageCursor`` — it is passed
+    through unchanged as the opaque cursor instead of being reconstructed
+    from timestamps.
 
     See Also
     --------
@@ -94,6 +104,11 @@ class BybitSource(
                 data_type=DataType.FUNDING, transport="rest", mode="historical",
                 history="full", max_per_request=200, page_direction="backward",
                 markets=["perp"],
+            ),
+            Capability(
+                data_type=DataType.OPEN_INTEREST, transport="rest", mode="historical",
+                history="full", max_per_request=200, page_direction="backward",
+                markets=["perp"], spans=[300, 900, 1800, 3600, 14400, 86400],
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
@@ -195,6 +210,55 @@ class BybitSource(
             else None
         )
         return rates, next_cursor
+
+    async def fetch_oi_page(
+        self,
+        symbol: Symbol,
+        span: int,
+        start_ns: int,
+        end_ns: int,
+        limit: int,
+        cursor: str | None = None,
+    ) -> tuple[list[OpenInterest], str | None]:
+        """Fetch one page of open interest, following Bybit's real cursor.
+
+        Unlike ``funding/history``, ``open-interest`` returns a genuine
+        ``result.nextPageCursor`` — it is passed through unchanged rather than
+        reconstructed from timestamps. ``linear`` category only (no spot
+        equivalent). Returns ``([], None)`` when *span* has no
+        :func:`~dccd.domain.timeutils.bybit_oi_interval` mapping.
+        """
+        interval = bybit_oi_interval(span)
+        if interval is None:
+            return [], None
+
+        params: dict[str, Any] = {
+            "category": "linear",
+            "symbol": self.render_symbol(symbol),
+            "intervalTime": interval,
+            "startTime": start_ns // 1_000_000,
+            "endTime": end_ns // 1_000_000,
+            "limit": min(limit, 200),
+        }
+        if cursor:
+            params["cursor"] = cursor
+        async with self._http as client:
+            data = await client.get(f"{_BASE}/open-interest", params)
+
+        if data.get("retCode") != 0:
+            logger.error("Bybit open-interest error: %s", data.get("retMsg"))
+            return [], None
+
+        result = data.get("result", {})
+        oi = [
+            OpenInterest(
+                ts=int(e["timestamp"]) * 1_000_000,
+                open_interest=float(e["openInterest"]),
+            )
+            for e in result.get("list", [])
+        ]
+        next_cursor = result.get("nextPageCursor") or None
+        return oi, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         """Fetch a current order-book snapshot up to *depth* levels."""
