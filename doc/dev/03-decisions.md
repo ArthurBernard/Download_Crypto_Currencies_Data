@@ -120,7 +120,29 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-07-04 — Funding: flat annual storage, cursor pagination shared with trades (PR #185)  [accepted]
+### 2026-07-04 — Open interest is span-typed like OHLC; `recent_window_s` generalises the recent-clamp (PR #188)  [accepted]
+- **Choice**: `DataType.OPEN_INTEREST` reuses the OHLC shape end to end — span
+  subdirectories (`open_interest/{pair}/{span}/YYYY.parquet`), span required at
+  config/API validation, span validated against declared `cap.spans`, and the
+  same `expected_rows`/`missing_rows` gap arithmetic in `inventory()`. The
+  backfill branch adds a **time-bound recent clamp**: when `history="recent"`
+  and `cap.recent_window_s` is declared, `start_ns` is clamped to
+  `end - recent_window_s` with a warning — the honesty pattern of the Kraken
+  720-bar clamp, generalised from bar-count-bound to time-bound windows (used
+  by the Binance OI adapter, whose history is hard-capped at 30 days).
+- **Why**: OI is a fixed-interval series the user chooses a granularity for —
+  exactly OHLC's operational shape — so span dirs give gap detection for free;
+  funding (variable per-symbol interval) deliberately is NOT span-typed (see
+  the #185 entry). Without `recent_window_s`, the only honest options for
+  Binance OI were lying (`history="full"`) or a bar-count clamp that
+  mis-computes for time-capped windows (`max_per_request×span` ≈ 1.7 d at 5m,
+  vs the real 30-day cap).
+- **Rejected alternatives**: flat funding-style layout for OI (loses gap
+  detection and collides granularities in one dir); inferring the recent
+  window from `max_per_request×span` (wrong for time-capped APIs); skipping
+  the clamp and letting Binance return empty pages silently (the exact
+  "looks-collected-but-isn't" failure mode this repo's testing doctrine
+  exists to prevent).
 - **Choice**: `DataType.FUNDING` stores flat annual files
   (`funding/{pair}/YYYY.parquet`, dedup `TS`, no span dir, no gap arithmetic) and
   is paginated by the **trades cursor contract** (`fetch_funding_page` returns
