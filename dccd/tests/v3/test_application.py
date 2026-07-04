@@ -9,11 +9,11 @@ from dccd.application.operations import _DEFAULT_LOOKBACK_NS, backfill
 from dccd.application.registry import REGISTRY
 from dccd.domain.capability import Capability
 from dccd.domain.dataset import DatasetId
-from dccd.domain.records import FundingRate
+from dccd.domain.records import FundingRate, OpenInterest
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
-from dccd.sources.base import FundingHistory, OHLCHistory
+from dccd.sources.base import FundingHistory, OHLCHistory, OpenInterestHistory
 from dccd.storage.parquet import ParquetStore
 
 # ---------------------------------------------------------------------------
@@ -465,6 +465,157 @@ class TestBackfillFunding:
         result = await backfill(spec, registry=_FundingFakeReg(src), store=store)
         assert "error" not in result
         assert src.calls
+
+
+# ---------------------------------------------------------------------------
+# Backfill — OPEN_INTEREST (span-typed like OHLC, cursor-paged like TRADES)
+# ---------------------------------------------------------------------------
+
+class _OIFakeSource(OpenInterestHistory):
+    """Cursor-paged OPEN_INTEREST adapter, index-based cursor over a fixed list."""
+
+    exchange = "fake"
+
+    def __init__(
+        self,
+        obs: list[OpenInterest],
+        markets: list[str] | None,
+        max_per_request: int = 2,
+        spans: list[int] | None = None,
+        history: str = "full",
+        recent_window_s: int | None = None,
+    ) -> None:
+        self._obs = obs
+        self._markets = markets
+        self._max_per_request = max_per_request
+        self._spans = [3600] if spans is None else spans
+        self._history = history
+        self._recent_window_s = recent_window_s
+        self.calls: list[tuple[int, int, int, str | None]] = []
+
+    def capabilities(self) -> list[Capability]:
+        return [
+            Capability(
+                data_type=DataType.OPEN_INTEREST, transport="rest", mode="historical",
+                history=self._history, max_per_request=self._max_per_request,
+                page_direction="backward", markets=self._markets, spans=self._spans,
+                recent_window_s=self._recent_window_s,
+            ),
+        ]
+
+    async def fetch_oi_page(self, symbol, span, start_ns, end_ns, limit, cursor=None):
+        self.calls.append((start_ns, end_ns, limit, cursor))
+        offset = int(cursor) if cursor else 0
+        page = self._obs[offset:offset + limit]
+        next_cursor = str(offset + limit) if offset + limit < len(self._obs) else None
+        return page, next_cursor
+
+
+class _OIFakeReg:
+    def __init__(self, src):
+        self._s = src
+
+    def get(self, ex):
+        return self._s
+
+
+class TestBackfillOpenInterest:
+    """OPEN_INTEREST is span-typed like OHLC but cursor-paged via paginate_trades
+    (duck-typed on ``.ts``), mirroring FUNDING — plus a span check like OHLC and
+    a time-bound recent-window clamp (used by Binance, leaf 06)."""
+
+    def _spec(self, market: str = "perp", start: str = "2020-06-01", span: int | None = 3600) -> JobSpec:
+        target = JobTarget(
+            exchange="fake",
+            symbol=Symbol(base="BTC", quote="USDT", market=market),
+            data_type=DataType.OPEN_INTEREST,
+            span=span,
+        )
+        return JobSpec(
+            id="x", operation="backfill", target=target,
+            trigger=Trigger(kind="once"), params=JobParams(start=start),
+        )
+
+    def test_default_lookback_has_entry(self):
+        assert DataType.OPEN_INTEREST in _DEFAULT_LOOKBACK_NS
+        assert _DEFAULT_LOOKBACK_NS[DataType.OPEN_INTEREST] == 30 * 86400 * NS
+
+    @pytest.mark.asyncio
+    async def test_drains_multiple_pages_and_respects_window(self, tmp_path):
+        obs = [
+            OpenInterest(ts=1_577_836_800 * NS, open_interest=100.0),  # 2020-01-01 — before start
+            OpenInterest(ts=1_622_505_600 * NS, open_interest=200.0),  # 2021-06-01
+            OpenInterest(ts=1_625_097_600 * NS, open_interest=300.0),  # 2021-07-01
+            OpenInterest(ts=1_627_776_000 * NS, open_interest=400.0),  # 2021-08-01
+            OpenInterest(ts=1_893_456_000 * NS, open_interest=500.0),  # 2030-01-01 — after "now"
+        ]
+        src = _OIFakeSource(obs, markets=["perp"], max_per_request=2)
+        store = ParquetStore(tmp_path)
+        spec = self._spec(start="2020-06-01")
+
+        result = await backfill(spec, registry=_OIFakeReg(src), store=store)
+
+        assert "error" not in result
+        assert len(src.calls) > 1, "expected multiple cursor pages to be drained"
+
+        ds = spec.target
+        loaded = store.load(DatasetId(exchange="fake", symbol=ds.symbol,
+                                       data_type=DataType.OPEN_INTEREST, span=3600))
+        assert len(loaded) == 3, "only the 3 in-window observations should land on disk"
+        assert loaded["TS"].min() == 1_622_505_600 * NS
+        assert loaded["TS"].max() == 1_627_776_000 * NS
+
+    @pytest.mark.asyncio
+    async def test_span_not_in_caps_rejected(self, tmp_path):
+        src = _OIFakeSource([OpenInterest(ts=NS, open_interest=1.0)], markets=["perp"], spans=[3600])
+        store = ParquetStore(tmp_path)
+        spec = self._spec(span=7200)  # not declared
+        result = await backfill(spec, registry=_OIFakeReg(src), store=store)
+        assert "error" in result
+        assert "7200" in result["error"]
+        assert src.calls == []
+
+    @pytest.mark.asyncio
+    async def test_perp_rejected_when_capability_is_spot_only(self, tmp_path):
+        src = _OIFakeSource([OpenInterest(ts=NS, open_interest=1.0)], markets=None)
+        store = ParquetStore(tmp_path)
+        spec = self._spec(market="perp")
+        result = await backfill(spec, registry=_OIFakeReg(src), store=store)
+        assert "error" in result
+        assert "perp" in result["error"]
+        assert src.calls == []
+
+    @pytest.mark.asyncio
+    async def test_perp_accepted_when_declared(self, tmp_path):
+        src = _OIFakeSource([OpenInterest(ts=NS, open_interest=1.0)], markets=["perp"])
+        store = ParquetStore(tmp_path)
+        spec = self._spec(market="perp", start="1970-01-01")
+        result = await backfill(spec, registry=_OIFakeReg(src), store=store)
+        assert "error" not in result
+        assert src.calls
+
+    @pytest.mark.asyncio
+    async def test_recent_window_clamp_fires_at_boundary(self, tmp_path):
+        recent_window_s = 30 * 86400
+        src = _OIFakeSource(
+            [OpenInterest(ts=NS, open_interest=1.0)], markets=["perp"],
+            history="recent", recent_window_s=recent_window_s,
+        )
+        store = ParquetStore(tmp_path)
+        # Requested start (2020) is far older than the 30-day recent window.
+        spec = self._spec(start="2020-01-01")
+
+        bus = EventBus()
+        received = []
+        bus.subscribe(received.append)
+        events = bus.for_run("r1")
+
+        result = await backfill(spec, registry=_OIFakeReg(src), store=store, events=events)
+
+        assert "error" not in result
+        assert result["start_ns"] == result["end_ns"] - recent_window_s * NS
+        warnings = [e for e in received if isinstance(e, LogEvent) and e.level == "warning"]
+        assert any("clamping start" in w.message for w in warnings)
 
 
 # ---------------------------------------------------------------------------

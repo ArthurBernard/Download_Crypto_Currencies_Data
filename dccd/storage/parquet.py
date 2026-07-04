@@ -56,11 +56,18 @@ _FUNDING_SCHEMA = {
     "mark_price": pl.Float64,
 }
 
+_OI_SCHEMA = {
+    "TS": pl.Int64,
+    "open_interest": pl.Float64,
+    "open_interest_value": pl.Float64,
+}
+
 _SCHEMAS: dict[DataType, dict[str, Any]] = {
     DataType.OHLC: _OHLC_SCHEMA,
     DataType.TRADES: _TRADES_SCHEMA,
     DataType.ORDERBOOK: _BOOK_SCHEMA,
     DataType.FUNDING: _FUNDING_SCHEMA,
+    DataType.OPEN_INTEREST: _OI_SCHEMA,
 }
 
 # Legacy (v2) → canonical (v3) column renames. ``weightedAverage`` is dropped:
@@ -250,23 +257,25 @@ class ParquetStore:
         """Return the directory for *ds*, creating it if needed."""
         pair_slug = ds.pair_slug()
         root = self._root / ds.exchange
-        if ds.data_type == DataType.OHLC:
+        dtype_name = ds.data_type.value
+        if ds.data_type in (DataType.OHLC, DataType.OPEN_INTEREST):
             if ds.span is None:
                 raise ValueError(
-                    f"DatasetId {ds} has data_type=OHLC but span is None. "
-                    "Set span when constructing the DatasetId."
+                    f"DatasetId {ds} has data_type={dtype_name} but span "
+                    "is None. Set span when constructing the DatasetId."
                 )
-            d = root / "ohlc" / pair_slug / span_label(ds.span)
+            d = root / dtype_name / pair_slug / span_label(ds.span)
         else:
-            d = root / ds.data_type.value / pair_slug
+            d = root / dtype_name / pair_slug
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     def _period_fmt(self, ds: DatasetId) -> str:
-        # Annual files for OHLC and FUNDING (both low-frequency: ~1095
-        # funding events/year at 8h cadence); daily files for the rest
-        # (trades, order book) would be pathological for funding's sparsity.
-        if ds.data_type in (DataType.OHLC, DataType.FUNDING):
+        # Annual files for OHLC, FUNDING and OPEN_INTEREST (all low-frequency
+        # enough: ~1095 funding events/year at 8h cadence, ~105k rows/year for
+        # 5m open interest); daily files for the rest (trades, order book)
+        # would be pathological for their sparsity.
+        if ds.data_type in (DataType.OHLC, DataType.FUNDING, DataType.OPEN_INTEREST):
             return "%Y"
         return "%Y-%m-%d"
 
@@ -428,13 +437,13 @@ class ParquetStore:
                 if not dtype_dir.is_dir():
                     continue
                 dtype = dtype_dir.name
-                if dtype not in ("ohlc", "trades", "orderbook", "funding"):
+                if dtype not in ("ohlc", "trades", "orderbook", "funding", "open_interest"):
                     continue
                 for pair_dir in sorted(dtype_dir.iterdir()):
                     if not pair_dir.is_dir():
                         continue
                     pair = pair_dir.name
-                    if dtype == "ohlc":
+                    if dtype in ("ohlc", "open_interest"):
                         for span_dir in sorted(pair_dir.iterdir()):
                             if not span_dir.is_dir():
                                 continue
@@ -571,6 +580,16 @@ class ParquetStore:
                 for r in records
             ]
             return pl.DataFrame(rows, schema=_FUNDING_SCHEMA)
+        elif ds.data_type == DataType.OPEN_INTEREST:
+            rows = [
+                {
+                    "TS": r.ts,
+                    "open_interest": r.open_interest,
+                    "open_interest_value": r.open_interest_value,
+                }
+                for r in records
+            ]
+            return pl.DataFrame(rows, schema=_OI_SCHEMA)
         else:
             rows = []
             for snap in records:
@@ -601,9 +620,10 @@ class ParquetStore:
         deduping on TS would drop distinct trades; we key on the trade id when
         present, else a composite. Order-book rows share one TS across every
         price level, so they key on (TS, side, price). Funding has one event
-        per instant, so TS alone is unique — same as OHLC.
+        per instant, so TS alone is unique — same as OHLC. Open interest is
+        span-typed (one observation per bucket), so TS alone is unique too.
         """
-        if ds.data_type in (DataType.OHLC, DataType.FUNDING):
+        if ds.data_type in (DataType.OHLC, DataType.FUNDING, DataType.OPEN_INTEREST):
             return ["TS"]
         if ds.data_type == DataType.TRADES:
             if "tid" in df.columns and df["tid"].null_count() == 0:

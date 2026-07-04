@@ -127,6 +127,16 @@ class TestJobConfigValidation:
         with pytest.raises(Exception):
             JobConfig(exchange="binance", pairs=["BTCUSDT"], data_type="ohlc", span=3600)
 
+    def test_open_interest_without_span_raises(self) -> None:
+        with pytest.raises(Exception, match="span.*required"):
+            JobConfig(exchange="bybit", pairs=["BTC/USDT:perp"], data_type="open_interest")
+
+    def test_open_interest_with_span_ok(self) -> None:
+        jc = JobConfig(
+            exchange="bybit", pairs=["BTC/USDT:perp"], data_type="open_interest", span=3600,
+        )
+        assert jc.span == 3600
+
 
 class TestAppConfigValidation:
     def test_empty_jobs_allowed(self) -> None:

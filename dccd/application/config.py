@@ -119,7 +119,7 @@ class JobConfig(BaseModel):
 
     Validation enforces:
     - ``exchange`` must be a known exchange name.
-    - ``data_type='ohlc'`` requires ``span`` to be set.
+    - ``data_type='ohlc'`` or ``'open_interest'`` requires ``span`` to be set.
     - ``pairs`` must be non-empty and use ``BASE/QUOTE`` format.
     """
 
@@ -157,9 +157,11 @@ class JobConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _validate_span_for_ohlc(self) -> "JobConfig":
-        if self.data_type == "ohlc" and self.span is None:
-            raise ValueError("'span' is required when data_type='ohlc'")
+    def _validate_span_required(self) -> "JobConfig":
+        if self.data_type in ("ohlc", "open_interest") and self.span is None:
+            raise ValueError(
+                "'span' is required when data_type='ohlc' or 'open_interest'"
+            )
         return self
 
     def to_job_specs(self) -> list[JobSpec]:

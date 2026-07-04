@@ -6,7 +6,13 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 from dccd.domain.capability import Capability
-from dccd.domain.records import FundingRate, OHLCBar, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OpenInterest,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.types import DataType
 
@@ -19,6 +25,7 @@ __all__ = [
     "TradesHistory",
     "OrderBookSnapshotREST",
     "FundingHistory",
+    "OpenInterestHistory",
     "OHLCLive",
     "TradesLive",
     "OrderBookLive",
@@ -187,6 +194,34 @@ class FundingHistory(Source):
         cursor: str | None = None,
     ) -> tuple[list[FundingRate], str | None]:
         """Fetch one page of funding events; return ``(rates, next_cursor)`` (see class)."""
+        raise NotImplementedError
+
+
+class OpenInterestHistory(Source):
+    """Protocol: can fetch historical open-interest pages via REST.
+
+    Span-typed like :class:`OHLCHistory` (``span`` selects the observation
+    cadence), but cursor-paged like :class:`TradesHistory`/:class:`FundingHistory`
+    — the same opaque-cursor contract: ``fetch_oi_page`` returns
+    ``(observations, next_cursor)``.
+
+    - ``cursor=None`` on the first call — anchor on ``start_ns`` (or ``end_ns``
+      for adapters that page backward).
+    - ``next_cursor`` is ``None`` when the window is exhausted (the adapter
+      returned a short/last page, or the next item would fall outside the
+      window). Returning a non-``None`` cursor tells the paginator to call again.
+    """
+
+    async def fetch_oi_page(
+        self,
+        symbol: Symbol,
+        span: int,
+        start_ns: int,
+        end_ns: int,
+        limit: int,
+        cursor: str | None = None,
+    ) -> tuple[list[OpenInterest], str | None]:
+        """Fetch one page of open interest; return ``(observations, next_cursor)`` (see class)."""
         raise NotImplementedError
 
 

@@ -377,6 +377,26 @@ class TestBackfillEndpoint:
         resp = client.get("/api/backfill/nonexistent-run-id")
         assert resp.status_code == 404
 
+    def test_start_backfill_open_interest_without_span_400(self, client):
+        resp = client.post("/api/backfill", json={
+            "exchange": "bybit",
+            "symbol": "BTC/USDT:perp",
+            "data_type": "open_interest",
+            "start": "last",
+        })
+        assert resp.status_code == 400
+
+    def test_start_backfill_open_interest_with_span_200(self, client):
+        resp = client.post("/api/backfill", json={
+            "exchange": "bybit",
+            "symbol": "BTC/USDT:perp",
+            "data_type": "open_interest",
+            "span": 3600,
+            "start": "last",
+        })
+        assert resp.status_code == 200
+        assert "run_id" in resp.json()
+
 
 class TestJobsEndpoint:
     def test_list_jobs_empty(self, client):
@@ -426,6 +446,23 @@ class TestJobCrudEndpoints:
 
     def test_delete_unknown_404(self, client):
         assert client.post("/api/jobs/delete", json={"job_id": "nope"}).status_code == 404
+
+    def test_create_open_interest_without_span_400(self, client):
+        r = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "bybit",
+            "symbol": "BTC/USDT:perp", "data_type": "open_interest",
+        })
+        assert r.status_code == 400
+
+    def test_create_open_interest_with_span_200(self, client):
+        r = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "bybit",
+            "symbol": "BTC/USDT:perp", "data_type": "open_interest", "span": 3600,
+        })
+        assert r.status_code == 200, r.text
+        job_id = r.json()["job_id"]
+        jobs = client.get("/api/jobs").json()["jobs"]
+        assert any(j["id"] == job_id for j in jobs)
 
     def test_update_start(self, client):
         job_id = client.post("/api/jobs/create", json={

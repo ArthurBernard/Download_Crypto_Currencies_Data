@@ -577,9 +577,12 @@ def create_app(
 
         data_type = DataType(body.data_type)
 
-        # Validate span for OHLC before the task starts — avoids a silent background crash.
-        if data_type == DataType.OHLC and not body.span:
-            raise HTTPException(400, "span is required for data_type='ohlc'")
+        # Validate span for OHLC/open_interest before the task starts — avoids a
+        # silent background crash.
+        if data_type in (DataType.OHLC, DataType.OPEN_INTEREST) and not body.span:
+            raise HTTPException(
+                400, f"span is required for data_type={data_type.value!r}"
+            )
 
         target = JobTarget(
             exchange=body.exchange,

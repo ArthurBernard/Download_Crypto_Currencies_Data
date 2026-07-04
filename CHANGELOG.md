@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   newest-first backward pagination; depth probed to contract launch 2020-03 →
   `history="full"` declared honestly) — cross-exchange funding spread now
   computable. (#187)
+- `DataType.OPEN_INTEREST` — span-typed OI history end to end:
+  `OpenInterest` record, `open_interest/{pair}/{span}/YYYY.parquet` layout with
+  the same gap detection as OHLC, `OpenInterestHistory` cursor protocol,
+  span-required validation (config + API), and a `recent_window_s` clamp for
+  time-bound recent windows; Bybit first with full history to symbol launch
+  (verified: 39.5k hourly rows since 2022-01-01, 0 % gap). (#188)
 
 ### Changed
 
