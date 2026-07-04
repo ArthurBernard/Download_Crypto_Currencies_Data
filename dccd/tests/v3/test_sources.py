@@ -954,3 +954,208 @@ class TestBinanceFundingHistory:
         assert len(captured) == 1
         _, params = captured[0]
         assert params["limit"] == 1000
+
+
+class TestBinanceOpenInterestHistory:
+    """USDS-M ``openInterestHist`` — rolling 30-day window, forward ms cursor.
+
+    The endpoint 400s on a ``startTime`` at/behind the rolling boundary and
+    anchors over-full windows on ``endTime`` (latest observations win), so the
+    adapter floors ``startTime`` at request time and bounds each request's
+    ``endTime`` to the page capacity. Fixed 2020 timestamps would always fall
+    behind the floor — these tests use *recent* dynamic timestamps instead.
+    """
+
+    PERP = Symbol(base="BTC", quote="USDT", market="perp")
+    WINDOW_MS = 30 * 86400 * 1000
+
+    def setup_method(self):
+        import time as _time
+        self.now_ms = (int(_time.time() * 1000) // 3_600_000) * 3_600_000
+        self.end_ns = self.now_ms * 1_000_000
+        self.start_ms = self.now_ms - 2 * 3_600_000  # 2h window, well inside 30d
+        self.start_ns = self.start_ms * 1_000_000
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], response):
+        """Return a fake ``AsyncHTTPClient`` context manager returning *response*."""
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return response
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_open_interest_history(self):
+        assert isinstance(BinanceSource(), OpenInterestHistory)
+
+    def test_oi_cap_declares_recent_window_perp_and_spans(self):
+        src = BinanceSource()
+        cap = src.capability_for(DataType.OPEN_INTEREST, "rest", "historical")
+        assert cap is not None
+        assert cap.history == "recent"
+        assert cap.recent_window_s == 30 * 86400
+        assert cap.markets == ["perp"]
+        assert cap.max_per_request == 500
+        assert cap.page_direction == "forward"
+        assert cap.spans == [300, 900, 1800, 3600, 7200, 14400, 21600, 43200, 86400]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("span, period", [
+        (300, "5m"), (900, "15m"), (1800, "30m"), (3600, "1h"), (7200, "2h"),
+        (14400, "4h"), (21600, "6h"), (43200, "12h"), (86400, "1d"),
+    ])
+    async def test_request_params_per_span(self, span, period):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        await src.fetch_oi_page(self.PERP, span, self.start_ns, self.end_ns, 500)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://fapi.binance.com/futures/data/openInterestHist"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["period"] == period
+        # 2h window ≪ 500 slots of any span: neither floored nor bounded.
+        assert params["startTime"] == self.start_ms
+        assert params["endTime"] == self.now_ms
+        assert params["limit"] == 500
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_500(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        await src.fetch_oi_page(self.PERP, 3600, self.start_ns, self.end_ns, 5000)
+
+        assert captured[0][1]["limit"] == 500
+
+    @pytest.mark.asyncio
+    async def test_wide_window_end_time_bounded_to_page_capacity(self):
+        # 25d × 24 = 600 hourly slots > 500 ⇒ endTime must be pulled in to
+        # startTime + 499 spans, or Binance would return the *latest* 500 and
+        # silently skip the oldest 100.
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        start_ms = self.now_ms - 25 * 86400 * 1000
+
+        await src.fetch_oi_page(
+            self.PERP, 3600, start_ms * 1_000_000, self.end_ns, 500,
+        )
+
+        params = captured[0][1]
+        assert params["startTime"] == start_ms
+        assert params["endTime"] == start_ms + 499 * 3_600_000
+        assert params["endTime"] < self.now_ms
+
+    @pytest.mark.asyncio
+    async def test_start_time_floored_to_rolling_window(self):
+        # A start 40 days back must be floored inside the rolling 30-day
+        # window (Binance 400s at/behind the boundary instead of trimming).
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        stale_start_ns = (self.now_ms - 40 * 86400 * 1000) * 1_000_000
+
+        await src.fetch_oi_page(self.PERP, 3600, stale_start_ns, self.end_ns, 500)
+
+        params = captured[0][1]
+        assert params["startTime"] > self.now_ms - self.WINDOW_MS
+
+    @pytest.mark.asyncio
+    async def test_window_entirely_before_floor_returns_empty_no_request(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        start_ns = (self.now_ms - 40 * 86400 * 1000) * 1_000_000
+        end_ns = (self.now_ms - 35 * 86400 * 1000) * 1_000_000
+
+        oi, next_cursor = await src.fetch_oi_page(self.PERP, 3600, start_ns, end_ns, 500)
+
+        assert oi == []
+        assert next_cursor is None
+        assert captured == []
+
+    @pytest.mark.asyncio
+    async def test_page_with_window_left_returns_forward_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"symbol": "BTCUSDT", "sumOpenInterest": "20403.63",
+             "sumOpenInterestValue": "150570784.07",
+             "timestamp": self.start_ms + i * 3_600_000}
+            for i in range(2)  # short page — but 1h of window still left
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+
+        oi, next_cursor = await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns, 500,
+        )
+
+        assert len(oi) == 2
+        assert oi[0].ts == self.start_ms * 1_000_000
+        assert oi[0].open_interest == 20403.63
+        assert oi[0].open_interest_value == 150570784.07
+        last_ts_ms = response[-1]["timestamp"]
+        assert next_cursor == str(last_ts_ms + 3_600_000)
+
+    @pytest.mark.asyncio
+    async def test_cursor_used_as_next_start_time(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        cursor_ms = self.start_ms + 3_600_000
+
+        await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns, 500, cursor=str(cursor_ms),
+        )
+
+        assert captured[0][1]["startTime"] == cursor_ms
+
+    @pytest.mark.asyncio
+    async def test_page_reaching_window_end_returns_no_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        # Last observation + one span lands past the global end (end is
+        # shaved by 1 ms so ``next_ms == now_ms`` falls outside) ⇒ exhausted.
+        response = [
+            {"symbol": "BTCUSDT", "sumOpenInterest": "20403.63",
+             "sumOpenInterestValue": "150570784.07",
+             "timestamp": self.now_ms - 3_600_000},
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns - 1_000_000, 500,
+        )
+
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_empty_page_returns_no_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        oi, next_cursor = await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns, 500,
+        )
+
+        assert oi == []
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("span", [60, 180, 28800, 604800])
+    async def test_unsupported_span_returns_empty_no_request(self, span):
+        # 60/180 map to 1m/3m and 28800 to 8h (valid klines intervals but NOT
+        # openInterestHist periods); 604800 maps to 1w. All must short-circuit.
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        oi, next_cursor = await src.fetch_oi_page(
+            self.PERP, span, self.start_ns, self.end_ns, 500,
+        )
+
+        assert oi == []
+        assert next_cursor is None
+        assert captured == []
