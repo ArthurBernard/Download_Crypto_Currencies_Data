@@ -477,3 +477,109 @@ class TestKrakenOHLCWSParsing:
         )
         assert bar.ts == expected
         assert bar.close == 60050.0
+
+
+class TestBinanceFuturesOHLCRouting:
+    """Non-spot ``Symbol.market`` routes ``fetch_ohlc_page`` to the USDS-M
+    futures ``continuousKlines`` endpoint instead of spot ``klines``."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]]):
+        """Return a fake ``AsyncHTTPClient`` context manager.
+
+        ``captured`` receives ``(url, params)`` tuples from each ``get()`` call.
+        """
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return [
+                    [1_600_000_000_000, "50000", "51000", "49000", "50500",
+                     "100", 1_600_003_600_000, "5000000", 500, "50", "2500000", "0"]
+                ]
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    @pytest.mark.asyncio
+    async def test_spot_symbol_uses_spot_klines(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+
+        await src.fetch_ohlc_page(BTC_USDT, 3600, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://api.binance.com/api/v3/klines"
+        assert params["symbol"] == "BTCUSDT"
+        assert "pair" not in params
+        assert "contractType" not in params
+        assert params["limit"] == 500
+
+    @pytest.mark.asyncio
+    async def test_perp_symbol_uses_continuous_klines(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_ohlc_page(sym, 3600, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://fapi.binance.com/fapi/v1/continuousKlines"
+        assert params["pair"] == "BTCUSDT"
+        assert params["contractType"] == "PERPETUAL"
+        assert "symbol" not in params
+
+    @pytest.mark.asyncio
+    async def test_quarter_symbol_uses_current_quarter(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="quarter")
+
+        await src.fetch_ohlc_page(sym, 86400, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["contractType"] == "CURRENT_QUARTER"
+
+    @pytest.mark.asyncio
+    async def test_next_quarter_symbol_uses_next_quarter(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="next_quarter")
+
+        await src.fetch_ohlc_page(sym, 86400, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["contractType"] == "NEXT_QUARTER"
+
+    @pytest.mark.asyncio
+    async def test_futures_limit_clamped_to_1500(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_ohlc_page(sym, 3600, START_NS, END_NS, 5000)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["limit"] == 1500
+
+    def test_ohlc_rest_capability_declares_futures_markets(self):
+        src = BinanceSource()
+        cap = src.capability_for(DataType.OHLC, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["spot", "perp", "quarter", "next_quarter"]
+        assert cap.max_per_request == 1000
+
+    def test_ws_capabilities_declare_no_futures_markets(self):
+        src = BinanceSource()
+        ws_caps = [c for c in src.capabilities() if c.transport == "ws"]
+        assert ws_caps, "expected at least one WS capability"
+        assert all(c.markets is None for c in ws_caps)

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   syntax (`BTC/USDT:perp`), market-suffixed storage slugs (`BTC-USDT_PERP`), and
   per-market capability declarations (`Capability.markets`, `recent_window_s`)
   enforced by `backfill()` — the plumbing for the derivative-markets epic. (#183)
+- Binance USDS-M continuous-contract klines: `BTC/USDT:perp` / `:quarter` /
+  `:next_quarter` OHLC backfills route to `fapi/v1/continuousKlines` (auto-rolled
+  quarterly series — the futures leg of the basis signal), reusing the OHLC
+  machinery and storage layout verbatim (`ohlc/BTC-USDT_QUARTER/…`). (#184)
 
 ### Changed
 

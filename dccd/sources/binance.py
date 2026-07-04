@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 _BASE_REST = "https://api.binance.com/api/v3"
 _BASE_WS = "wss://stream.binance.com:9443/stream"
+_BASE_FAPI = "https://fapi.binance.com/fapi/v1"
+_CONTRACT_TYPE = {
+    "perp": "PERPETUAL",
+    "quarter": "CURRENT_QUARTER",
+    "next_quarter": "NEXT_QUARTER",
+}
 
 
 def _parse_ohlc_page(data: list[Any]) -> list[OHLCBar]:
@@ -97,13 +103,18 @@ class BinanceSource(
     TradesLive,
     OrderBookLive,
 ):
-    """Binance source adapter (spot).
+    """Binance source adapter (spot + USDS-M futures OHLC).
 
     The reference adapter — full historical depth and every live channel.
 
     - **Backfill**: OHLC (``klines``, 1 000/req), trades (``aggTrades``,
       cursor-paginated by ``fromId``), order-book snapshot (``depth``, ≤ 5 000).
     - **Stream**: OHLC (``kline``), trades (``aggTrade``), order book (``depth``).
+    - **Derivative OHLC**: a non-spot :attr:`~dccd.domain.symbol.Symbol.market`
+      (``perp``, ``quarter``, ``next_quarter``) routes ``fetch_ohlc_page`` to
+      the USDS-M futures ``continuousKlines`` endpoint instead of spot
+      ``klines`` — no live futures channels are declared (WS caps stay
+      spot-only).
 
     Adapters are not used directly — they are resolved by the engine from the
     registry. Drive them through :class:`dccd.Client` or the CLI.
@@ -134,6 +145,7 @@ class BinanceSource(
                 history="full", max_per_request=1000, page_direction="forward",
                 spans=[60, 180, 300, 900, 1800, 3600, 7200, 14400, 21600, 28800,
                        43200, 86400, 259200, 604800, 2592000],
+                markets=["spot", "perp", "quarter", "next_quarter"],
             ),
             Capability(
                 data_type=DataType.TRADES, transport="rest", mode="historical",
@@ -164,6 +176,26 @@ class BinanceSource(
         interval = binance_interval(span)
         if not interval:
             return []
+
+        if symbol.market != "spot":
+            # USDS-M futures (continuous contract): auto-rolled quarterly series
+            # or perpetual OHLC. Same 12-field kline layout as spot, so
+            # ``_parse_ohlc_page`` is reused unchanged. Uses the shared
+            # "binance" rate-limit bucket (conservative — fapi actually has its
+            # own, separate limits from spot) and the shared reference-counted
+            # HTTP client.
+            fapi_params: dict[str, Any] = {
+                "pair": self.render_symbol(symbol),
+                "contractType": _CONTRACT_TYPE[symbol.market],
+                "interval": interval,
+                "startTime": start_ns // 1_000_000,
+                "endTime": end_ns // 1_000_000,
+                "limit": min(limit, 1500),
+            }
+            async with self._http as client:
+                data = await client.get(f"{_BASE_FAPI}/continuousKlines", fapi_params)
+            return _parse_ohlc_page(data)
+
         params: dict[str, Any] = {
             "symbol": self.render_symbol(symbol),
             "interval": interval,
