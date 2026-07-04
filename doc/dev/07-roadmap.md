@@ -113,5 +113,24 @@ treat as bugs (see `06-status.md`).
   stablecoins** (supply/peg since ~2017 — a liquidity-proxy family nothing else covers);
   P1 Deribit DVOL (OHLC-shaped, public) and Fear & Greed (trivial single call). The
   first source pays for the schema; the rest are nearly free follow-ons.
+- [ ] **Non-crypto assets (ETF / equities / FX)** — a third generalization, filed
+  2026-07-04 by fynance-research: its documented route past the crypto ceiling is
+  *more uncorrelated assets*, and the first consumer is a ~50-name liquid **ETF
+  universe, daily bars** (multi-asset trend/cross-section book). Same OHLC shape and
+  storage layout; the delta is the `Symbol` domain (ticker/exchange/currency instead
+  of a crypto pair) and a new venue class:
+  - **P0 — bulk daily adapter, Stooq or Tiingo** (public REST, free, no auth/gateway —
+    exactly the transport shape dccd already speaks) + the ETF universe. One trap the
+    research side names as blocking: **dividend/split adjustment must be explicit**
+    (adjusted vs raw close — an equity backtest needs total-return-consistent series;
+    crypto never had this problem).
+  - **P1 — FX daily/intraday** — IBKR IDEALPRO (deep history, no subscription) or
+    Dukascopy tick data.
+  - **Later — IBKR as a source** (deep 1-min equity history to ~2004, FX): transport
+    is a stateful TWS/`ib_async` gateway session, the same "unlike the rest"
+    class as the descoped liquidations WS — park until the Trading_Bot IBKR
+    adapter exists (the gateway ops land there first) and intraday needs are proven.
+  - **Non-goal — continuous futures**: IBKR drops expired contracts after ~2 years
+    (kills deep backfill); if ever needed, that's databento/Norgate, a paid decision.
 - [ ] **Auth/secrets for private endpoints** — credential injection into
   `transport/` for authenticated exchange endpoints.
