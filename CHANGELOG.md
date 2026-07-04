@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `:next_quarter` OHLC backfills route to `fapi/v1/continuousKlines` (auto-rolled
   quarterly series — the futures leg of the basis signal), reusing the OHLC
   machinery and storage layout verbatim (`ohlc/BTC-USDT_QUARTER/…`). (#184)
+- `DataType.FUNDING` — perp funding-rate history end to end: `FundingRate`
+  record, annual Parquet store (`funding/{pair}/YYYY.parquet`, dedup on `TS`),
+  `FundingHistory` cursor protocol, bounded 365-day default lookback, and
+  Binance USDS-M as first source (full history; verified 2019-09→today on real
+  data, values byte-identical to the exchange). (#185)
 
 ### Changed
 
