@@ -24,9 +24,11 @@ stays self-contained:
   `Co-Authored-By` trailers** (personal repo).
 - **One PR = one concern**, small and disposable — a big plan ships as several small
   atomic PRs, never one catch-all branch.
-- **Model: the session model, always** — interactive sessions and every spawned
-  subagent inherit it (set in `~/.claude/settings.json`); a plan leaf's
-  `complexity` is effort/ordering only and never selects or downgrades the model.
+- **Model: session model for judgement, tiered execution** — sessions,
+  orchestration and the judgement skills run on the session model (set in
+  `~/.claude/settings.json`); plan-leaf execution runs at the tier derived from
+  the leaf's `complexity` (`low→haiku / medium→sonnet / high→session model`),
+  escalating one tier on failed tests/verification.
 - **Before every commit** — `pytest` and `ruff check dccd/` must pass.
 
 ## Commands
@@ -80,9 +82,9 @@ truth:
 `/plan` (decompose into a `doc/dev/plans/<epic>/` tree — adaptive depth: a single
 leaf for a trivial task, a global `00-plan.md` + leaves otherwise — and open the
 **plan PR** that lands the tree on `develop` first) →
-`/execute-leaf <epic> next` (cut the leaf branch, **spawn an agent — session
-model, effort derived from the leaf's `complexity`** — which implements + tests +
-**verifies on real data**, then reports) →
+`/execute-leaf <epic> next` (cut the leaf branch, **spawn an agent at the tier
+derived from the leaf's `complexity`, escalating a tier on failure**, which
+implements + tests + **verifies on real data**, then reports) →
 `/finish-task` (tests, ADR, CHANGELOG, leaf PR, archive the leaf, tick the global
 checklist) → … per leaf … → last leaf removes the roadmap line → `/release`.
 
