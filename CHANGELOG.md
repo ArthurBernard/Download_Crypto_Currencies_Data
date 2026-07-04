@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   span-required validation (config + API), and a `recent_window_s` clamp for
   time-bound recent windows; Bybit first with full history to symbol launch
   (verified: 39.5k hourly rows since 2022-01-01, 0 % gap). (#188)
+- Binance USDS-M open-interest statistics — forward collector with the 30-day
+  window declared honestly (`history="recent"` + `recent_window_s` → clamp +
+  warn at exactly the boundary), handling two verified endpoint quirks: a hard
+  HTTP 400 below the 30-day floor (floored with a safety margin) and
+  `endTime`-anchored over-full windows that would otherwise silently drop all
+  but the newest 500 rows (per-request `endTime` bounding + window-left
+  continuation). (#190)
 
 ### Changed
 
