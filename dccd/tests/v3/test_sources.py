@@ -190,6 +190,121 @@ class TestBybitCapabilities:
         assert cap.history == "full"
 
 
+class TestBybitFundingHistory:
+    """``linear`` ``perp`` funding — paired time params, newest-first backward paging."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], responses):
+        """Return a fake ``AsyncHTTPClient`` returning *responses* in sequence.
+
+        *responses* may be a single dict (returned on every call) or a list of
+        dicts consumed in order (the last entry repeats once exhausted).
+        """
+        seq = responses if isinstance(responses, list) else None
+
+        class _FakeClient:
+            def __init__(self) -> None:
+                self._calls = 0
+
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                if seq is not None:
+                    resp = seq[min(self._calls, len(seq) - 1)]
+                    self._calls += 1
+                    return resp
+                return responses
+
+        client = _FakeClient()
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return client
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_funding_history(self):
+        assert isinstance(BybitSource(), FundingHistory)
+
+    def test_funding_cap_declares_perp_market_and_backward_paging(self):
+        src = BybitSource()
+        cap = src.capability_for(DataType.FUNDING, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["perp"]
+        assert cap.max_per_request == 200
+        assert cap.page_direction == "backward"
+
+    @pytest.mark.asyncio
+    async def test_first_call_sends_both_start_and_end_time(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [
+            {"fundingRate": "0.0001", "fundingRateTimestamp": "1600003600000", "symbol": "BTCUSDT"},
+        ]}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        rates, next_cursor = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 200)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://api.bybit.com/v5/market/funding/history"
+        assert params["category"] == "linear"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["startTime"] == START_NS // 1_000_000
+        assert params["endTime"] == END_NS // 1_000_000
+        assert len(rates) == 1
+        assert rates[0].ts == 1_600_003_600_000 * 1_000_000
+        assert rates[0].rate == 0.0001
+        assert next_cursor is None  # short page (1 item < limit=200)
+
+    @pytest.mark.asyncio
+    async def test_newest_first_two_page_backward_walk(self):
+        captured: list[tuple[str, dict]] = []
+        # Page 1: full page (limit=2), newest-first; oldest item ts=1_600_000_100_000 ms.
+        page1 = {"retCode": 0, "result": {"list": [
+            {"fundingRate": "0.0002", "fundingRateTimestamp": "1600000200000", "symbol": "BTCUSDT"},
+            {"fundingRate": "0.0001", "fundingRateTimestamp": "1600000100000", "symbol": "BTCUSDT"},
+        ]}}
+        # Page 2: short page (1 item < limit=2) -> terminates the walk.
+        page2 = {"retCode": 0, "result": {"list": [
+            {"fundingRate": "0.0003", "fundingRateTimestamp": "1600000000000", "symbol": "BTCUSDT"},
+        ]}}
+        src = BybitSource(http=self._make_stub_http(captured, [page1, page2]))
+
+        rates1, cursor1 = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 2)
+        assert len(rates1) == 2
+        assert cursor1 == str(1_600_000_100_000 - 1)
+
+        rates2, cursor2 = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 2, cursor=cursor1)
+        assert len(rates2) == 1
+        assert cursor2 is None
+
+        # cursor is reused as endTime on the follow-up call; startTime stays pinned.
+        assert captured[1][1]["endTime"] == int(cursor1)
+        assert captured[1][1]["startTime"] == START_NS // 1_000_000
+
+    @pytest.mark.asyncio
+    async def test_ret_code_error_returns_empty_no_crash(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 10001, "retMsg": "params error"}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        rates, next_cursor = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 200)
+
+        assert rates == []
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_200(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 5000)
+
+        assert captured[0][1]["limit"] == 200
+
+
 class TestStreamCapabilityHonesty:
     """Declared WS capabilities must match a real implementation (D8)."""
 

@@ -1,19 +1,28 @@
-"""Bybit source adapter — OHLC full history, trades recent only (60), order book."""
+"""Bybit source adapter — OHLC full history, trades recent only (60), order book, funding."""
 
 from __future__ import annotations
 
+# Built-in
 import json
 import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any
 
+# Local
 from dccd.domain.capability import Capability
-from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import bybit_interval
 from dccd.domain.types import DataType
 from dccd.sources.base import (
+    FundingHistory,
     OHLCHistory,
     OHLCLive,
     OrderBookLive,
@@ -31,10 +40,13 @@ logger = logging.getLogger(__name__)
 _BASE = "https://api.bybit.com/v5/market"
 
 
-class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, OrderBookLive):
-    """Bybit source adapter (spot).
+class BybitSource(
+    OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, OrderBookLive, FundingHistory,
+):
+    """Bybit source adapter (spot + USDT-perpetual funding).
 
-    - **Backfill**: OHLC (full), order-book snapshot. **No trades** (see Notes).
+    - **Backfill**: OHLC (full), order-book snapshot, realized funding
+      (``linear`` ``perp`` market only). **No trades** (see Notes).
     - **Stream**: OHLC, trades, order book.
 
     Notes
@@ -43,6 +55,12 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
     ``TradesHistory`` is deliberately **not implemented** — a trades backfill
     raises :class:`~dccd.domain.errors.NoCapability` rather than returning a
     misleading recent slice. Live trades are still available via the stream.
+
+    Funding history (``GET /v5/market/funding/history``) has two quirks:
+    Bybit rejects a request carrying ``startTime`` without ``endTime`` (both
+    must always be sent), and pages come back **newest-first** — the adapter
+    walks backward, using each page's oldest timestamp minus one millisecond
+    as the next page's ``endTime``.
 
     See Also
     --------
@@ -71,6 +89,11 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
             Capability(
                 data_type=DataType.ORDERBOOK, transport="rest", mode="historical",
                 max_depth=200,
+            ),
+            Capability(
+                data_type=DataType.FUNDING, transport="rest", mode="historical",
+                history="full", max_per_request=200, page_direction="backward",
+                markets=["perp"],
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
@@ -120,6 +143,58 @@ class BybitSource(OHLCHistory, OHLCLive, TradesLive, OrderBookSnapshotREST, Orde
                 quote_volume=float(e[6]) if len(e) > 6 else None,
             ))
         return bars
+
+    async def fetch_funding_page(
+        self,
+        symbol: Symbol,
+        start_ns: int,
+        end_ns: int,
+        limit: int,
+        cursor: str | None = None,
+    ) -> tuple[list[FundingRate], str | None]:
+        """Fetch one page of realized funding rates, walking backward from ``end_ns``.
+
+        Bybit's ``funding/history`` endpoint rejects a request that carries
+        ``startTime`` without ``endTime`` — both are always sent. Pages are
+        **newest-first**, so *cursor* (when set) is the previous page's oldest
+        timestamp minus 1 ms, reused as this call's ``endTime``; ``startTime``
+        stays pinned to ``start_ns`` throughout the walk. ``linear`` category
+        only — this endpoint has no spot equivalent.
+        """
+        limit_eff = min(limit, 200)
+        params: dict[str, Any] = {
+            "category": "linear",
+            "symbol": self.render_symbol(symbol),
+            "startTime": start_ns // 1_000_000,
+            "endTime": int(cursor) if cursor else end_ns // 1_000_000,
+            "limit": limit_eff,
+        }
+        async with self._http as client:
+            data = await client.get(f"{_BASE}/funding/history", params)
+
+        if data.get("retCode") != 0:
+            logger.error("Bybit funding error: %s", data.get("retMsg"))
+            return [], None
+
+        items = data.get("result", {}).get("list", [])
+        if not items:
+            return [], None
+
+        rates = [
+            FundingRate(
+                ts=int(e["fundingRateTimestamp"]) * 1_000_000,
+                rate=float(e["fundingRate"]),
+            )
+            for e in items
+        ]
+
+        oldest_ms = int(items[-1]["fundingRateTimestamp"])
+        next_cursor = (
+            str(oldest_ms - 1)
+            if len(items) == limit_eff and oldest_ms > start_ns // 1_000_000
+            else None
+        )
+        return rates, next_cursor
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         """Fetch a current order-book snapshot up to *depth* levels."""
