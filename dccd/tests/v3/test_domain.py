@@ -2,16 +2,26 @@
 
 import pytest
 
+from dccd.application.config import JobConfig
+from dccd.application.jobs import JobSpec, JobTarget
 from dccd.domain.capability import Capability
 from dccd.domain.dataset import DatasetId, Provenance
 from dccd.domain.errors import CoverageError, NoCapability
-from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OpenInterest,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import (
     NS,
     align_ns,
     binance_interval,
     bybit_interval,
+    bybit_oi_interval,
     coinbase_granularity,
     kraken_interval,
     ns_to_s,
@@ -63,6 +73,34 @@ class TestSymbol:
         s2 = Symbol(base="BTC", quote="USDT")
         assert hash(s1) == hash(s2)
 
+    @pytest.mark.parametrize("market", ["spot", "perp", "quarter", "next_quarter"])
+    def test_parse_str_roundtrip_all_markets(self, market):
+        raw = "BTC/USDT" if market == "spot" else f"BTC/USDT:{market}"
+        s = Symbol.parse(raw)
+        assert s.market == market
+        assert str(s) == raw
+        assert Symbol.parse(str(s)) == s
+
+    def test_parse_market_suffix(self):
+        s = Symbol.parse("BTC/USDT:perp")
+        assert s == Symbol(base="BTC", quote="USDT", market="perp")
+
+    def test_parse_unknown_market_suffix_raises(self):
+        with pytest.raises(ValueError):
+            Symbol.parse("BTC/USDT:margin")
+
+    def test_parse_xbt_alias_with_market_suffix(self):
+        s = Symbol.parse("XBT/USD:perp")
+        assert s.base == "BTC"
+        assert s.market == "perp"
+
+    def test_parse_suffix_wins_over_market_kwarg(self):
+        s = Symbol.parse("BTC/USDT:perp", market="quarter")
+        assert s.market == "perp"
+
+    def test_str_spot_unchanged(self):
+        assert str(Symbol(base="BTC", quote="USDT", market="spot")) == "BTC/USDT"
+
 
 # ---------------------------------------------------------------------------
 # DataType
@@ -73,6 +111,8 @@ class TestDataType:
         assert DataType("ohlc") == DataType.OHLC
         assert DataType("trades") == DataType.TRADES
         assert DataType("orderbook") == DataType.ORDERBOOK
+        assert DataType("funding") == DataType.FUNDING
+        assert DataType("open_interest") == DataType.OPEN_INTEREST
 
     def test_invalid(self):
         with pytest.raises(ValueError):
@@ -103,6 +143,34 @@ class TestRecords:
         assert snap.is_snapshot is True
         assert len(snap.bids) == 1
 
+    def test_funding_rate(self):
+        f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001, mark_price=50000.0)
+        assert f.rate == 0.0001
+        assert f.mark_price == 50000.0
+
+    def test_funding_rate_mark_price_defaults_none(self):
+        f = FundingRate(ts=1_000_000_000_000_000_000, rate=-0.0002)
+        assert f.mark_price is None
+
+    def test_funding_rate_frozen(self):
+        f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001)
+        with pytest.raises(Exception):
+            f.rate = 0.0002  # type: ignore[misc]
+
+    def test_open_interest(self):
+        oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0, open_interest_value=250_000_000.0)
+        assert oi.open_interest == 5000.0
+        assert oi.open_interest_value == 250_000_000.0
+
+    def test_open_interest_value_defaults_none(self):
+        oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0)
+        assert oi.open_interest_value is None
+
+    def test_open_interest_frozen(self):
+        oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0)
+        with pytest.raises(Exception):
+            oi.open_interest = 6000.0  # type: ignore[misc]
+
 
 # ---------------------------------------------------------------------------
 # DatasetId
@@ -131,6 +199,57 @@ class TestDatasetId:
     def test_provenance(self):
         prov = Provenance(source="binance:rest", derived_from=None)
         assert prov.source == "binance:rest"
+
+    def test_pair_slug_perp(self):
+        ds = DatasetId(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        assert ds.pair_slug() == "BTC-USDT_PERP"
+
+    def test_pair_slug_quarter(self):
+        ds = DatasetId(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT", market="quarter"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        assert ds.pair_slug() == "BTC-USDT_QUARTER"
+
+
+# ---------------------------------------------------------------------------
+# Symbol market — integration with JobSpec/JobConfig
+# ---------------------------------------------------------------------------
+
+class TestSymbolMarketIntegration:
+    def test_make_id_differs_spot_vs_perp(self):
+        spot_target = JobTarget(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        perp_target = JobTarget(
+            exchange="binance",
+            symbol=Symbol(base="BTC", quote="USDT", market="perp"),
+            data_type=DataType.OHLC,
+            span=3600,
+        )
+        spot_id = JobSpec.make_id("backfill", spot_target)
+        perp_id = JobSpec.make_id("backfill", perp_target)
+        assert spot_id != perp_id
+        assert ":perp" in perp_id
+
+    def test_job_config_accepts_perp_suffix(self):
+        jc = JobConfig(
+            exchange="binance", pairs=["BTC/USDT:perp"], data_type="ohlc", span=3600,
+        )
+        specs = jc.to_job_specs()
+        assert len(specs) == 1
+        assert specs[0].target.symbol.market == "perp"
+        assert ":perp" in specs[0].id
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +285,18 @@ class TestTimeutils:
     def test_bybit_interval(self):
         assert bybit_interval(3600) == "60"
         assert bybit_interval(86400) == "D"
+
+    def test_bybit_oi_interval(self):
+        assert bybit_oi_interval(300) == "5min"
+        assert bybit_oi_interval(900) == "15min"
+        assert bybit_oi_interval(1800) == "30min"
+        assert bybit_oi_interval(3600) == "1h"
+        assert bybit_oi_interval(14400) == "4h"
+        assert bybit_oi_interval(86400) == "1d"
+
+    def test_bybit_oi_interval_unsupported_span(self):
+        assert bybit_oi_interval(60) is None
+        assert bybit_oi_interval(7200) is None
 
     def test_okx_interval(self):
         assert okx_interval(3600) == "1H"

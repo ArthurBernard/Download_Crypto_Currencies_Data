@@ -4,17 +4,27 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
 from dccd.domain.capability import Capability
-from dccd.domain.records import OHLCBar, OrderBookLevel, OrderBookSnapshot, Trade
+from dccd.domain.records import (
+    FundingRate,
+    OHLCBar,
+    OpenInterest,
+    OrderBookLevel,
+    OrderBookSnapshot,
+    Trade,
+)
 from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import binance_interval, s_to_ns
 from dccd.domain.types import DataType
 from dccd.sources.base import (
+    FundingHistory,
     OHLCHistory,
     OHLCLive,
+    OpenInterestHistory,
     OrderBookLive,
     OrderBookSnapshotREST,
     TradesHistory,
@@ -30,6 +40,23 @@ logger = logging.getLogger(__name__)
 
 _BASE_REST = "https://api.binance.com/api/v3"
 _BASE_WS = "wss://stream.binance.com:9443/stream"
+_BASE_FAPI = "https://fapi.binance.com/fapi/v1"
+_BASE_FDATA = "https://fapi.binance.com/futures/data"
+_CONTRACT_TYPE = {
+    "perp": "PERPETUAL",
+    "quarter": "CURRENT_QUARTER",
+    "next_quarter": "NEXT_QUARTER",
+}
+# The only ``period`` values ``openInterestHist`` accepts — a strict subset of
+# what :func:`~dccd.domain.timeutils.binance_interval` can emit (no 1m/3m/8h/…).
+_OI_PERIODS = frozenset({"5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"})
+# ``openInterestHist`` serves a rolling 30-day window and returns HTTP 400
+# (code -1130, "parameter 'startTime' is invalid.") for any startTime at or
+# beyond the boundary instead of trimming to it — verified 2026-07-04.
+# The floor is therefore re-evaluated at request time, with a safety margin so
+# clock skew, rate-limit waits and retries cannot push a request back over it.
+_OI_WINDOW_MS = 30 * 86400 * 1000
+_OI_FLOOR_MARGIN_MS = 5 * 60 * 1000
 
 
 def _parse_ohlc_page(data: list[Any]) -> list[OHLCBar]:
@@ -89,21 +116,96 @@ def _parse_aggtrades_page(data: list[Any], end_ms: int | None = None) -> tuple[l
     return trades, next_cursor
 
 
+def _parse_funding_page(data: list[Any], limit: int) -> tuple[list[FundingRate], str | None]:
+    """Parse a raw Binance ``fundingRate`` response into :class:`~dccd.domain.records.FundingRate` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``fundingTime``
+        (ms), ``fundingRate`` (str), and ``markPrice`` (str, may be empty or
+        absent). The response is ascending by ``fundingTime``.
+    limit:
+        The *limit* passed to the request — used to detect a full page (the
+        signal that more data may follow).
+    """
+    if not data:
+        return [], None
+    rates = [
+        FundingRate(
+            ts=int(e["fundingTime"]) * 1_000_000,
+            rate=float(e["fundingRate"]),
+            mark_price=float(e["markPrice"]) if e.get("markPrice") else None,
+        )
+        for e in data
+    ]
+    next_cursor = str(int(data[-1]["fundingTime"]) + 1) if len(data) == limit else None
+    return rates, next_cursor
+
+
+def _parse_oi_page(
+    data: list[Any], span: int, end_ms: int,
+) -> tuple[list[OpenInterest], str | None]:
+    """Parse a raw Binance ``openInterestHist`` response into :class:`~dccd.domain.records.OpenInterest` records.
+
+    Parameters
+    ----------
+    data:
+        The parsed JSON list — each element is a dict with ``timestamp`` (ms),
+        ``sumOpenInterest`` (str, base asset) and ``sumOpenInterestValue``
+        (str, quote asset). The response is ascending by ``timestamp``.
+    span:
+        Observation cadence in seconds — the next cursor is the last
+        timestamp advanced by one span.
+    end_ms:
+        The **global** window end in milliseconds. Because each request's
+        window is bounded to the page capacity (see ``fetch_oi_page``), page
+        fullness is *not* a reliable continuation signal — a boundary page can
+        be short while plenty of window remains. The walk continues as long as
+        the next slot still falls inside the global window.
+    """
+    if not data:
+        return [], None
+    oi = [
+        OpenInterest(
+            ts=int(e["timestamp"]) * 1_000_000,
+            open_interest=float(e["sumOpenInterest"]),
+            open_interest_value=float(e["sumOpenInterestValue"]),
+        )
+        for e in data
+    ]
+    next_ms = int(data[-1]["timestamp"]) + span * 1000
+    next_cursor = str(next_ms) if next_ms <= end_ms else None
+    return oi, next_cursor
+
+
 class BinanceSource(
     OHLCHistory,
     TradesHistory,
     OrderBookSnapshotREST,
+    FundingHistory,
+    OpenInterestHistory,
     OHLCLive,
     TradesLive,
     OrderBookLive,
 ):
-    """Binance source adapter (spot).
+    """Binance source adapter (spot + USDS-M futures OHLC, funding, open interest).
 
     The reference adapter — full historical depth and every live channel.
 
     - **Backfill**: OHLC (``klines``, 1 000/req), trades (``aggTrades``,
-      cursor-paginated by ``fromId``), order-book snapshot (``depth``, ≤ 5 000).
+      cursor-paginated by ``fromId``), order-book snapshot (``depth``, ≤ 5 000),
+      realized funding rate (USDS-M ``fundingRate``, ``perp`` market only),
+      open-interest statistics (USDS-M ``openInterestHist``, ``perp`` only —
+      Binance serves at most the **last 30 days**, hence
+      ``history="recent"`` + ``recent_window_s``; run a recurring job to
+      accumulate history forward).
     - **Stream**: OHLC (``kline``), trades (``aggTrade``), order book (``depth``).
+    - **Derivative OHLC**: a non-spot :attr:`~dccd.domain.symbol.Symbol.market`
+      (``perp``, ``quarter``, ``next_quarter``) routes ``fetch_ohlc_page`` to
+      the USDS-M futures ``continuousKlines`` endpoint instead of spot
+      ``klines`` — no live futures channels are declared (WS caps stay
+      spot-only).
 
     Adapters are not used directly — they are resolved by the engine from the
     registry. Drive them through :class:`dccd.Client` or the CLI.
@@ -117,7 +219,7 @@ class BinanceSource(
     --------
     >>> from dccd.sources.binance import BinanceSource
     >>> sorted({c.data_type.value for c in BinanceSource().capabilities()})
-    ['ohlc', 'orderbook', 'trades']
+    ['funding', 'ohlc', 'open_interest', 'orderbook', 'trades']
     """
 
     exchange = "binance"
@@ -134,6 +236,7 @@ class BinanceSource(
                 history="full", max_per_request=1000, page_direction="forward",
                 spans=[60, 180, 300, 900, 1800, 3600, 7200, 14400, 21600, 28800,
                        43200, 86400, 259200, 604800, 2592000],
+                markets=["spot", "perp", "quarter", "next_quarter"],
             ),
             Capability(
                 data_type=DataType.TRADES, transport="rest", mode="historical",
@@ -142,6 +245,18 @@ class BinanceSource(
             Capability(
                 data_type=DataType.ORDERBOOK, transport="rest", mode="historical",
                 max_per_request=1, max_depth=5000,
+            ),
+            Capability(
+                data_type=DataType.FUNDING, transport="rest", mode="historical",
+                history="full", max_per_request=1000, page_direction="forward",
+                markets=["perp"],
+            ),
+            Capability(
+                data_type=DataType.OPEN_INTEREST, transport="rest", mode="historical",
+                history="recent", recent_window_s=30 * 86400,
+                max_per_request=500, page_direction="forward",
+                markets=["perp"],
+                spans=[300, 900, 1800, 3600, 7200, 14400, 21600, 43200, 86400],
             ),
             Capability(data_type=DataType.OHLC, transport="ws", mode="live"),
             Capability(data_type=DataType.TRADES, transport="ws", mode="live"),
@@ -164,6 +279,26 @@ class BinanceSource(
         interval = binance_interval(span)
         if not interval:
             return []
+
+        if symbol.market != "spot":
+            # USDS-M futures (continuous contract): auto-rolled quarterly series
+            # or perpetual OHLC. Same 12-field kline layout as spot, so
+            # ``_parse_ohlc_page`` is reused unchanged. Uses the shared
+            # "binance" rate-limit bucket (conservative — fapi actually has its
+            # own, separate limits from spot) and the shared reference-counted
+            # HTTP client.
+            fapi_params: dict[str, Any] = {
+                "pair": self.render_symbol(symbol),
+                "contractType": _CONTRACT_TYPE[symbol.market],
+                "interval": interval,
+                "startTime": start_ns // 1_000_000,
+                "endTime": end_ns // 1_000_000,
+                "limit": min(limit, 1500),
+            }
+            async with self._http as client:
+                data = await client.get(f"{_BASE_FAPI}/continuousKlines", fapi_params)
+            return _parse_ohlc_page(data)
+
         params: dict[str, Any] = {
             "symbol": self.render_symbol(symbol),
             "interval": interval,
@@ -207,6 +342,90 @@ class BinanceSource(
             data = await client.get(f"{_BASE_REST}/aggTrades", params)
 
         return _parse_aggtrades_page(data, end_ms=end_ms if len(data) >= limit else None)
+
+    async def fetch_funding_page(
+        self,
+        symbol: Symbol,
+        start_ns: int,
+        end_ns: int,
+        limit: int,
+        cursor: str | None = None,
+    ) -> tuple[list[FundingRate], str | None]:
+        """Fetch one page of realized funding rates (cursor = next ``startTime`` in ms).
+
+        First call (``cursor=None``) is time-bounded on ``start_ns``; subsequent
+        calls advance ``startTime`` to the last event's ``fundingTime`` + 1 ms.
+        USDS-M futures only — ``fundingRate`` has no spot equivalent.
+        """
+        params: dict[str, Any] = {
+            "symbol": self.render_symbol(symbol),
+            "startTime": int(cursor) if cursor else start_ns // 1_000_000,
+            "endTime": end_ns // 1_000_000,
+            "limit": min(limit, 1000),
+        }
+        async with self._http as client:
+            data = await client.get(f"{_BASE_FAPI}/fundingRate", params)
+
+        return _parse_funding_page(data, min(limit, 1000))
+
+    async def fetch_oi_page(
+        self,
+        symbol: Symbol,
+        span: int,
+        start_ns: int,
+        end_ns: int,
+        limit: int,
+        cursor: str | None = None,
+    ) -> tuple[list[OpenInterest], str | None]:
+        """Fetch one page of open-interest statistics (cursor = next ``startTime`` in ms).
+
+        USDS-M ``openInterestHist`` — ascending pages, walked forward like
+        :meth:`fetch_funding_page`: the first call (``cursor=None``) anchors on
+        ``start_ns``, then each page advances ``startTime`` to the last
+        observation's timestamp + one *span*. Two quirks of the real endpoint
+        (verified 2026-07-04) shape the request:
+
+        - Binance serves only the **last 30 days** (declared as
+          ``history="recent"``) and returns HTTP 400 for a ``startTime`` at or
+          beyond the rolling boundary — so ``startTime`` is floored to the
+          window (re-evaluated at request time, with a safety margin).
+        - When the requested window holds more than ``limit`` observations,
+          Binance returns the **latest** ones in it, not the earliest — so
+          each request's ``endTime`` is bounded to the page capacity
+          (``limit`` slots) and the continuation signal is *window left*, not
+          page fullness.
+
+        Returns ``([], None)`` without a request when *span* has no supported
+        ``period`` mapping (only {5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d}) or
+        when the whole window predates the 30-day floor.
+        """
+        period = binance_interval(span)
+        if period is None or period not in _OI_PERIODS:
+            logger.warning("No Binance openInterestHist period for span=%d", span)
+            return [], None
+
+        limit_eff = min(limit, 500)
+        end_ms = end_ns // 1_000_000
+        start_ms = int(cursor) if cursor else start_ns // 1_000_000
+        floor_ms = int(time.time() * 1000) - _OI_WINDOW_MS + _OI_FLOOR_MARGIN_MS
+        start_ms = max(start_ms, floor_ms)
+        if start_ms > end_ms:
+            return [], None
+        # ``limit`` slots from an *aligned* start span (limit-1)×span ms
+        # inclusive; a wider window would drop its oldest observations.
+        end_req_ms = min(end_ms, start_ms + (limit_eff - 1) * span * 1000)
+
+        params: dict[str, Any] = {
+            "symbol": self.render_symbol(symbol),
+            "period": period,
+            "limit": limit_eff,
+            "startTime": start_ms,
+            "endTime": end_req_ms,
+        }
+        async with self._http as client:
+            data = await client.get(f"{_BASE_FDATA}/openInterestHist", params)
+
+        return _parse_oi_page(data, span, end_ms)
 
     async def fetch_orderbook(self, symbol: Symbol, depth: int) -> OrderBookSnapshot:
         """Fetch a current order-book snapshot up to *depth* levels."""

@@ -6,7 +6,14 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-__all__ = ["OHLCBar", "Trade", "OrderBookLevel", "OrderBookSnapshot"]
+__all__ = [
+    "OHLCBar",
+    "Trade",
+    "OrderBookLevel",
+    "OrderBookSnapshot",
+    "FundingRate",
+    "OpenInterest",
+]
 
 
 class OHLCBar(BaseModel, frozen=True):
@@ -112,3 +119,55 @@ class OrderBookSnapshot(BaseModel, frozen=True):
     bids: list[OrderBookLevel]
     asks: list[OrderBookLevel]
     is_snapshot: bool = True
+
+
+class FundingRate(BaseModel, frozen=True):
+    """One realized perpetual-futures funding event.
+
+    Attributes
+    ----------
+    ts : int
+        Funding time, **nanoseconds UTC**.
+    rate : float
+        Realized funding rate for this event (e.g. ``0.0001`` = 0.01%).
+    mark_price : float or None
+        Mark price at funding time (not always available).
+
+    Examples
+    --------
+    >>> f = FundingRate(ts=1_000_000_000_000_000_000, rate=0.0001)
+    >>> f.mark_price is None
+    True
+    """
+
+    ts: int
+    rate: float
+    mark_price: float | None = None
+
+
+class OpenInterest(BaseModel, frozen=True):
+    """One open-interest observation for a derivative instrument.
+
+    Span-typed like OHLC: one row per fixed-cadence bucket (e.g. hourly),
+    rather than one row per event like :class:`FundingRate`.
+
+    Attributes
+    ----------
+    ts : int
+        Observation time, **nanoseconds UTC**, aligned to the requested span.
+    open_interest : float
+        Open interest in contracts/base units.
+    open_interest_value : float or None
+        Open interest expressed as notional value (quote units), when the
+        exchange provides it. ``None`` when not available.
+
+    Examples
+    --------
+    >>> oi = OpenInterest(ts=1_000_000_000_000_000_000, open_interest=5000.0)
+    >>> oi.open_interest_value is None
+    True
+    """
+
+    ts: int
+    open_interest: float
+    open_interest_value: float | None = None

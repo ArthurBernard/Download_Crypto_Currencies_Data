@@ -120,6 +120,99 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-07-05 — Liquidations descoped from the derivative-markets epic (PR #191)  [rejected]
+- **Choice**: the derivative-markets epic shipped funding (Binance + Bybit),
+  open interest (Bybit deep + Binance 30-day forward) and quarterly-futures
+  klines — and deliberately did **not** implement liquidations, although the
+  original roadmap line named them.
+- **Why**: market-wide liquidations have **no REST history on any surveyed
+  exchange** — public access is WS-stream-only, forward-only from connection
+  time, and Binance throttles the public feed to the largest order per second
+  per symbol, so even forward capture is a lossy sample, not a tape (scan row
+  8, [`plans/data-sources-scan-2026-07.md`](plans/data-sources-scan-2026-07.md)).
+  It is dccd's first would-be stream-only/no-backstop data type —
+  architecturally unlike everything the epic built. Do not silently re-add it
+  as "one more adapter method"; if it ever returns, it is its own epic with a
+  stream-first design and an explicit lossy-capture caveat in the capability
+  model.
+- **Rejected alternatives**: shipping the WS collector anyway (permanent,
+  invisible data-quality ceiling); emulating history from OHLC wicks
+  (fabricated data — violates provenance honesty).
+- **Choice**: `BinanceSource.fetch_oi_page` bounds every request to
+  `endTime = min(global_end, startTime + (limit−1)·span)`, continues on
+  *window-left* (`last_ts + span ≤ global_end`) rather than page fullness, and
+  floors `startTime` at now−30d plus a 5-minute margin (window entirely below
+  the floor → empty page, no request).
+- **Why**: two behaviours verified live against `futures/data/openInterestHist`
+  — (1) a `startTime` older than 30 days returns a hard HTTP 400
+  (`code -1130`), it does not trim, and the operations-level clamp is always
+  ~1 s stale by request time; (2) a window holding more than `limit`
+  observations returns the **newest** `limit` anchored on `endTime`, so the
+  naive funding-style forward walk silently kept only 500 of 720 hourly rows.
+  A "simplification" back to the naive walk would reintroduce silent data loss.
+- **Rejected alternatives**: page-fullness continuation (breaks on legitimately
+  short bounded pages); trusting the ops clamp alone (races the 400 boundary);
+  `history="full"` with best-effort trimming (dishonest — the cap is real).
+
+### 2026-07-04 — Open interest is span-typed like OHLC; `recent_window_s` generalises the recent-clamp (PR #188)  [accepted]
+- **Choice**: `DataType.OPEN_INTEREST` reuses the OHLC shape end to end — span
+  subdirectories (`open_interest/{pair}/{span}/YYYY.parquet`), span required at
+  config/API validation, span validated against declared `cap.spans`, and the
+  same `expected_rows`/`missing_rows` gap arithmetic in `inventory()`. The
+  backfill branch adds a **time-bound recent clamp**: when `history="recent"`
+  and `cap.recent_window_s` is declared, `start_ns` is clamped to
+  `end - recent_window_s` with a warning — the honesty pattern of the Kraken
+  720-bar clamp, generalised from bar-count-bound to time-bound windows (used
+  by the Binance OI adapter, whose history is hard-capped at 30 days).
+- **Why**: OI is a fixed-interval series the user chooses a granularity for —
+  exactly OHLC's operational shape — so span dirs give gap detection for free;
+  funding (variable per-symbol interval) deliberately is NOT span-typed (see
+  the #185 entry). Without `recent_window_s`, the only honest options for
+  Binance OI were lying (`history="full"`) or a bar-count clamp that
+  mis-computes for time-capped windows (`max_per_request×span` ≈ 1.7 d at 5m,
+  vs the real 30-day cap).
+- **Rejected alternatives**: flat funding-style layout for OI (loses gap
+  detection and collides granularities in one dir); inferring the recent
+  window from `max_per_request×span` (wrong for time-capped APIs); skipping
+  the clamp and letting Binance return empty pages silently (the exact
+  "looks-collected-but-isn't" failure mode this repo's testing doctrine
+  exists to prevent).
+
+### 2026-07-04 — Funding: flat annual storage, cursor pagination shared with trades (PR #185)  [accepted]
+- **Choice**: `DataType.FUNDING` stores flat annual files
+  (`funding/{pair}/YYYY.parquet`, dedup `TS`, no span dir, no gap arithmetic) and
+  is paginated by the **trades cursor contract** (`fetch_funding_page` returns
+  `(items, next_cursor)`), driven by `paginate_trades` — whose type signature was
+  generalised to the module `TypeVar` (it was always duck-typed on `.ts`).
+  First `start=last` lookback is bounded at 365 days.
+- **Why**: funding intervals vary per symbol (8h mostly, but 4h/1h/2h dynamic
+  schedules exist) — a span-typed layout or fixed-window pagination would either
+  lie about cadence or silently drop overflow pages; the cursor drain is the
+  same failure-proof pattern that fixed trades. Annual files because ~1 095
+  rows/yr at 8h makes daily files pathological. 365-day default lookback is
+  ~1 100 records — cheap, and a year of funding is the minimum useful window for
+  carry research.
+- **Rejected alternatives**: a new `paginate_funding` (pure duplication of
+  `paginate_trades`); span-typed funding dirs like OHLC (interval is an exchange
+  property, not a job parameter); `expected_rows` gap detection for funding
+  (would need per-symbol interval knowledge the store doesn't have).
+
+### 2026-07-03 — Market lives on `Symbol`, honesty via `Capability.markets` (PR #183)  [accepted]
+- **Choice**: derivative addressing is a `Symbol.market` literal
+  (`spot|perp|quarter|next_quarter`, default `spot`) with a `:market` string
+  suffix, not a new `DatasetId` field or a separate symbol type. Capabilities
+  declare supported markets via `markets: list[str] | None` (`None` = spot-only)
+  plus `recent_window_s` for time-bound recent windows; `backfill()` rejects an
+  undeclared market (`_check_market`) before any fetch.
+- **Why**: market-on-Symbol flows through job ids (`str(symbol)`), storage slugs
+  (`pair_slug()` suffix) and adapters for free — one field, zero schema
+  migration, spot behaviour bit-for-bit unchanged. `markets=None` keeps every
+  existing declaration honest without touching the seven adapters.
+- **Rejected alternatives**: `DatasetId.market` (wouldn't reach adapters or job
+  ids without duplicating the field); a separate `PerpSymbol` type (fans out
+  through every signature); encoding the market in the quote (`USDT-PERP` —
+  collides with real tickers like PERP and breaks alias normalisation).
+
 ### 2026-06-20 — Null the shared HTTP client before awaiting `aclose()` (PR #173)  [accepted]
 - **Choice**: in `AsyncHTTPClient.__aexit__`, when the ref-count hits zero, capture
   the client into a local, set `self._client = None` and `self._depth = 0`, **then**

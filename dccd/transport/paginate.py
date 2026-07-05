@@ -21,7 +21,7 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any, TypeVar
 
 from dccd.domain.capability import Capability
-from dccd.domain.records import OHLCBar, Trade
+from dccd.domain.records import OHLCBar
 from dccd.domain.timeutils import NS, align_ns
 
 __all__ = ["paginate_forward", "paginate_backward", "paginate_ohlc", "paginate_trades"]
@@ -157,7 +157,7 @@ async def paginate_ohlc(
 async def paginate_trades(
     fetch_page: Callable[
         [int, int, int, str | None],
-        Coroutine[Any, Any, tuple[list[Trade], str | None]],
+        Coroutine[Any, Any, tuple[list[T], str | None]],
     ],
     cap: Capability,
     start_ns: int,
@@ -165,15 +165,19 @@ async def paginate_trades(
     *,
     emit_progress: Callable[[int, int], None] | None = None,
     max_pages: int = 1_000_000,
-) -> AsyncIterator[Trade]:
-    """Paginate trades by **cursor**, draining the ``[start_ns, end_ns]`` window.
+) -> AsyncIterator[T]:
+    """Paginate by **cursor**, draining the ``[start_ns, end_ns]`` window.
 
-    Unlike OHLC (fixed-size time windows), trades are far denser than any single
-    page: a one-day window on a liquid pair holds millions of trades but a page
-    is capped at ``cap.max_per_request``. Advancing by a fixed time window —
-    the previous design — silently dropped everything past the first page. This
-    paginator instead follows the adapter's opaque cursor until the window is
-    exhausted.
+    Despite the name, this paginator is generic over any record type that is
+    duck-typed on ``.ts`` (see :func:`_get_ts`) — it drives the TRADES branch
+    of :func:`~dccd.application.operations.backfill` and is reused unchanged
+    for FUNDING (both are cursor-paged, sparse-relative-to-OHLC record
+    streams). Unlike OHLC (fixed-size time windows), trades are far denser
+    than any single page: a one-day window on a liquid pair holds millions of
+    trades but a page is capped at ``cap.max_per_request``. Advancing by a
+    fixed time window — the previous design — silently dropped everything
+    past the first page. This paginator instead follows the adapter's opaque
+    cursor until the window is exhausted.
 
     Parameters
     ----------

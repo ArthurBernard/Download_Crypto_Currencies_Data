@@ -23,6 +23,7 @@ __all__ = [
     "span_label",
     "binance_interval",
     "bybit_interval",
+    "bybit_oi_interval",
     "okx_interval",
     "kraken_interval",
     "coinbase_granularity",
@@ -238,6 +239,32 @@ def bybit_interval(span: int) -> str | None:
     result = _map.get(span)
     if result is None:
         _logger.warning("No Bybit interval for span=%d", span)
+    return result
+
+
+def bybit_oi_interval(span: int) -> str | None:
+    """Return Bybit open-interest ``intervalTime`` string for *span* seconds.
+
+    Bybit's ``/v5/market/open-interest`` endpoint uses its own fixed set of
+    interval strings — distinct from :func:`bybit_interval` (the kline
+    interval codes).
+
+    Examples
+    --------
+    >>> bybit_oi_interval(3600)
+    '1h'
+    >>> bybit_oi_interval(86400)
+    '1d'
+    >>> bybit_oi_interval(120) is None
+    True
+    """
+    _map = {
+        300: "5min", 900: "15min", 1800: "30min",
+        3600: "1h", 14400: "4h", 86400: "1d",
+    }
+    result = _map.get(span)
+    if result is None:
+        _logger.warning("No Bybit open-interest interval for span=%d", span)
     return result
 
 

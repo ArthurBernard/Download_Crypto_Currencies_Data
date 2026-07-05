@@ -22,9 +22,22 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
   "instrument panel" visual refresh ships **self-hosted** fonts (Martian Mono +
   Spline Sans woff2 under `static/fonts/`, no external CDN) via `base.html`
   tokens (#157–#160).
+- **Derivative markets (epic, PRs #183–#191, 2026-07-03→05)**: `Symbol.market`
+  (`spot|perp|quarter|next_quarter`, `BTC/USDT:perp` syntax, `_PERP` storage
+  slugs) with per-market capability honesty (`Capability.markets`,
+  `recent_window_s` clamp); Binance continuous-contract klines (perp +
+  quarterly → basis leg); `DataType.FUNDING` (Binance full history 2019→,
+  Bybit full history 2020→, both verified on real data against the exchanges);
+  `DataType.OPEN_INTEREST` span-typed with OHLC-style gap detection (Bybit
+  full history to launch, Binance honest 30-day forward collector); Funding +
+  Open Interest tabs on Data/Historical + `how-to/derivatives`. Liquidations
+  descoped (ADR 2026-07-05); OKX funding/OI + long/short/taker ratios
+  re-homed on the roadmap. **Ops: start recurring Binance OI jobs on the
+  production collector immediately after release — the 30-day cap makes delay
+  irreversible.**
 - **Security**: Bearer auth on `/api/*` when `ui_auth_token` is set; non-wildcard
   CORS via `ui_allow_origins`.
-- **Quality gates**: ~480 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`
+- **Quality gates**: ~600 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`
   clean; Sphinx 0 warnings; CI matrix 3.11–3.13.
 - **Released**: `v3.6.0` tagged on `master` (2026-06-13) — the latest in the v3
   line that began with `v3.0.0` (2026-06-07). GitHub Release + PyPI publish on

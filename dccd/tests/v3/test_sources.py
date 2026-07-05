@@ -9,8 +9,10 @@ from dccd.domain.symbol import Symbol
 from dccd.domain.timeutils import NS
 from dccd.domain.types import DataType
 from dccd.sources.base import (
+    FundingHistory,
     OHLCHistory,
     OHLCLive,
+    OpenInterestHistory,
     OrderBookLive,
     OrderBookSnapshotREST,
     TradesHistory,
@@ -187,6 +189,269 @@ class TestBybitCapabilities:
         cap = self.src.capability_for(DataType.OHLC, "rest", "historical")
         assert cap is not None
         assert cap.history == "full"
+
+
+class TestBybitFundingHistory:
+    """``linear`` ``perp`` funding — paired time params, newest-first backward paging."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], responses):
+        """Return a fake ``AsyncHTTPClient`` returning *responses* in sequence.
+
+        *responses* may be a single dict (returned on every call) or a list of
+        dicts consumed in order (the last entry repeats once exhausted).
+        """
+        seq = responses if isinstance(responses, list) else None
+
+        class _FakeClient:
+            def __init__(self) -> None:
+                self._calls = 0
+
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                if seq is not None:
+                    resp = seq[min(self._calls, len(seq) - 1)]
+                    self._calls += 1
+                    return resp
+                return responses
+
+        client = _FakeClient()
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return client
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_funding_history(self):
+        assert isinstance(BybitSource(), FundingHistory)
+
+    def test_funding_cap_declares_perp_market_and_backward_paging(self):
+        src = BybitSource()
+        cap = src.capability_for(DataType.FUNDING, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["perp"]
+        assert cap.max_per_request == 200
+        assert cap.page_direction == "backward"
+
+    @pytest.mark.asyncio
+    async def test_first_call_sends_both_start_and_end_time(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [
+            {"fundingRate": "0.0001", "fundingRateTimestamp": "1600003600000", "symbol": "BTCUSDT"},
+        ]}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        rates, next_cursor = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 200)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://api.bybit.com/v5/market/funding/history"
+        assert params["category"] == "linear"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["startTime"] == START_NS // 1_000_000
+        assert params["endTime"] == END_NS // 1_000_000
+        assert len(rates) == 1
+        assert rates[0].ts == 1_600_003_600_000 * 1_000_000
+        assert rates[0].rate == 0.0001
+        assert next_cursor is None  # short page (1 item < limit=200)
+
+    @pytest.mark.asyncio
+    async def test_newest_first_two_page_backward_walk(self):
+        captured: list[tuple[str, dict]] = []
+        # Page 1: full page (limit=2), newest-first; oldest item ts=1_600_000_100_000 ms.
+        page1 = {"retCode": 0, "result": {"list": [
+            {"fundingRate": "0.0002", "fundingRateTimestamp": "1600000200000", "symbol": "BTCUSDT"},
+            {"fundingRate": "0.0001", "fundingRateTimestamp": "1600000100000", "symbol": "BTCUSDT"},
+        ]}}
+        # Page 2: short page (1 item < limit=2) -> terminates the walk.
+        page2 = {"retCode": 0, "result": {"list": [
+            {"fundingRate": "0.0003", "fundingRateTimestamp": "1600000000000", "symbol": "BTCUSDT"},
+        ]}}
+        src = BybitSource(http=self._make_stub_http(captured, [page1, page2]))
+
+        rates1, cursor1 = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 2)
+        assert len(rates1) == 2
+        assert cursor1 == str(1_600_000_100_000 - 1)
+
+        rates2, cursor2 = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 2, cursor=cursor1)
+        assert len(rates2) == 1
+        assert cursor2 is None
+
+        # cursor is reused as endTime on the follow-up call; startTime stays pinned.
+        assert captured[1][1]["endTime"] == int(cursor1)
+        assert captured[1][1]["startTime"] == START_NS // 1_000_000
+
+    @pytest.mark.asyncio
+    async def test_ret_code_error_returns_empty_no_crash(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 10001, "retMsg": "params error"}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        rates, next_cursor = await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 200)
+
+        assert rates == []
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_200(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_funding_page(BTC_USDT, START_NS, END_NS, 5000)
+
+        assert captured[0][1]["limit"] == 200
+
+
+class TestBybitOpenInterestHistory:
+    """``linear`` ``perp`` open interest — span-typed, real ``nextPageCursor``."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], responses):
+        """Return a fake ``AsyncHTTPClient`` returning *responses* in sequence.
+
+        *responses* may be a single dict (returned on every call) or a list of
+        dicts consumed in order (the last entry repeats once exhausted).
+        """
+        seq = responses if isinstance(responses, list) else None
+
+        class _FakeClient:
+            def __init__(self) -> None:
+                self._calls = 0
+
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                if seq is not None:
+                    resp = seq[min(self._calls, len(seq) - 1)]
+                    self._calls += 1
+                    return resp
+                return responses
+
+        client = _FakeClient()
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return client
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_open_interest_history(self):
+        assert isinstance(BybitSource(), OpenInterestHistory)
+
+    def test_oi_cap_declares_perp_market_full_history_and_spans(self):
+        src = BybitSource()
+        cap = src.capability_for(DataType.OPEN_INTEREST, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["perp"]
+        assert cap.history == "full"
+        assert cap.max_per_request == 200
+        assert cap.page_direction == "backward"
+        assert cap.spans == [300, 900, 1800, 3600, 14400, 86400]
+
+    @pytest.mark.asyncio
+    async def test_request_params(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [], "nextPageCursor": ""}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://api.bybit.com/v5/market/open-interest"
+        assert params["category"] == "linear"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["intervalTime"] == "1h"
+        assert params["startTime"] == START_NS // 1_000_000
+        assert params["endTime"] == END_NS // 1_000_000
+        assert params["limit"] == 200
+        assert "cursor" not in params
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_200(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 5000)
+
+        assert captured[0][1]["limit"] == 200
+
+    @pytest.mark.asyncio
+    async def test_cursor_sent_only_when_set(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200, cursor="abc123")
+
+        assert captured[0][1]["cursor"] == "abc123"
+
+    @pytest.mark.asyncio
+    async def test_next_page_cursor_passthrough_when_present(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [], "nextPageCursor": "next-token"}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert next_cursor == "next-token"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("result", [{"list": []}, {"list": [], "nextPageCursor": ""}])
+    async def test_next_page_cursor_none_when_empty_or_missing(self, result):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": result}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_newest_first_parsing(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": [
+            {"openInterest": "5100.0", "timestamp": "1698768000000"},
+            {"openInterest": "5000.0", "timestamp": "1698764400000"},
+        ]}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        oi, _ = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert len(oi) == 2
+        assert oi[0].ts == 1_698_768_000_000 * 1_000_000
+        assert oi[0].open_interest == 5100.0
+        assert oi[0].open_interest_value is None
+        assert oi[1].ts == 1_698_764_400_000 * 1_000_000
+
+    @pytest.mark.asyncio
+    async def test_ret_code_error_returns_empty_no_crash(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 10001, "retMsg": "params error"}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        oi, next_cursor = await src.fetch_oi_page(BTC_USDT, 3600, START_NS, END_NS, 200)
+
+        assert oi == []
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_unsupported_span_returns_empty_no_request(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"retCode": 0, "result": {"list": []}}
+        src = BybitSource(http=self._make_stub_http(captured, response))
+
+        oi, next_cursor = await src.fetch_oi_page(BTC_USDT, 60, START_NS, END_NS, 200)
+
+        assert oi == []
+        assert next_cursor is None
+        assert captured == []
 
 
 class TestStreamCapabilityHonesty:
@@ -477,3 +742,420 @@ class TestKrakenOHLCWSParsing:
         )
         assert bar.ts == expected
         assert bar.close == 60050.0
+
+
+class TestBinanceFuturesOHLCRouting:
+    """Non-spot ``Symbol.market`` routes ``fetch_ohlc_page`` to the USDS-M
+    futures ``continuousKlines`` endpoint instead of spot ``klines``."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]]):
+        """Return a fake ``AsyncHTTPClient`` context manager.
+
+        ``captured`` receives ``(url, params)`` tuples from each ``get()`` call.
+        """
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return [
+                    [1_600_000_000_000, "50000", "51000", "49000", "50500",
+                     "100", 1_600_003_600_000, "5000000", 500, "50", "2500000", "0"]
+                ]
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    @pytest.mark.asyncio
+    async def test_spot_symbol_uses_spot_klines(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+
+        await src.fetch_ohlc_page(BTC_USDT, 3600, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://api.binance.com/api/v3/klines"
+        assert params["symbol"] == "BTCUSDT"
+        assert "pair" not in params
+        assert "contractType" not in params
+        assert params["limit"] == 500
+
+    @pytest.mark.asyncio
+    async def test_perp_symbol_uses_continuous_klines(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_ohlc_page(sym, 3600, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://fapi.binance.com/fapi/v1/continuousKlines"
+        assert params["pair"] == "BTCUSDT"
+        assert params["contractType"] == "PERPETUAL"
+        assert "symbol" not in params
+
+    @pytest.mark.asyncio
+    async def test_quarter_symbol_uses_current_quarter(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="quarter")
+
+        await src.fetch_ohlc_page(sym, 86400, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["contractType"] == "CURRENT_QUARTER"
+
+    @pytest.mark.asyncio
+    async def test_next_quarter_symbol_uses_next_quarter(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="next_quarter")
+
+        await src.fetch_ohlc_page(sym, 86400, START_NS, END_NS, 500)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["contractType"] == "NEXT_QUARTER"
+
+    @pytest.mark.asyncio
+    async def test_futures_limit_clamped_to_1500(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_ohlc_page(sym, 3600, START_NS, END_NS, 5000)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["limit"] == 1500
+
+    def test_ohlc_rest_capability_declares_futures_markets(self):
+        src = BinanceSource()
+        cap = src.capability_for(DataType.OHLC, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["spot", "perp", "quarter", "next_quarter"]
+        assert cap.max_per_request == 1000
+
+    def test_ws_capabilities_declare_no_futures_markets(self):
+        src = BinanceSource()
+        ws_caps = [c for c in src.capabilities() if c.transport == "ws"]
+        assert ws_caps, "expected at least one WS capability"
+        assert all(c.markets is None for c in ws_caps)
+
+
+class TestBinanceFundingHistory:
+    """USDS-M ``fundingRate`` — realized funding, ``perp`` market only."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], response):
+        """Return a fake ``AsyncHTTPClient`` context manager returning *response*."""
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return response
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_funding_history(self):
+        assert isinstance(BinanceSource(), FundingHistory)
+
+    def test_funding_cap_declares_perp_market(self):
+        src = BinanceSource()
+        cap = src.capability_for(DataType.FUNDING, "rest", "historical")
+        assert cap is not None
+        assert cap.markets == ["perp"]
+        assert cap.max_per_request == 1000
+
+    @pytest.mark.asyncio
+    async def test_first_call_uses_start_ns_as_start_time(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"fundingTime": 1_600_000_000_000, "fundingRate": "0.00010000", "markPrice": "50000.00"},
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        rates, next_cursor = await src.fetch_funding_page(sym, START_NS, END_NS, 1000)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://fapi.binance.com/fapi/v1/fundingRate"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["startTime"] == START_NS // 1_000_000
+        assert params["endTime"] == END_NS // 1_000_000
+        assert len(rates) == 1
+        assert rates[0].ts == 1_600_000_000_000 * 1_000_000
+        assert rates[0].rate == 0.0001
+        assert rates[0].mark_price == 50000.0
+        assert next_cursor is None  # short page (1 item < limit=1000)
+
+    @pytest.mark.asyncio
+    async def test_followup_call_uses_cursor_as_start_time(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_funding_page(sym, START_NS, END_NS, 1000, cursor="1600003600001")
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["startTime"] == 1600003600001
+
+    @pytest.mark.asyncio
+    async def test_full_page_returns_next_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"fundingTime": 1_600_000_000_000 + i * 28_800_000, "fundingRate": "0.0001", "markPrice": "50000"}
+            for i in range(2)
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        rates, next_cursor = await src.fetch_funding_page(sym, START_NS, END_NS, 2)
+
+        assert len(rates) == 2
+        assert next_cursor == str(response[-1]["fundingTime"] + 1)
+
+    @pytest.mark.asyncio
+    async def test_empty_mark_price_becomes_none(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"fundingTime": 1_600_000_000_000, "fundingRate": "-0.0002", "markPrice": ""},
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        rates, _ = await src.fetch_funding_page(sym, START_NS, END_NS, 1000)
+
+        assert rates[0].mark_price is None
+        assert rates[0].rate == -0.0002
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_1000(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        sym = Symbol(base="BTC", quote="USDT", market="perp")
+
+        await src.fetch_funding_page(sym, START_NS, END_NS, 5000)
+
+        assert len(captured) == 1
+        _, params = captured[0]
+        assert params["limit"] == 1000
+
+
+class TestBinanceOpenInterestHistory:
+    """USDS-M ``openInterestHist`` — rolling 30-day window, forward ms cursor.
+
+    The endpoint 400s on a ``startTime`` at/behind the rolling boundary and
+    anchors over-full windows on ``endTime`` (latest observations win), so the
+    adapter floors ``startTime`` at request time and bounds each request's
+    ``endTime`` to the page capacity. Fixed 2020 timestamps would always fall
+    behind the floor — these tests use *recent* dynamic timestamps instead.
+    """
+
+    PERP = Symbol(base="BTC", quote="USDT", market="perp")
+    WINDOW_MS = 30 * 86400 * 1000
+
+    def setup_method(self):
+        import time as _time
+        self.now_ms = (int(_time.time() * 1000) // 3_600_000) * 3_600_000
+        self.end_ns = self.now_ms * 1_000_000
+        self.start_ms = self.now_ms - 2 * 3_600_000  # 2h window, well inside 30d
+        self.start_ns = self.start_ms * 1_000_000
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], response):
+        """Return a fake ``AsyncHTTPClient`` context manager returning *response*."""
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return response
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return _FakeClient()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_open_interest_history(self):
+        assert isinstance(BinanceSource(), OpenInterestHistory)
+
+    def test_oi_cap_declares_recent_window_perp_and_spans(self):
+        src = BinanceSource()
+        cap = src.capability_for(DataType.OPEN_INTEREST, "rest", "historical")
+        assert cap is not None
+        assert cap.history == "recent"
+        assert cap.recent_window_s == 30 * 86400
+        assert cap.markets == ["perp"]
+        assert cap.max_per_request == 500
+        assert cap.page_direction == "forward"
+        assert cap.spans == [300, 900, 1800, 3600, 7200, 14400, 21600, 43200, 86400]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("span, period", [
+        (300, "5m"), (900, "15m"), (1800, "30m"), (3600, "1h"), (7200, "2h"),
+        (14400, "4h"), (21600, "6h"), (43200, "12h"), (86400, "1d"),
+    ])
+    async def test_request_params_per_span(self, span, period):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        await src.fetch_oi_page(self.PERP, span, self.start_ns, self.end_ns, 500)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://fapi.binance.com/futures/data/openInterestHist"
+        assert params["symbol"] == "BTCUSDT"
+        assert params["period"] == period
+        # 2h window ≪ 500 slots of any span: neither floored nor bounded.
+        assert params["startTime"] == self.start_ms
+        assert params["endTime"] == self.now_ms
+        assert params["limit"] == 500
+
+    @pytest.mark.asyncio
+    async def test_limit_clamped_to_500(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        await src.fetch_oi_page(self.PERP, 3600, self.start_ns, self.end_ns, 5000)
+
+        assert captured[0][1]["limit"] == 500
+
+    @pytest.mark.asyncio
+    async def test_wide_window_end_time_bounded_to_page_capacity(self):
+        # 25d × 24 = 600 hourly slots > 500 ⇒ endTime must be pulled in to
+        # startTime + 499 spans, or Binance would return the *latest* 500 and
+        # silently skip the oldest 100.
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        start_ms = self.now_ms - 25 * 86400 * 1000
+
+        await src.fetch_oi_page(
+            self.PERP, 3600, start_ms * 1_000_000, self.end_ns, 500,
+        )
+
+        params = captured[0][1]
+        assert params["startTime"] == start_ms
+        assert params["endTime"] == start_ms + 499 * 3_600_000
+        assert params["endTime"] < self.now_ms
+
+    @pytest.mark.asyncio
+    async def test_start_time_floored_to_rolling_window(self):
+        # A start 40 days back must be floored inside the rolling 30-day
+        # window (Binance 400s at/behind the boundary instead of trimming).
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        stale_start_ns = (self.now_ms - 40 * 86400 * 1000) * 1_000_000
+
+        await src.fetch_oi_page(self.PERP, 3600, stale_start_ns, self.end_ns, 500)
+
+        params = captured[0][1]
+        assert params["startTime"] > self.now_ms - self.WINDOW_MS
+
+    @pytest.mark.asyncio
+    async def test_window_entirely_before_floor_returns_empty_no_request(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        start_ns = (self.now_ms - 40 * 86400 * 1000) * 1_000_000
+        end_ns = (self.now_ms - 35 * 86400 * 1000) * 1_000_000
+
+        oi, next_cursor = await src.fetch_oi_page(self.PERP, 3600, start_ns, end_ns, 500)
+
+        assert oi == []
+        assert next_cursor is None
+        assert captured == []
+
+    @pytest.mark.asyncio
+    async def test_page_with_window_left_returns_forward_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        response = [
+            {"symbol": "BTCUSDT", "sumOpenInterest": "20403.63",
+             "sumOpenInterestValue": "150570784.07",
+             "timestamp": self.start_ms + i * 3_600_000}
+            for i in range(2)  # short page — but 1h of window still left
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+
+        oi, next_cursor = await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns, 500,
+        )
+
+        assert len(oi) == 2
+        assert oi[0].ts == self.start_ms * 1_000_000
+        assert oi[0].open_interest == 20403.63
+        assert oi[0].open_interest_value == 150570784.07
+        last_ts_ms = response[-1]["timestamp"]
+        assert next_cursor == str(last_ts_ms + 3_600_000)
+
+    @pytest.mark.asyncio
+    async def test_cursor_used_as_next_start_time(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+        cursor_ms = self.start_ms + 3_600_000
+
+        await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns, 500, cursor=str(cursor_ms),
+        )
+
+        assert captured[0][1]["startTime"] == cursor_ms
+
+    @pytest.mark.asyncio
+    async def test_page_reaching_window_end_returns_no_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        # Last observation + one span lands past the global end (end is
+        # shaved by 1 ms so ``next_ms == now_ms`` falls outside) ⇒ exhausted.
+        response = [
+            {"symbol": "BTCUSDT", "sumOpenInterest": "20403.63",
+             "sumOpenInterestValue": "150570784.07",
+             "timestamp": self.now_ms - 3_600_000},
+        ]
+        src = BinanceSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns - 1_000_000, 500,
+        )
+
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_empty_page_returns_no_cursor(self):
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        oi, next_cursor = await src.fetch_oi_page(
+            self.PERP, 3600, self.start_ns, self.end_ns, 500,
+        )
+
+        assert oi == []
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("span", [60, 180, 28800, 604800])
+    async def test_unsupported_span_returns_empty_no_request(self, span):
+        # 60/180 map to 1m/3m and 28800 to 8h (valid klines intervals but NOT
+        # openInterestHist periods); 604800 maps to 1w. All must short-circuit.
+        captured: list[tuple[str, dict]] = []
+        src = BinanceSource(http=self._make_stub_http(captured, []))
+
+        oi, next_cursor = await src.fetch_oi_page(
+            self.PERP, span, self.start_ns, self.end_ns, 500,
+        )
+
+        assert oi == []
+        assert next_cursor is None
+        assert captured == []

@@ -91,7 +91,21 @@ treat as bugs (see `06-status.md`).
 - [ ] **Kraken deep OHLC from trades** — a `DerivedOHLCSource` wiring
   `domain/transforms.aggregate_ohlc` into the resolver (REST only gives 720 recent
   bars; the transform exists but isn't wired).
-- [ ] **Derivative markets** — `DataType` for funding / open-interest /
-  liquidations, `Symbol.market=perp`.
+- [ ] **OKX funding / open interest** — cheap follow-ons on the shipped
+  `FUNDING`/`OPEN_INTEREST` mixins (derivative-markets epic, PRs #183–#190);
+  **verify history depth empirically before declaring capabilities** (scan rows
+  3/6 left both unconfirmed; the honesty invariant requires a probe, not an
+  assumption). Liquidations stay out of scope (WS-only, forward-only, lossy —
+  see the 2026-07-05 ADR tombstone).
+- [ ] **Metric-series sources (non-exchange)** — a second generalization: no
+  `Symbol(base,quote)`, no OHLC shape; `(ts, entity, metric, value)` instead. From the
+  same scan: **P0 CoinMetrics Community** (full daily history, free, non-commercial
+  licence — the "on-chain" unblock named by fynance-research) and **P0 DefiLlama
+  stablecoins** (supply/peg since ~2017 — a liquidity-proxy family nothing else covers);
+  P1 Deribit DVOL (OHLC-shaped, public) and Fear & Greed (trivial single call). The
+  first source pays for the schema; the rest are nearly free follow-ons. Also
+  **Binance long/short + taker ratios** (scan row 7): same `(ts, metric, value)`
+  shape, same 30-day cap as Binance OI — **time-sensitive**, forward collection
+  should start as soon as the schema exists.
 - [ ] **Auth/secrets for private endpoints** — credential injection into
   `transport/` for authenticated exchange endpoints.

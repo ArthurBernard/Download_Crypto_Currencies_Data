@@ -16,6 +16,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.7.0] - 2026-07-05
+
+### Added
+
+- `Symbol.market` (`spot`/`perp`/`quarter`/`next_quarter`) with `:market` pair
+  syntax (`BTC/USDT:perp`), market-suffixed storage slugs (`BTC-USDT_PERP`), and
+  per-market capability declarations (`Capability.markets`, `recent_window_s`)
+  enforced by `backfill()` — the plumbing for the derivative-markets epic. (#183)
+- Binance USDS-M continuous-contract klines: `BTC/USDT:perp` / `:quarter` /
+  `:next_quarter` OHLC backfills route to `fapi/v1/continuousKlines` (auto-rolled
+  quarterly series — the futures leg of the basis signal), reusing the OHLC
+  machinery and storage layout verbatim (`ohlc/BTC-USDT_QUARTER/…`). (#184)
+- `DataType.FUNDING` — perp funding-rate history end to end: `FundingRate`
+  record, annual Parquet store (`funding/{pair}/YYYY.parquet`, dedup on `TS`),
+  `FundingHistory` cursor protocol, bounded 365-day default lookback, and
+  Binance USDS-M as first source (full history; verified 2019-09→today on real
+  data, values byte-identical to the exchange). (#185)
+- Bybit perp funding-rate history (paired `startTime`/`endTime` params,
+  newest-first backward pagination; depth probed to contract launch 2020-03 →
+  `history="full"` declared honestly) — cross-exchange funding spread now
+  computable. (#187)
+- `DataType.OPEN_INTEREST` — span-typed OI history end to end:
+  `OpenInterest` record, `open_interest/{pair}/{span}/YYYY.parquet` layout with
+  the same gap detection as OHLC, `OpenInterestHistory` cursor protocol,
+  span-required validation (config + API), and a `recent_window_s` clamp for
+  time-bound recent windows; Bybit first with full history to symbol launch
+  (verified: 39.5k hourly rows since 2022-01-01, 0 % gap). (#188)
+- Binance USDS-M open-interest statistics — forward collector with the 30-day
+  window declared honestly (`history="recent"` + `recent_window_s` → clamp +
+  warn at exactly the boundary), handling two verified endpoint quirks: a hard
+  HTTP 400 below the 30-day floor (floored with a safety margin) and
+  `endTime`-anchored over-full windows that would otherwise silently drop all
+  but the newest 500 rows (per-request `endTime` bounding + window-left
+  continuation). (#190)
+- Funding and open-interest surfaced in the web UI: Data + Historical tabs
+  (span/coverage columns for OI, `:perp` pair hints, OI span select), plus a
+  `how-to/derivatives` guide (funding, OI forward collection, quarterly klines
+  → basis recipe) and the per-exchange capability matrix updated. (#191)
+
 ## [3.6.3] - 2026-06-20
 
 ### Fixed

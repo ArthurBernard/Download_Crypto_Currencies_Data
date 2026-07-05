@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dccd"
-version = "3.6.3"
+version = "3.7.0"
 description = "Download Crypto Currency Data — hexagonal architecture, async-first."
 readme = "README.md"
 license = { text = "MIT" }

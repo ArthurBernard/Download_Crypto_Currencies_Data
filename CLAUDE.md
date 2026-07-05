@@ -9,6 +9,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > [`doc/dev/README.md`](doc/dev/README.md) for a fuller picture than this file
 > gives. `CLAUDE.md` remains authoritative for commands and invariants.
 
+## Common conventions
+
+Shared across my repos, mirrored from `~/.claude/CLAUDE.md` (the single source of
+truth — if they ever disagree, the global file wins). Restated here so the repo
+stays self-contained:
+
+- **Git Flow** — `master` (tagged releases) ← `develop` (integration) ←
+  `feat|fix|chore|docs/<topic>`. **Never commit directly to `develop` or `master`**
+  — always a feature branch + PR into `develop`; `develop` → `master` only at release.
+- **Conventional Commits** — `feat:` `fix:` `chore:` `docs:`. **Never add
+  `Co-Authored-By` trailers** (personal repo).
+- **One PR = one concern**, small and disposable — a big plan ships as several small
+  atomic PRs, never one catch-all branch.
+- **Model: `opus`, always** — interactive sessions and every spawned subagent; a plan
+  leaf's `complexity` is effort/ordering only and never downgrades the model.
+- **Before every commit** — `pytest` and `ruff check dccd/` must pass.
+
 ## Commands
 
 ```bash
@@ -42,42 +59,7 @@ python doc/dev/ui_smoke.py http://127.0.0.1:8137
 > env ships Sphinx whose source uses 3.12 `type` statements, which made mypy
 > abort under 3.11. dccd supports 3.11–3.13, so 3.12 semantics are safe.
 
-## Git Flow
-
-**Branch model:**
-```
-master          ← stable releases only (tagged vX.Y.Z)
-  └── develop   ← integration branch
-        ├── feat/<topic>   new feature or modernization axis
-        ├── fix/<topic>    bug fix
-        ├── chore/<topic>  tooling, CI, deps
-        └── docs/<topic>   documentation only
-```
-
-**Rules — always follow these before committing or pushing:**
-1. **Never commit directly to `master`.**
-2. **Never commit directly to `develop`** — always use a feature branch + PR.
-3. Branch off `develop`: `git checkout develop && git checkout -b feat/my-topic`
-4. Open a PR into `develop` when done. `develop` → `master` only at release time.
-
-**Commit style (Conventional Commits):**
-```
-feat: add Bybit futures OHLC capability
-fix: correct paginator window for Coinbase
-chore: upgrade httpx to 0.28
-docs: update README for v3 install
-```
-
-Do not add `Co-Authored-By` trailers to commits — this is a personal repo.
-
-**Before every commit:** run `pytest`. It must pass.
-
-**One PR = one concern, small and disposable.** Even a large plan ships as
-*several* small atomic PRs — never one fourre-tout branch. A PR you couldn't throw
-away without losing unrelated good work is too big: split it. This is what makes
-`/abandon-task` (kill a bad PR, keep the lesson) viable.
-
-### Dev loop & docs of record
+## Dev loop & docs of record
 
 The iterative loop is tooled by skills, with four tracked docs as the sources of
 truth:
@@ -106,17 +88,6 @@ checklist) → … per leaf … → last leaf removes the roadmap line → `/rel
 [`doc/dev/plans/README.md`](doc/dev/plans/README.md). The workflow is
 backward-compatible: a repo whose `.claude/workflow.json` has **no `plans_dir`**
 falls back to the older `/pick-task → plan mode → /finish-task` loop.
-
-**Model per task** (advisory — you set it via `/model`, a skill spawns a subagent
-with an explicit `model`, or a plan **leaf's `complexity` derives it**:
-`low→haiku`, `medium→sonnet`, `high→opus`; subagents otherwise *inherit* the
-parent):
-
-| Model | For |
-|-------|-----|
-| `opus` | judgement, design, decisions, planning, review |
-| `sonnet` | implementation — code, tests, docstrings |
-| `haiku` | mechanical fan-out (doc scans, checklists) — spawn it explicitly as a subagent |
 
 ## Architecture (v3 — hexagonal)
 
@@ -148,9 +119,9 @@ Pure, synchronous, no I/O. Never import from transport/sources/storage.
 
 | Module | Contents |
 |--------|----------|
-| `symbol.py` | `Symbol(base, quote)` — normalises XBT→BTC |
-| `types.py` | `DataType` enum: `ohlc`, `trades`, `orderbook` |
-| `records.py` | `OHLCBar`, `Trade`, `OrderBookSnapshot` (ns timestamps) |
+| `symbol.py` | `Symbol(base, quote, market)` — normalises XBT→BTC; `market` = `spot`/`perp`/`quarter`/`next_quarter` (`BTC/USDT:perp` syntax, `_PERP` slugs on disk) |
+| `types.py` | `DataType` enum: `ohlc`, `trades`, `orderbook`, `funding`, `open_interest` |
+| `records.py` | `OHLCBar`, `Trade`, `OrderBookSnapshot`, `FundingRate`, `OpenInterest` (ns timestamps) |
 | `dataset.py` | `DatasetId`, `Provenance` |
 | `capability.py` | `Capability` — declared per adapter per (data_type × transport × mode) |
 | `timeutils.py` | Helpers: `s_to_ns`, `align_ns`, `span_label`, `binance_interval`, … |
@@ -190,10 +161,10 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 
 | Exchange | Notes |
 |----------|-------|
-| `binance.py` | Full history OHLC+trades, depth 5000 |
+| `binance.py` | Full history OHLC+trades, depth 5000; perp/quarterly continuous futures klines, funding (full), open interest (30-day window only) |
 | `coinbase.py` | 300 candles/req (Paginator handles automatically) |
 | `kraken.py` | OHLC: 720 recent only (`history="recent"`); trades: full via `since` cursor |
-| `bybit.py` | No spot trades history (capability not declared → `NoCapability` early) |
+| `bybit.py` | No spot trades history (capability not declared → `NoCapability` early); funding + open interest full history (perp) |
 | `okx.py` | `history-candles` + `history-trades` for deep history |
 | `bitfinex.py` | Up to 10 000 items per request |
 | `bitmex.py` | Bucketed OHLC (1m/5m/1h/1d only), full trades |
@@ -230,8 +201,8 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 - `api/app.py` — FastAPI `create_app()`, lifespan context manager, module-level Pydantic request models. Job CRUD lives here: `POST /api/jobs/{create,delete,update}` (body-based to allow `/`/`:` in ids), all routed through the async `_persist_and_refresh` helper (writes YAML, updates `app.state`, calls `scheduler.sync_streams` **and** `scheduler.sync_intervals` to reconcile recurring backfills live). `POST /api/jobs/update` edits `start` and/or the recurring `every` (schedule). `GET /api/jobs` exposes `start`/`every`/`trigger`/`snapshot_interval`/`depth` so the UI can render and preserve them. `POST /api/jobs/run` + `/api/jobs/run-all` trigger configured backfills on demand. SSE at `GET /api/events` uses `add_queue`/`remove_queue` for multi-consumer fan-out.
 - `cli/main.py` — Typer commands, all import from `service_factory`
 - `ui/` — Jinja2 templates + static files. Nav: `Dashboard` · `Data` flat, plus `Collect ▾` (Historical/Live) and `System ▾` (Logs/Config/Storage) dropdowns. Pages are **split by concern**:
-  - **Data** (`data.html`, route `/data`; `/inventory` 307-redirects here) — read-only view of what's on disk: DataType tabs → per-exchange accordions with totals, freshness dot, OHLC gap %, on-disk size, file count. No action buttons.
-  - **Historical** (`historical.html`) — backfill jobs (**OHLC + Trades only**; order books have no REST history): DataType tabs → exchange accordions → one row per dataset with editable `first_date` (defaults to the dataset's earliest stored bar), a **Schedule** select (Off/hourly/daily/custom → `every`; `manual` trigger when off), real coverage bar, inline Run/Delete. **Run all** (header) + per-exchange **Run all**. New jobs default to `manual`.
+  - **Data** (`data.html`, route `/data`; `/inventory` 307-redirects here) — read-only view of what's on disk: DataType tabs (incl. Funding + Open Interest) → per-exchange accordions with totals, freshness dot, OHLC/OI gap %, on-disk size, file count. No action buttons.
+  - **Historical** (`historical.html`) — backfill jobs (**OHLC, Trades, Funding + Open Interest**; order books have no REST history): DataType tabs → exchange accordions → one row per dataset with editable `first_date` (defaults to the dataset's earliest stored bar), a **Schedule** select (Off/hourly/daily/custom → `every`; `manual` trigger when off), real coverage bar, inline Run/Delete. Span column/select is gated by `hasSpan(dt)` (OHLC + open interest); funding has no span. Pair fields accept the `:perp` market suffix (placeholder hints it on the derivative tabs). **Run all** (header) + per-exchange **Run all**. New jobs default to `manual`.
   - **Live** (`live.html`) — stream jobs (**Trades + Order Book only**; OHLC is collected via the Historical schedule, not streamed): same tab/accordion shape, with a liveness indicator fed by `StreamSampleEvent` over SSE (numeric `value`/`bid`/`ask`, formatted client-side via `fmtNum`). Liveness is **seeded from the last on-disk point** (inventory `max_ts`) so a refresh shows freshness without waiting for a live sample. The dot's "fresh" window is span-aware (order-book `snapshot_interval` / short for trades); the freshness label is a relative "N ago" under 24h (`fmtFreshness`) and an absolute date beyond, or the last-run date-time when stopped. Cadence column + `snapshot_interval` field for order book. Inline Start/Stop/Delete.
   - Single top bar carries the brand (logo · `dccd` · version) left and the nav right. Dates render in `settings.timezone` (`local`/`UTC`/zoneinfo) via `DCCD_TZ` in `fmtNs`/`fmtDate`; relative ages are tz-independent.
   - `dashboard.html` (KPIs + Active now / Recent runs / Data), `logs.html` (recent runs first, live console secondary, human run labels), `config.html` (Settings incl. `timezone`/Alerts/Storage + Raw JSON — **no jobs form**; jobs are managed on Historical/Live), `storage.html` (sizes via `fmtBytes`; no migrate tool).

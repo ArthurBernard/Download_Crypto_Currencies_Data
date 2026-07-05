@@ -169,6 +169,7 @@ cursor-paginated and drain the full requested window.
 
    how-to/schedule-daily
    how-to/deep-trades
+   how-to/derivatives
    how-to/analyse
    how-to/sync-remote
    how-to/protect-ui
