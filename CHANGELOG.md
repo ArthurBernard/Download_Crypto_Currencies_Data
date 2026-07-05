@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.7.0] - 2026-07-05
+
+### Added
+
 - `Symbol.market` (`spot`/`perp`/`quarter`/`next_quarter`) with `:market` pair
   syntax (`BTC/USDT:perp`), market-suffixed storage slugs (`BTC-USDT_PERP`), and
   per-market capability declarations (`Capability.markets`, `recent_window_s`)
@@ -42,14 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (span/coverage columns for OI, `:perp` pair hints, OI span select), plus a
   `how-to/derivatives` guide (funding, OI forward collection, quarterly klines
   → basis recipe) and the per-exchange capability matrix updated. (#191)
-
-### Changed
-
-### Fixed
-
-### Deprecated
-
-### Removed
 
 ## [3.6.3] - 2026-06-20
 
