@@ -8,7 +8,7 @@ the code — the things that bite if you forget them.
 
 | Exchange | OHLC history | Trades history | Order-book history | OHLC live | Trades live | Book live |
 |----------|--------------|----------------|--------------------|-----------|-------------|-----------|
-| binance  | ✅ REST (1000/req) | ✅ REST cursor (`fromId`) | ❌ → WS | ✅ | ✅ | ✅ |
+| binance  | ✅ REST (1000/req), + perp/quarterly continuous klines | ✅ REST cursor (`fromId`) | ❌ → WS | ✅ | ✅ | ✅ |
 | bybit    | ✅ REST (1000) | ❌ recent-only → WS | ❌ → WS | ✅ | ✅ | ✅ |
 | coinbase | ✅ REST (300/req) | ⚠️ slow cursor | ❌ → WS | ❌ (not impl.) | ✅ | ❌ (not impl.) |
 | kraken   | ⚠️ **720 recent only** | ✅ REST full (`since`) | ❌ → WS | ✅ | ✅ | ✅ |
@@ -20,6 +20,26 @@ the code — the things that bite if you forget them.
 is to record the WS stream over time, then read it back from the store.
 Capabilities that aren't implemented are **not declared** (so the engine raises
 `NoCapability` early rather than "running" empty).
+
+## Derivative data (perp/futures markets — `:perp` etc. symbol suffix)
+
+Only binance and bybit declare derivative capabilities; the other five adapters
+are spot-only (funding/OI requests raise `NoCapability`).
+
+| Exchange | Funding history | Open-interest history | Futures klines |
+|----------|-----------------|-----------------------|----------------|
+| binance  | ✅ full (`fundingRate`, perp, to contract launch) | ⚠️ **30-day window only** (`openInterestHist`, hard API cap) | ✅ continuous `perp`/`quarter`/`next_quarter` via `continuousKlines` |
+| bybit    | ✅ full (probed to contract launch 2020-03) | ✅ full (to symbol launch, real `nextPageCursor`) | ❌ (spot klines only) |
+
+- **Binance OI history is a hard 30-day cap** — older points are unrecoverable.
+  Deep Binance OI can only be built by forward-collecting via a recurring job
+  that never lapses > 30 days. Bybit OI is the deep-history source.
+- **Funding is an event series** (one row per ~8 h settlement, no span);
+  open interest is **span-typed like OHLC** (`span` required; bybit spans
+  5m/15m/30m/1h/4h/1d, binance adds 2h/6h/12h).
+- **Bybit funding pagination is backward** with a fake cursor (the endpoint
+  rejects a `cursor` param; the adapter re-anchors `endTime` on the oldest
+  event seen). Binance funding walks forward on `startTime`.
 
 ## Caveats that drive the code
 
