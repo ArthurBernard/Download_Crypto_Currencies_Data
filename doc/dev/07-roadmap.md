@@ -91,13 +91,6 @@ treat as bugs (see `06-status.md`).
 - [ ] **Kraken deep OHLC from trades** — a `DerivedOHLCSource` wiring
   `domain/transforms.aggregate_ohlc` into the resolver (REST only gives 720 recent
   bars; the transform exists but isn't wired).
-- [ ] **Kraken Futures adapter (funding + perp klines)** — new
-  `sources/kraken_futures.py` (separate API surface from spot `KrakenSource`):
-  funding history (**hourly**, hard ~1-year rolling window → `history="recent"`,
-  probed live 2026-07-05; 300 `PF_` perps — widest alt-perp universe surveyed)
-  + perp/mark klines via the charts API (deep, ~2000 candles/page). OI is
-  snapshot-only → P2 design note. Scan rows 17–19. **Start within the quarter**
-  (the 1-year funding window rolls).
 - [ ] **OKX funding / open interest** — cheap follow-ons on the shipped
   `FUNDING`/`OPEN_INTEREST` mixins (derivative-markets epic, PRs #183–#190);
   **verify history depth empirically before declaring capabilities** (scan rows
