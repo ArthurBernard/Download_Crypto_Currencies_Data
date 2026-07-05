@@ -22,6 +22,7 @@ from dccd.sources.binance import BinanceSource
 from dccd.sources.bybit import BybitSource
 from dccd.sources.coinbase import CoinbaseSource
 from dccd.sources.kraken import KrakenSource
+from dccd.sources.kraken_futures import KrakenFuturesSource
 from dccd.sources.okx import OKXSource
 from dccd.sources.registry import SourceRegistry
 
@@ -452,6 +453,134 @@ class TestBybitOpenInterestHistory:
         assert oi == []
         assert next_cursor is None
         assert captured == []
+
+
+class TestKrakenFuturesFunding:
+    """``PF_`` linear-perp funding — single unpaginated ~1-year window."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], response):
+        """Return a fake ``AsyncHTTPClient`` returning *response* on every call."""
+
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return response
+
+        client = _FakeClient()
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return client
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_funding_history(self):
+        assert isinstance(KrakenFuturesSource(), FundingHistory)
+
+    def test_render_symbol_btc_aliased_to_xbt(self):
+        src = KrakenFuturesSource()
+        assert src.render_symbol(Symbol.parse("BTC/USD:perp")) == "PF_XBTUSD"
+
+    def test_render_symbol_eth_unaliased(self):
+        src = KrakenFuturesSource()
+        assert src.render_symbol(Symbol.parse("ETH/USD:perp")) == "PF_ETHUSD"
+
+    def test_sole_capability_is_honest_recent_funding(self):
+        src = KrakenFuturesSource()
+        caps = src.capabilities()
+        assert len(caps) == 1, "funding must be the ONLY declared capability"
+        cap = caps[0]
+        assert cap.data_type == DataType.FUNDING
+        assert cap.transport == "rest"
+        assert cap.mode == "historical"
+        assert cap.history == "recent"
+        assert cap.recent_window_s == 365 * 86400
+        assert cap.max_per_request == 10000
+        assert cap.page_direction is None
+        assert cap.markets == ["perp"]
+
+    @pytest.mark.asyncio
+    async def test_request_sends_symbol_only(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"result": "success", "rates": []}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_funding_page(Symbol.parse("BTC/USD:perp"), 0, 2**63 - 1, 10000)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://futures.kraken.com/derivatives/api/v4/historicalfundingrates"
+        assert params == {"symbol": "PF_XBTUSD"}
+
+    @pytest.mark.asyncio
+    async def test_iso_z_timestamp_to_ns_exact_and_relative_rate(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"result": "success", "rates": [
+            # 2025-07-02T08:00:00Z == 1751443200 s epoch.
+            {"timestamp": "2025-07-02T08:00:00Z",
+             "fundingRate": 0.669129677269492056,
+             "relativeFundingRate": 0.000006246193055556},
+        ]}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        rates, _ = await src.fetch_funding_page(
+            Symbol.parse("BTC/USD:perp"), 0, 2**63 - 1, 10000)
+
+        assert len(rates) == 1
+        assert rates[0].ts == 1_751_443_200 * NS
+        # rate is the comparable relativeFundingRate, NOT the absolute fundingRate.
+        assert rates[0].rate == 0.000006246193055556
+
+    @pytest.mark.asyncio
+    async def test_window_filter_and_cursor_always_none(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"result": "success", "rates": [
+            {"timestamp": "2025-07-02T08:00:00Z", "fundingRate": 0.1,
+             "relativeFundingRate": 0.0001},  # 1751443200 — before window
+            {"timestamp": "2026-07-04T12:00:00Z", "fundingRate": 0.2,
+             "relativeFundingRate": 0.0002},  # 1783166400 — inside window
+        ]}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        start_ns = 1_783_000_000 * NS
+        end_ns = 1_784_000_000 * NS
+        rates, next_cursor = await src.fetch_funding_page(
+            Symbol.parse("BTC/USD:perp"), start_ns, end_ns, 10000)
+
+        assert [r.rate for r in rates] == [0.0002]
+        assert next_cursor is None
+
+    @pytest.mark.asyncio
+    async def test_next_cursor_none_even_on_full_window(self):
+        # Even a maximal response is one page: the endpoint is unpaginated.
+        captured: list[tuple[str, dict]] = []
+        response = {"result": "success", "rates": [
+            {"timestamp": "2026-07-04T12:00:00Z", "fundingRate": 0.2,
+             "relativeFundingRate": 0.0002},
+        ]}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        _, next_cursor = await src.fetch_funding_page(
+            Symbol.parse("BTC/USD:perp"), 0, 2**63 - 1, 1, cursor="ignored")
+
+        assert next_cursor is None
+        assert len(captured) == 1  # cursor/limit ignored, no extra params sent
+        assert captured[0][1] == {"symbol": "PF_XBTUSD"}
+
+    @pytest.mark.asyncio
+    async def test_error_result_returns_empty_no_crash(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"result": "error", "errors": [{"code": "not_found"}]}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        rates, next_cursor = await src.fetch_funding_page(
+            Symbol.parse("BTC/USD:perp"), 0, 2**63 - 1, 10000)
+
+        assert rates == []
+        assert next_cursor is None
 
 
 class TestStreamCapabilityHonesty:

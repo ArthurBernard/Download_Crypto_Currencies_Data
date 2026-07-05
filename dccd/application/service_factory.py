@@ -40,6 +40,7 @@ def build_registry() -> "SourceRegistry":
     from dccd.sources.bybit import BybitSource
     from dccd.sources.coinbase import CoinbaseSource
     from dccd.sources.kraken import KrakenSource
+    from dccd.sources.kraken_futures import KrakenFuturesSource
     from dccd.sources.okx import OKXSource
     from dccd.sources.registry import SourceRegistry
 
@@ -47,6 +48,7 @@ def build_registry() -> "SourceRegistry":
     reg.register("binance", BinanceSource())
     reg.register("coinbase", CoinbaseSource())
     reg.register("kraken", KrakenSource())
+    reg.register("krakenfutures", KrakenFuturesSource())
     reg.register("bybit", BybitSource())
     reg.register("okx", OKXSource())
     reg.register("bitfinex", BitfinexSource())

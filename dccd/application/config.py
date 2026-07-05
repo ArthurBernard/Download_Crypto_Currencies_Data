@@ -32,7 +32,8 @@ _XDG_CONFIG_HOME = pathlib.Path(
 DEFAULT_CONFIG_PATH = _XDG_CONFIG_HOME / "dccd" / "config.yml"
 
 SUPPORTED_EXCHANGES: frozenset[str] = frozenset(
-    {"binance", "kraken", "bybit", "okx", "coinbase", "bitfinex", "bitmex"}
+    {"binance", "kraken", "krakenfutures", "bybit", "okx", "coinbase",
+     "bitfinex", "bitmex"}
 )
 
 

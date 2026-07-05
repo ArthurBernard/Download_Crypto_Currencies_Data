@@ -367,18 +367,28 @@ class _FundingFakeSource(FundingHistory):
 
     exchange = "fake"
 
-    def __init__(self, rates: list[FundingRate], markets: list[str] | None, max_per_request: int = 2) -> None:
+    def __init__(
+        self,
+        rates: list[FundingRate],
+        markets: list[str] | None,
+        max_per_request: int = 2,
+        history: str = "full",
+        recent_window_s: int | None = None,
+    ) -> None:
         self._rates = rates
         self._markets = markets
         self._max_per_request = max_per_request
+        self._history = history
+        self._recent_window_s = recent_window_s
         self.calls: list[tuple[int, int, int, str | None]] = []
 
     def capabilities(self) -> list[Capability]:
         return [
             Capability(
                 data_type=DataType.FUNDING, transport="rest", mode="historical",
-                history="full", max_per_request=self._max_per_request,
+                history=self._history, max_per_request=self._max_per_request,
                 page_direction="forward", markets=self._markets,
+                recent_window_s=self._recent_window_s,
             ),
         ]
 
@@ -465,6 +475,52 @@ class TestBackfillFunding:
         result = await backfill(spec, registry=_FundingFakeReg(src), store=store)
         assert "error" not in result
         assert src.calls
+
+    @pytest.mark.asyncio
+    async def test_recent_window_clamp_fires_at_boundary(self, tmp_path):
+        # Kraken Futures pattern: a time-bound ~1-year rolling window.
+        recent_window_s = 365 * 86400
+        src = _FundingFakeSource(
+            [FundingRate(ts=NS, rate=0.0001)], markets=["perp"],
+            history="recent", recent_window_s=recent_window_s,
+        )
+        store = ParquetStore(tmp_path)
+        # Requested start (2020) is far older than the 1-year recent window.
+        spec = self._spec(start="2020-01-01")
+
+        bus = EventBus()
+        received = []
+        bus.subscribe(received.append)
+        events = bus.for_run("r1")
+
+        result = await backfill(spec, registry=_FundingFakeReg(src), store=store, events=events)
+
+        assert "error" not in result
+        assert result["start_ns"] == result["end_ns"] - recent_window_s * NS
+        warnings = [e for e in received if isinstance(e, LogEvent) and e.level == "warning"]
+        assert any("clamping start" in w.message for w in warnings)
+
+    @pytest.mark.asyncio
+    async def test_full_history_funding_not_clamped(self, tmp_path):
+        # Regression: Binance/Bybit funding declare history="full" — a deep
+        # start must be honoured verbatim, with no clamp warning.
+        src = _FundingFakeSource(
+            [FundingRate(ts=1_622_505_600 * NS, rate=0.0002)], markets=["perp"],
+        )
+        store = ParquetStore(tmp_path)
+        spec = self._spec(start="2020-01-01")
+
+        bus = EventBus()
+        received = []
+        bus.subscribe(received.append)
+        events = bus.for_run("r1")
+
+        result = await backfill(spec, registry=_FundingFakeReg(src), store=store, events=events)
+
+        assert "error" not in result
+        assert result["start_ns"] == 1_577_836_800 * NS  # 2020-01-01, untouched
+        warnings = [e for e in received if isinstance(e, LogEvent) and e.level == "warning"]
+        assert not any("clamping start" in w.message for w in warnings)
 
 
 # ---------------------------------------------------------------------------
