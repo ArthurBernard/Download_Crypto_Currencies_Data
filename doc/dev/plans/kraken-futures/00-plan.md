@@ -71,7 +71,7 @@ FUNDING/OHLC frameworks shipped in v3.7.0. All endpoint facts were
 
 ## Leaf checklist
 
-- [ ] 01 adapter-funding — feat/kraken-futures-funding — medium
+- [x] 01 adapter-funding — feat/kraken-futures-funding — medium
 - [ ] 02 charts-klines-docs — feat/kraken-futures-klines — medium (depends on 01)
 
 ## Dependencies
