@@ -1,8 +1,9 @@
 # 4 — Exchanges & capabilities
 
-Seven spot adapters in `dccd/sources/`. Each declares `capabilities()`; the engine
-honours them. This page is the factual matrix plus the caveats that actually shape
-the code — the things that bite if you forget them.
+Eight adapters in `dccd/sources/` — seven spot plus the derivatives-only
+`krakenfutures`. Each declares `capabilities()`; the engine honours them. This
+page is the factual matrix plus the caveats that actually shape the code — the
+things that bite if you forget them.
 
 ## Capability summary
 
@@ -23,23 +24,34 @@ Capabilities that aren't implemented are **not declared** (so the engine raises
 
 ## Derivative data (perp/futures markets — `:perp` etc. symbol suffix)
 
-Only binance and bybit declare derivative capabilities; the other five adapters
-are spot-only (funding/OI requests raise `NoCapability`).
+Only binance, bybit and krakenfutures declare derivative capabilities; the
+other five adapters are spot-only (funding/OI requests raise `NoCapability`).
+`krakenfutures` is a **separate adapter and API surface** from spot kraken
+(host `futures.kraken.com`, `PF_` symbols) and is derivatives-only.
 
 | Exchange | Funding history | Open-interest history | Futures klines |
 |----------|-----------------|-----------------------|----------------|
 | binance  | ✅ full (`fundingRate`, perp, to contract launch) | ⚠️ **30-day window only** (`openInterestHist`, hard API cap) | ✅ continuous `perp`/`quarter`/`next_quarter` via `continuousKlines` |
 | bybit    | ✅ full (probed to contract launch 2020-03) | ✅ full (to symbol launch, real `nextPageCursor`) | ❌ (spot klines only) |
+| krakenfutures | ⚠️ **~1-year rolling window**, **hourly** cadence (`relativeFundingRate`, ~300 `PF_` linear perps) | ❌ **not implemented by design** — upstream is snapshot-only (`ticker.openInterest`), no honest `history` declaration possible | ✅ deep perp klines via the **charts API** (`/api/charts/v1/trade`, 2000/page, 9 resolutions 1m…1w) |
 
 - **Binance OI history is a hard 30-day cap** — older points are unrecoverable.
   Deep Binance OI can only be built by forward-collecting via a recurring job
   that never lapses > 30 days. Bybit OI is the deep-history source.
-- **Funding is an event series** (one row per ~8 h settlement, no span);
+- **Funding is an event series** (one row per settlement, no span);
   open interest is **span-typed like OHLC** (`span` required; bybit spans
   5m/15m/30m/1h/4h/1d, binance adds 2h/6h/12h).
+- **Funding cadence differs**: Kraken Futures settles **hourly**; Binance/Bybit
+  every ~8 h. Normalise before any cross-exchange comparison.
+  Kraken Futures funding is also window-capped (~1 year, unpaginated single
+  response) — a recurring job must accumulate history forward.
 - **Bybit funding pagination is backward** with a fake cursor (the endpoint
   rejects a `cursor` param; the adapter re-anchors `endTime` on the oldest
-  event seen). Binance funding walks forward on `startTime`.
+  event seen). Binance funding walks forward on `startTime`. Kraken Futures
+  is unpaginated (one response = the whole window).
+- **Kraken Futures charts API takes `from`/`to` in seconds** but returns
+  candle `time` in **ms** (live-probed 2026-07); ascending, anchored on
+  `from`, ~2 000 candles max per response.
 
 ## Caveats that drive the code
 
