@@ -91,27 +91,21 @@ treat as bugs (see `06-status.md`).
 - [ ] **Kraken deep OHLC from trades** — a `DerivedOHLCSource` wiring
   `domain/transforms.aggregate_ohlc` into the resolver (REST only gives 720 recent
   bars; the transform exists but isn't wired).
-- [ ] **Derivative markets** — `DataType` for funding / open-interest /
-  liquidations, `Symbol.market=perp`. **Sequencing informed by the 2026-07 data scan**
-  ([`plans/data-sources-scan-2026-07.md`](plans/data-sources-scan-2026-07.md), 16 sources
-  verified against official API docs):
-  - **P0 — funding rates, Binance + Bybit first** (full history via public REST,
-    simple pagination; OKX depth unconfirmed → P1). The `DataType.FUNDING` framework
-    makes every other `/futures/data/*` endpoint a cheap follow-on.
-  - **P0 — quarterly-futures klines (→ basis)**: NOT a new DataType — reuses the OHLC
-    machinery verbatim (one adapter change). Best value-for-effort of the whole scan;
-    can ship before the epic proper.
-  - **P1, time-sensitive — open interest + long/short + taker ratios on Binance**:
-    history capped at 30 days/1 month → every week of delay is data lost forever;
-    Bybit OI has full history (backtestable). Start forward collection early.
-  - **Descoped within this epic — liquidations**: WS-only, forward-only, throttled/lossy
-    (no REST history exists); architecturally unlike the rest — park it.
+- [ ] **OKX funding / open interest** — cheap follow-ons on the shipped
+  `FUNDING`/`OPEN_INTEREST` mixins (derivative-markets epic, PRs #183–#190);
+  **verify history depth empirically before declaring capabilities** (scan rows
+  3/6 left both unconfirmed; the honesty invariant requires a probe, not an
+  assumption). Liquidations stay out of scope (WS-only, forward-only, lossy —
+  see the 2026-07-05 ADR tombstone).
 - [ ] **Metric-series sources (non-exchange)** — a second generalization: no
   `Symbol(base,quote)`, no OHLC shape; `(ts, entity, metric, value)` instead. From the
   same scan: **P0 CoinMetrics Community** (full daily history, free, non-commercial
   licence — the "on-chain" unblock named by fynance-research) and **P0 DefiLlama
   stablecoins** (supply/peg since ~2017 — a liquidity-proxy family nothing else covers);
   P1 Deribit DVOL (OHLC-shaped, public) and Fear & Greed (trivial single call). The
-  first source pays for the schema; the rest are nearly free follow-ons.
+  first source pays for the schema; the rest are nearly free follow-ons. Also
+  **Binance long/short + taker ratios** (scan row 7): same `(ts, metric, value)`
+  shape, same 30-day cap as Binance OI — **time-sensitive**, forward collection
+  should start as soon as the schema exists.
 - [ ] **Auth/secrets for private endpoints** — credential injection into
   `transport/` for authenticated exchange endpoints.
