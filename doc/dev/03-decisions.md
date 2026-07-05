@@ -120,6 +120,29 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-07-05 — Kraken Futures: separate adapter, relative rate stored, FUNDING clamp generalised (PR #196)  [accepted]
+- **Choice**: Kraken Futures is a **new adapter** (`sources/kraken_futures.py`,
+  exchange `krakenfutures`) rather than methods on spot `KrakenSource`;
+  `FundingRate.rate` stores `relativeFundingRate` (the comparable per-period
+  rate) and drops the absolute per-contract `fundingRate`; the
+  `history="recent"`+`recent_window_s` clamp now applies to the FUNDING
+  backfill branch (previously OI-only), trimming Kraken's single unpaginated
+  ~1-year response to the declared window.
+- **Why**: different host, symbol scheme (`PF_XBTUSD`), auth model and JSON
+  shapes — grafting onto `KrakenSource` would entangle two API surfaces behind
+  one exchange name and break capability honesty (spot has no perps). The
+  relative rate is the only cross-exchange-comparable field; the absolute one
+  is contract-denominated and would poison funding-spread research. Without
+  the FUNDING clamp, a deep `start` would silently "succeed" with one year of
+  data — the looks-collected-but-isn't failure mode.
+- **Rejected alternatives**: one Kraken adapter with an internal futures
+  branch (hidden coupling, dishonest spot capabilities); storing both rate
+  fields (schema noise for a field no research consumes; revisit if
+  contract-PnL accounting ever matters). Note for research: Kraken funding is
+  **hourly** (vs ~8h elsewhere) and hourly tails can exceed 1e-3 in crashes
+  (SOL 2025-10-10 −0.00125, verified against the raw API) — normalise cadence
+  before comparing.
+
 ### 2026-07-05 — Liquidations descoped from the derivative-markets epic (PR #191)  [rejected]
 - **Choice**: the derivative-markets epic shipped funding (Binance + Bybit),
   open interest (Bybit deep + Binance 30-day forward) and quarterly-futures

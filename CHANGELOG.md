@@ -16,6 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+## [3.8.0] - 2026-07-05
+
+### Added
+
+- Kraken Futures adapter (`krakenfutures`) — hourly perp funding history over
+  the exchange's ~1-year rolling window (`history="recent"` +
+  `recent_window_s` clamp, now enforced on the FUNDING backfill branch too);
+  300 `PF_` linear perps addressable via `BTC/USD:perp` (XBT alias handled).
+  Verified on real data: ~8 750 hourly rows × BTC/ETH/SOL, values
+  byte-identical to the exchange. (#196)
+- Kraken Futures perp klines via the charts API (`from`/`to` in seconds,
+  2000-candle pages, 9 resolutions 1m–1w, deep history — verified gap-free
+  across page seams back to 2022); derivative capability matrix, CLAUDE.md
+  and the `how-to/derivatives` cadence caveat (1h vs 8h funding) updated. (#197)
+
 ## [3.7.0] - 2026-07-05
 
 ### Added

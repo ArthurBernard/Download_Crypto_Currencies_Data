@@ -2,10 +2,16 @@
 Exchanges
 =========
 
-dccd supports **7 exchanges**. Each adapter declares its
+dccd supports **8 exchanges**: the 7 spot venues below plus **Kraken Futures**
+(``krakenfutures``), a derivatives-only adapter (hourly funding + deep perp
+klines — see :doc:`/how-to/derivatives`). Each adapter declares its
 :class:`~dccd.domain.capability.Capability` per data type and transport, and the
 engine honours them — an unsupported request is rejected early rather than
 silently returning wrong or partial data.
+
+Binance and Bybit additionally serve derivative data (funding, open interest,
+futures klines) on their ``:perp``/``:quarter`` markets — also covered in
+:doc:`/how-to/derivatives`.
 
 Capabilities
 ============

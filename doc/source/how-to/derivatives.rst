@@ -38,6 +38,26 @@ everything back to contract launch:
 
 Funding has no ``span`` — it is an event series, like trades.
 
+**Kraken Futures** (exchange name ``krakenfutures``, USD-quoted linear perps)
+also serves funding history, with two twists:
+
+- **Hourly cadence** — Kraken settles funding every hour, not every ~8 h like
+  Binance/Bybit. Per-event rates are therefore roughly 8× smaller; **normalise
+  by cadence** (e.g. to a daily or annualised rate) before comparing across
+  exchanges. Don't let the smaller magnitude fool you: in a crash the hourly
+  tail gets fat — single hourly prints beyond 1e-3 have happened (e.g. SOL on
+  2025-10-10).
+- **~1-year rolling window** — the API keeps only about one year of history,
+  so a one-shot deep backfill is impossible. Start a **recurring job** early
+  and let it accumulate history forward; the window rolls.
+
+.. code-block:: bash
+
+   dccd backfill -e krakenfutures -s BTC/USD:perp -t funding
+
+Note the quote: Kraken Futures perps are ``BTC/USD:perp`` (USD-margined), not
+``USDT``.
+
 Open interest
 =============
 
@@ -67,6 +87,14 @@ contracts — same OHLC pipeline, just a suffixed pair:
 .. code-block:: bash
 
    dccd backfill -e binance -s BTC/USDT:quarter -t ohlc --span 86400 --start 2024-01-01
+
+Kraken Futures serves **deep perp klines** through its charts API — full
+history back to contract launch (``PF_`` linear perps launched 2022-03; use it
+alongside the funding series above):
+
+.. code-block:: bash
+
+   dccd backfill -e krakenfutures -s BTC/USD:perp -t ohlc --span 3600 --start 2022-04-01
 
 Collecting spot and ``:quarter`` OHLC side by side gives you the **basis**
 (annualisable carry): dccd stores the two raw series; compute the spread

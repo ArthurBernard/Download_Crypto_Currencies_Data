@@ -400,6 +400,23 @@ async def backfill(
                     raise NoCapability(target.exchange, "funding", "historical")
                 _check_market(cap, target)
 
+                # Honour a time-bound "recent" window (used by Kraken
+                # Futures, ~1 rolling year): paginating further back just
+                # re-fetches the same recent events — clamp + warn instead,
+                # mirroring the OPEN_INTEREST clamp below. Binance/Bybit
+                # funding declare history="full" and are unaffected.
+                if cap.history == "recent" and cap.recent_window_s:
+                    earliest = end_ns - cap.recent_window_s * NS
+                    if start_ns < earliest:
+                        _emit_log(
+                            events, runs_store, run_id,
+                            f"{target.exchange} funding serves only the "
+                            f"last {cap.recent_window_s}s; clamping start "
+                            f"to {ns_to_dt(earliest).isoformat()}.",
+                            level="warning",
+                        )
+                        start_ns = earliest
+
                 # paginate_trades is duck-typed on ``.ts`` (see _get_ts in
                 # transport/paginate.py) and drives any cursor-paged record
                 # stream — funding events reuse it unchanged, no renaming.

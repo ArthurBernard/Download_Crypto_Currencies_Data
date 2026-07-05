@@ -35,6 +35,15 @@ an agent doesn't re-investigate settled ground or assume missing things are bugs
   re-homed on the roadmap. **Ops: start recurring Binance OI jobs on the
   production collector immediately after release — the 30-day cap makes delay
   irreversible.**
+- **Kraken Futures adapter (epic, PRs #196–#197, 2026-07-05)**: new
+  `krakenfutures` source (separate API surface from spot Kraken) — hourly perp
+  funding over the exchange's ~1-year rolling window (`history="recent"` +
+  clamp, now enforced on the FUNDING branch; 300 `PF_` perps, `BTC/USD:perp`)
+  and deep perp klines via the charts API (2000-candle pages, 9 resolutions,
+  verified to 2022 gap-free). OI deliberately not implemented (snapshot-only
+  upstream — design note in the plan archive/scan row 18). **Ops: add
+  recurring `krakenfutures` funding jobs on the production collector within
+  the quarter — the 1-year window rolls.**
 - **Security**: Bearer auth on `/api/*` when `ui_auth_token` is set; non-wildcard
   CORS via `ui_allow_origins`.
 - **Quality gates**: ~600 unit tests + 3 network E2E (opt-in); `ruff` + `mypy`

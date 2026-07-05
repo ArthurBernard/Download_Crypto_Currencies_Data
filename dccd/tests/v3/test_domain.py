@@ -23,6 +23,7 @@ from dccd.domain.timeutils import (
     bybit_interval,
     bybit_oi_interval,
     coinbase_granularity,
+    kraken_futures_resolution,
     kraken_interval,
     ns_to_s,
     okx_interval,
@@ -305,6 +306,22 @@ class TestTimeutils:
     def test_kraken_interval(self):
         assert kraken_interval(3600) == 60
         assert kraken_interval(86400) == 1440
+
+    def test_kraken_futures_resolution(self):
+        assert kraken_futures_resolution(60) == "1m"
+        assert kraken_futures_resolution(300) == "5m"
+        assert kraken_futures_resolution(900) == "15m"
+        assert kraken_futures_resolution(1800) == "30m"
+        assert kraken_futures_resolution(3600) == "1h"
+        assert kraken_futures_resolution(14400) == "4h"
+        assert kraken_futures_resolution(43200) == "12h"
+        assert kraken_futures_resolution(86400) == "1d"
+        assert kraken_futures_resolution(604800) == "1w"
+
+    def test_kraken_futures_resolution_unsupported_span(self):
+        assert kraken_futures_resolution(180) is None
+        assert kraken_futures_resolution(7200) is None
+        assert kraken_futures_resolution(2592000) is None
 
     def test_coinbase_granularity(self):
         assert coinbase_granularity(3600) == 3600

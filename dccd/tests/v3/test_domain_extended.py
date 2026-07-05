@@ -137,6 +137,14 @@ class TestJobConfigValidation:
         )
         assert jc.span == 3600
 
+    def test_krakenfutures_funding_job_valid(self) -> None:
+        jc = JobConfig(
+            exchange="krakenfutures", pairs=["BTC/USD:perp"], data_type="funding",
+        )
+        assert jc.exchange == "krakenfutures"
+        specs = jc.to_job_specs()
+        assert specs[0].target.symbol.market == "perp"
+
 
 class TestAppConfigValidation:
     def test_empty_jobs_allowed(self) -> None:
