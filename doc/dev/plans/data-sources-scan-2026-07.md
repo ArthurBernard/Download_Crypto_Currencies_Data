@@ -544,6 +544,64 @@ different generalization (metric-series, not per-pair OHLC).
 - **Priority: P2** (redundant with row 10 for research purposes; low priority
   given the better alternative already scoped).
 
+### 17. Kraken Futures — Funding Rate History (added 2026-07-05, post-epic)
+- **Source**: Kraken Futures public REST,
+  `GET https://futures.kraken.com/derivatives/api/v4/historicalfundingrates?symbol=PF_XBTUSD`.
+  **Verified by live probe** (2026-07-05), not just docs.
+- **What**: historical realized funding per perp. **300 tradeable `PF_` linear
+  perps** + 4 `PI_` inverse perps listed by `/derivatives/api/v3/instruments` —
+  by far the widest perp universe of the exchanges surveyed (many alts nothing
+  else covers). Two fields per entry: `fundingRate` (absolute, per contract)
+  and `relativeFundingRate` (the comparable per-period rate).
+- **History depth & granularity**: **hourly** cadence (vs 8h Binance/Bybit) and
+  a **hard ~1-year rolling window** — probed: exactly 8 823 entries (~367 d ×
+  24 h) for BOTH `PF_XBTUSD` and `PI_XBTUSD`, same start date one year back, no
+  `from`/`to` params honoured → single unpaginated response, window-capped.
+  Like Binance OI, history beyond a year must be accumulated forward — but the
+  window is 12× wider, so urgency is months, not days.
+- **API & limits**: public, no auth; one call returns the whole window.
+- **Effort to add to dccd**: **S/M** — the FUNDING framework exists (v3.7.0);
+  the cost is a **new adapter** `sources/kraken_futures.py` (exchange
+  `krakenfutures`): Kraken Futures is a separate API surface from spot
+  `KrakenSource` (different host, symbols, formats), NOT a method on the
+  existing adapter. `fetch_funding_page` itself is trivial (one call, filter
+  window, `next_cursor=None`); capability `history="recent"`,
+  `recent_window_s≈365d`, `markets=["perp"]`. Cadence note: store
+  `relativeFundingRate` in `FundingRate.rate`; research must normalise 1h vs
+  8h cadences before cross-exchange comparison.
+- **Documented alpha / intended use**: 3rd/4th leg of the cross-exchange
+  funding spread; hourly resolution is finer regime signal; unique long-tail
+  perp coverage (ADA/ATOM/UNI/… funding nothing else in dccd provides).
+- **Priority: P1** — cheap on the shipped framework, distinct coverage; the
+  1-year rolling window argues for starting collection within the quarter.
+
+### 18. Kraken Futures — Open Interest (snapshot only)
+- **Source**: `GET /derivatives/api/v3/tickers/{symbol}` → `openInterest`
+  field (live-probed). **No history endpoint exists** on the public API.
+- **What/depth**: current OI snapshot per perp; zero history.
+- **Effort to add to dccd**: **S mechanically, M conceptually** — a snapshot
+  source could implement `fetch_oi_page` returning a single `(now, oi)` row
+  (`next_cursor=None`), accumulating rows at the recurring-job cadence — the
+  same forward-capture philosophy as order-book snapshots. Needs an honest
+  capability shape decision (it is neither `history="full"` nor a meaningful
+  `recent_window_s`) — design note for the epic, not a blocker.
+- **Priority: P2** — forward-only from day one AND snapshot-granularity only;
+  do after funding + klines if at all.
+
+### 19. Kraken Futures — Klines (charts API)
+- **Source**: `GET https://futures.kraken.com/api/charts/v1/{tick_type}/{symbol}/{resolution}?from=&to=`
+  (tick_type ∈ trade/mark/spot; resolutions 1m…1w). Live-probed.
+- **History depth & granularity**: deep — `PI_XBTUSD` 1d reaches back to at
+  least **2020-02**; `PF_XBTUSD` since launch (2022-03). Responses cap at
+  **~2 000 candles** per call → window pagination (from/to), same
+  `paginate_ohlc` pattern dccd already runs.
+- **Effort to add to dccd**: **S** once the `kraken_futures` adapter exists
+  (OHLC protocol + `markets=["perp"]`; same 12-field-free parse, different
+  JSON shape). Gives Kraken-perp OHLC for the 300-perp universe + mark-price
+  klines (`tick_type=mark`) as a bonus.
+- **Priority: P1** — rides the same new adapter as row 17; deep history means
+  no urgency, but pairs naturally with funding for perp-native research.
+
 ---
 
 ## PART 3 — Top-3 recommendation & roadmap overlap
@@ -613,3 +671,6 @@ separate roadmap item rather than folding into the existing M3 entry.
 | 14 | DefiLlama stablecoins | Aggregate/per-chain/per-asset stablecoin supply + peg prices | Daily, full history from ~2017 | Public, free tier (Pro tier for higher limits) | S/M | Crypto liquidity proxy — distinct signal family | **P0** — free, deep, trivial shape, novel signal |
 | 15 | alternative.me | Fear & Greed Index | `limit=0` = full history (documented since 2018), daily | Public, no auth | **S — trivial, one call** | Contrarian sentiment overlay | **P1** — cheapest add; composite/opaque index, marginal-signal question |
 | 16 | Binance USDS-M | Dedicated Basis endpoint | **Capped at latest 30 days** (contrast row 10) | Public | S | Same as row 10 but shallow | **P2** — redundant with row 10 for research use |
+| 17 | Kraken Futures | Funding rate history (300 PF perps) | **Hourly**, hard ~1-year rolling window (probed: 8823 entries), single unpaginated response | Public, no auth | S/M (new `kraken_futures` adapter; FUNDING framework exists) | 3rd funding-spread leg + widest alt-perp universe, hourly resolution | **P1** — start within the quarter (1-yr window rolls) |
+| 18 | Kraken Futures | Open interest | **Snapshot only** (ticker field), no history endpoint | Public | S mech. / M design (snapshot-capture shape) | OI forward capture only | **P2** — after funding/klines, if at all |
+| 19 | Kraken Futures | Perp klines (charts API, trade/mark/spot) | Deep (PI 1d ≥2020-02; PF since 2022-03), ~2000 candles/page window paging | Public | S (same new adapter) | Kraken-perp OHLC + mark-price klines | **P1** — rides the row-17 adapter |
