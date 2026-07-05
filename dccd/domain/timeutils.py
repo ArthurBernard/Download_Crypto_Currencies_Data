@@ -26,6 +26,7 @@ __all__ = [
     "bybit_oi_interval",
     "okx_interval",
     "kraken_interval",
+    "kraken_futures_resolution",
     "coinbase_granularity",
 ]
 
@@ -304,6 +305,33 @@ def kraken_interval(span: int) -> int | None:
         _logger.warning("Kraken does not support %d-minute interval", minutes)
         return None
     return minutes
+
+
+def kraken_futures_resolution(span: int) -> str | None:
+    """Return Kraken Futures charts-API resolution string for *span* seconds.
+
+    The charts endpoint (``/api/charts/v1/trade/{symbol}/{resolution}``) accepts
+    a fixed set of resolutions — distinct from spot Kraken's minute integers
+    (:func:`kraken_interval`).
+
+    Examples
+    --------
+    >>> kraken_futures_resolution(3600)
+    '1h'
+    >>> kraken_futures_resolution(86400)
+    '1d'
+    >>> kraken_futures_resolution(7200) is None
+    True
+    """
+    _map = {
+        60: "1m", 300: "5m", 900: "15m", 1800: "30m",
+        3600: "1h", 14400: "4h", 43200: "12h",
+        86400: "1d", 604800: "1w",
+    }
+    result = _map.get(span)
+    if result is None:
+        _logger.warning("No Kraken Futures resolution for span=%d", span)
+    return result
 
 
 def coinbase_granularity(span: int) -> int | None:

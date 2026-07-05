@@ -488,14 +488,10 @@ class TestKrakenFuturesFunding:
         src = KrakenFuturesSource()
         assert src.render_symbol(Symbol.parse("ETH/USD:perp")) == "PF_ETHUSD"
 
-    def test_sole_capability_is_honest_recent_funding(self):
+    def test_funding_capability_is_honest_recent(self):
         src = KrakenFuturesSource()
-        caps = src.capabilities()
-        assert len(caps) == 1, "funding must be the ONLY declared capability"
-        cap = caps[0]
-        assert cap.data_type == DataType.FUNDING
-        assert cap.transport == "rest"
-        assert cap.mode == "historical"
+        cap = src.capability_for(DataType.FUNDING, "rest", "historical")
+        assert cap is not None
         assert cap.history == "recent"
         assert cap.recent_window_s == 365 * 86400
         assert cap.max_per_request == 10000
@@ -581,6 +577,104 @@ class TestKrakenFuturesFunding:
 
         assert rates == []
         assert next_cursor is None
+
+
+class TestKrakenFuturesKlines:
+    """Perp klines via the charts API — seconds params, string OHLCV fields."""
+
+    def _make_stub_http(self, captured: list[tuple[str, dict]], response):
+        """Return a fake ``AsyncHTTPClient`` returning *response* on every call."""
+
+        class _FakeClient:
+            async def get(self, url, params):
+                captured.append((url, dict(params)))
+                return response
+
+        client = _FakeClient()
+
+        class _FakeHTTP:
+            async def __aenter__(self):
+                return client
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _FakeHTTP()
+
+    def test_implements_ohlc_history(self):
+        assert isinstance(KrakenFuturesSource(), OHLCHistory)
+
+    def test_ohlc_capability_full_history_perp_only(self):
+        src = KrakenFuturesSource()
+        cap = src.capability_for(DataType.OHLC, "rest", "historical")
+        assert cap is not None
+        assert cap.history == "full"
+        assert cap.max_per_request == 2000
+        assert cap.page_direction == "forward"
+        assert cap.markets == ["perp"]
+        assert cap.spans == [60, 300, 900, 1800, 3600, 14400, 43200, 86400,
+                             604800]
+
+    def test_no_ws_or_oi_capabilities_declared(self):
+        # Honesty invariant: no WS channels, no open interest (snapshot-only
+        # upstream → no honest history declaration possible).
+        src = KrakenFuturesSource()
+        assert src.capability_for(DataType.OHLC, "ws", "live") is None
+        assert src.capability_for(DataType.TRADES, "ws", "live") is None
+        assert src.capability_for(DataType.ORDERBOOK, "ws", "live") is None
+        assert src.capability_for(
+            DataType.OPEN_INTEREST, "rest", "historical") is None
+
+    @pytest.mark.asyncio
+    async def test_charts_url_and_seconds_params(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"candles": []}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        await src.fetch_ohlc_page(
+            Symbol.parse("BTC/USD:perp"), 3600, START_NS, END_NS, 2000)
+
+        assert len(captured) == 1
+        url, params = captured[0]
+        assert url == "https://futures.kraken.com/api/charts/v1/trade/PF_XBTUSD/1h"
+        # from/to are SECONDS (live-probed), not ms or ns.
+        assert params == {"from": 1_600_000_000, "to": 1_600_003_600}
+
+    @pytest.mark.asyncio
+    async def test_string_ohlcv_fields_parsed_to_floats(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"candles": [
+            {"time": 1_600_000_000_000, "open": "10912.5", "high": "10921.0",
+             "low": "10904.5", "close": "10917.5", "volume": "1573129"},
+        ]}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        bars = await src.fetch_ohlc_page(
+            Symbol.parse("BTC/USD:perp"), 3600, START_NS, END_NS, 2000)
+
+        assert len(bars) == 1
+        bar = bars[0]
+        assert bar.ts == 1_600_000_000 * NS  # response time is ms → ns
+        assert bar.open == 10912.5
+        assert bar.high == 10921.0
+        assert bar.low == 10904.5
+        assert bar.close == 10917.5
+        assert bar.volume == 1573129.0
+        # Not provided by the endpoint — must stay null, never fabricated.
+        assert bar.quote_volume is None
+        assert bar.trades is None
+
+    @pytest.mark.asyncio
+    async def test_unsupported_span_returns_empty_no_request(self):
+        captured: list[tuple[str, dict]] = []
+        response = {"candles": []}
+        src = KrakenFuturesSource(http=self._make_stub_http(captured, response))
+
+        bars = await src.fetch_ohlc_page(
+            Symbol.parse("BTC/USD:perp"), 7200, START_NS, END_NS, 2000)
+
+        assert bars == []
+        assert captured == []
 
 
 class TestStreamCapabilityHonesty:

@@ -164,6 +164,7 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 | `binance.py` | Full history OHLC+trades, depth 5000; perp/quarterly continuous futures klines, funding (full), open interest (30-day window only) |
 | `coinbase.py` | 300 candles/req (Paginator handles automatically) |
 | `kraken.py` | OHLC: 720 recent only (`history="recent"`); trades: full via `since` cursor |
+| `kraken_futures.py` | Separate API surface (`krakenfutures`, `PF_` linear perps): funding **hourly** cadence, ~1-year rolling window (`history="recent"`); deep perp klines via charts API (2000/page); no OI (snapshot-only upstream) |
 | `bybit.py` | No spot trades history (capability not declared → `NoCapability` early); funding + open interest full history (perp) |
 | `okx.py` | `history-candles` + `history-trades` for deep history |
 | `bitfinex.py` | Up to 10 000 items per request |
