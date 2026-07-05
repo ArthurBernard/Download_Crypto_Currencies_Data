@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Deprecated
+
+### Removed
+
+## [3.8.0] - 2026-07-05
+
+### Added
+
 - Kraken Futures adapter (`krakenfutures`) — hourly perp funding history over
   the exchange's ~1-year rolling window (`history="recent"` +
   `recent_window_s` clamp, now enforced on the FUNDING backfill branch too);
@@ -18,14 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2000-candle pages, 9 resolutions 1m–1w, deep history — verified gap-free
   across page seams back to 2022); derivative capability matrix, CLAUDE.md
   and the `how-to/derivatives` cadence caveat (1h vs 8h funding) updated. (#197)
-
-### Changed
-
-### Fixed
-
-### Deprecated
-
-### Removed
 
 ## [3.7.0] - 2026-07-05
 
