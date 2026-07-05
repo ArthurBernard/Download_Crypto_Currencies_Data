@@ -15,6 +15,8 @@
   <code>first&nbsp;date → today</code>. A <strong>Schedule</strong> turns a job
   into a recurring backfill (a cron) — it runs only while the daemon
   (<code>dccd&nbsp;start</code>) is up. Deleting a job never deletes stored data.
+  Derivative datasets (funding, open interest, futures OHLC) use a market suffix
+  on the pair, e.g. <code>BTC/USDT:perp</code> or <code>BTC/USDT:quarter</code>.
 </p>
 
 <!-- New job for a not-yet-listed exchange -->
@@ -23,10 +25,14 @@
 <div class="tabs" id="hist-tabs">
   <button class="tab" data-tab="ohlc">OHLC</button>
   <button class="tab" data-tab="trades">Trades</button>
+  <button class="tab" data-tab="funding">Funding</button>
+  <button class="tab" data-tab="open_interest">Open Interest</button>
 </div>
 
 <div data-pane="ohlc"><span class="muted">Loading…</span></div>
 <div data-pane="trades"><span class="muted">Loading…</span></div>
+<div data-pane="funding"><span class="muted">Loading…</span></div>
+<div data-pane="open_interest"><span class="muted">Loading…</span></div>
 {% endblock %}
 
 {% block scripts %}
@@ -34,14 +40,34 @@
 const EXCHANGES = ['binance','coinbase','kraken','bybit','okx','bitfinex','bitmex'];
 const SPANS = [[60,'1m'],[300,'5m'],[900,'15m'],[1800,'30m'],[3600,'1h'],
                [14400,'4h'],[86400,'1d'],[604800,'1w']];
+// Open-interest endpoints are span-typed too, but serve a narrower span set
+// (intersection of binance/bybit) — no 1m, no 1w.
+const OI_SPANS = [[300,'5m'],[900,'15m'],[1800,'30m'],[3600,'1h'],[14400,'4h'],[86400,'1d']];
 // Schedule presets (seconds) offered in the cron dropdown.
 const SCHEDULES = [[3600,'Hourly'],[21600,'Every 6h'],[43200,'Every 12h'],[86400,'Daily']];
 const NS = 1e9;
+const HIST_DTS = ['ohlc','trades','funding','open_interest'];
+const DT_LABEL = {ohlc:'OHLC', trades:'trades', funding:'funding', open_interest:'open interest'};
 let JOBS = [], INV = [], openExchanges = {};
 
 function sid(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
 function keyOf(ex, pair, dt, span){ return `${ex}|${pair}|${dt}|${span??''}`; }
 function spanLabel(s){ const m = SPANS.find(x=>x[0]===s); return m?m[1]:(s?s+'s':'—'); }
+// Span-typed data types get a Span column/select (OHLC and open interest).
+function hasSpan(dt){ return dt==='ohlc' || dt==='open_interest'; }
+function spansFor(dt){ return dt==='open_interest' ? OI_SPANS : SPANS; }
+// Derivative pairs use a `:market` symbol suffix but a `_MARKET` slug on disk:
+// BTC/USDT:perp <-> BTC-USDT_PERP (see DatasetId.pair_slug).
+function pairSlug(sym){
+  const [pair, market] = String(sym).split(':');
+  return pair.replace(/\//g,'-') + (market ? '_'+market.toUpperCase() : '');
+}
+function slugToSym(slug){
+  const i = String(slug).indexOf('_');  // first _ only: NEXT_QUARTER keeps its own
+  const pair = i < 0 ? String(slug) : slug.slice(0, i);
+  const market = i < 0 ? '' : slug.slice(i + 1);
+  return pair.replace(/-/,'/') + (market ? ':'+market.toLowerCase() : '');
+}
 
 async function loadAll() {
   try {
@@ -49,7 +75,7 @@ async function loadAll() {
       api('GET','/api/jobs'), api('GET','/api/inventory')]);
     JOBS = (jr.jobs||[]).filter(j => j.operation === 'backfill');
     INV = ir.datasets || [];
-    for (const dt of ['ohlc','trades']) renderPane(dt);
+    for (const dt of HIST_DTS) renderPane(dt);
   } catch (e) {
     document.querySelectorAll('[data-pane]').forEach(p =>
       p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
@@ -58,21 +84,21 @@ async function loadAll() {
 
 function invFor(ex, pair, dt, span) {
   return INV.find(d => d.exchange===ex && d.pair===pair && d.data_type===dt
-    && (dt!=='ohlc' || d.span===span));
+    && (!hasSpan(dt) || d.span===span));
 }
 
 function renderPane(dt) {
   const pane = document.querySelector(`[data-pane="${dt}"]`);
   // Rows = backfill jobs of this data type, plus orphan datasets (no job).
   const jobs = JOBS.filter(j => j.data_type === dt);
-  const jobKeys = new Set(jobs.map(j => keyOf(j.exchange, j.symbol.replace(/\//g,'-'), dt, j.span)));
+  const jobKeys = new Set(jobs.map(j => keyOf(j.exchange, pairSlug(j.symbol), dt, j.span)));
   const orphans = INV.filter(d => d.data_type===dt
     && !jobKeys.has(keyOf(d.exchange, d.pair, dt, d.span)));
 
   const exchanges = [...new Set([...jobs.map(j=>j.exchange), ...orphans.map(o=>o.exchange)])].sort();
   if (!exchanges.length) {
     pane.innerHTML = `<div class="card muted" style="text-align:center;padding:1.5rem">
-      No ${dt} jobs yet. Use <strong>＋ Add</strong> above to create one.</div>`;
+      No ${DT_LABEL[dt]||dt} jobs yet. Use <strong>＋ Add</strong> above to create one.</div>`;
     return;
   }
   let html = '';
@@ -89,7 +115,7 @@ function renderPane(dt) {
         <span class="ex-meta">${exJobs.length} job${exJobs.length!==1?'s':''} ${runAllBtn}</span></summary>
       <div class="ex-body">
         <table><thead><tr>
-          <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>First date</th>
+          <th>Pair</th>${hasSpan(dt)?'<th>Span</th>':''}<th>First date</th>
           <th>Schedule</th><th>Last date</th>
           <th>Coverage (first date → today)</th><th>Rows</th><th></th>
         </tr></thead><tbody>`;
@@ -113,7 +139,7 @@ function renderPane(dt) {
 }
 
 function coverageHtml(j, dt) {
-  const pair = j.symbol.replace(/\//g,'-');
+  const pair = pairSlug(j.symbol);
   const inv = invFor(j.exchange, pair, dt, j.span);
   const now = Date.now()*1e6;
   // Left edge = target first date (job.start if a date), else dataset start.
@@ -128,7 +154,7 @@ function coverageHtml(j, dt) {
     pct = Math.min(100, Math.round(covered/total*100));
     gapPct = Math.min(100, Math.round(leadGap/total*100));
     title = `${fmtNum(inv.rows||0)} rows · ${fmtNs(inv.min_ts)} → ${fmtNs(inv.max_ts)}`;
-    if (dt==='ohlc' && inv.expected_rows) {
+    if (hasSpan(dt) && inv.expected_rows) {
       title += ` · ${fmtNum(inv.missing_rows||0)} missing of ${fmtNum(inv.expected_rows)} bars`;
     }
   }
@@ -171,7 +197,7 @@ function scheduleHtml(j) {
 }
 
 function rowHtml(j, dt) {
-  const pair = j.symbol.replace(/\//g,'-');
+  const pair = pairSlug(j.symbol);
   const inv = invFor(j.exchange, pair, dt, j.span);
   const last = inv && inv.max_ts != null ? fmtNs(inv.max_ts) : '<span class="muted">empty</span>';
   const rows = inv ? fmtNum(inv.rows||0) : '0';
@@ -181,7 +207,7 @@ function rowHtml(j, dt) {
     || (inv && inv.min_ts != null ? new Date(inv.min_ts/1e6).toISOString().slice(0,10) : '');
   return `<tr id="row-${sid(j.id)}">
     <td><strong>${escapeHtml(j.symbol)}</strong></td>
-    ${dt==='ohlc'?`<td>${spanLabel(j.span)}</td>`:''}
+    ${hasSpan(dt)?`<td>${spanLabel(j.span)}</td>`:''}
     <td><input type="date" value="${dateVal}" style="font-size:.78rem;padding:.2rem .3rem"
         title="Target first date (job start)"
         onchange='updateStart(${attrJson(j.id)}, this.value)'></td>
@@ -198,10 +224,10 @@ function rowHtml(j, dt) {
 }
 
 function orphanRowHtml(o, dt) {
-  const sym = o.pair.replace(/-/, '/');
+  const sym = slugToSym(o.pair);
   return `<tr>
     <td>${escapeHtml(o.pair)}</td>
-    ${dt==='ohlc'?`<td>${spanLabel(o.span)}</td>`:''}
+    ${hasSpan(dt)?`<td>${spanLabel(o.span)}</td>`:''}
     <td class="muted" style="font-size:.8rem">${fmtNs(o.min_ts)}</td>
     <td class="muted">—</td>
     <td class="muted" style="font-size:.8rem">${fmtNs(o.max_ts)}</td>
@@ -353,11 +379,15 @@ async function doDelete(jobId) {
 }
 
 // --- add-job forms ---------------------------------------------------------
+function pairPlaceholder(dt) {
+  // Funding/open interest exist on perpetual futures only — hint the suffix.
+  return (dt==='funding' || dt==='open_interest') ? 'BTC/USDT:perp' : 'BTC/USDT';
+}
 function addFormHtml(ex, dt) {
-  const spanSel = dt==='ohlc'
-    ? `<div><label>Span</label><select id="span-${sid(ex+dt)}">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>` : '';
+  const spanSel = hasSpan(dt)
+    ? `<div><label>Span</label><select id="span-${sid(ex+dt)}">${spansFor(dt).map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>` : '';
   return `<div class="inline-form" id="addf-${sid(ex+dt)}" style="display:none">
-    <div><label>Pair</label><input id="pair-${sid(ex+dt)}" placeholder="BTC/USDT" style="width:9rem"></div>
+    <div><label>Pair</label><input id="pair-${sid(ex+dt)}" placeholder="${pairPlaceholder(dt)}" style="width:9rem"></div>
     ${spanSel}
     <div><label>First date</label><input type="date" id="date-${sid(ex+dt)}"></div>
     <button style="font-size:.8rem" onclick='createJob(${attrJson(ex)}, ${attrJson(dt)})'>Create</button>
@@ -370,11 +400,11 @@ function toggleAddForm(key) {
 async function createJob(ex, dt) {
   const k = sid(ex+dt);
   const pair = (document.getElementById('pair-'+k).value||'').trim();
-  if (!pair) { toast('Pair required (e.g. BTC/USDT)','err'); return; }
+  if (!pair) { toast(`Pair required (e.g. ${pairPlaceholder(dt)})`,'err'); return; }
   const dateV = document.getElementById('date-'+k).value;
   const payload = { operation:'backfill', exchange:ex, symbol:pair, data_type:dt,
                     start: dateV || 'last', trigger_kind:'manual' };
-  if (dt==='ohlc') payload.span = parseInt(document.getElementById('span-'+k).value,10);
+  if (hasSpan(dt)) payload.span = parseInt(document.getElementById('span-'+k).value,10);
   try { await api('POST','/api/jobs/create', payload);
     toast('Job created','ok'); await loadAll();
   } catch (e) { toast(e.message,'err'); }
@@ -398,8 +428,10 @@ function toggleNewExchange() {
     <div><label>Exchange</label><select id="ne-ex">${EXCHANGES.map(e=>`<option>${e}</option>`).join('')}</select></div>
     <div><label>Data type</label><select id="ne-dt" onchange="neToggleSpan()">
       <option value="ohlc"${dt==='ohlc'?' selected':''}>OHLC</option>
-      <option value="trades"${dt==='trades'?' selected':''}>Trades</option></select></div>
-    <div id="ne-span-wrap"><label>Span</label><select id="ne-span">${SPANS.map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('')}</select></div>
+      <option value="trades"${dt==='trades'?' selected':''}>Trades</option>
+      <option value="funding"${dt==='funding'?' selected':''}>Funding</option>
+      <option value="open_interest"${dt==='open_interest'?' selected':''}>Open Interest</option></select></div>
+    <div id="ne-span-wrap"><label>Span</label><select id="ne-span"></select></div>
     <div><label>Pair</label><input id="ne-pair" placeholder="BTC/USDT" style="width:9rem"></div>
     <div><label>First date</label><input type="date" id="ne-date"></div>
     <button style="font-size:.8rem" onclick="createNew()">Create</button>
@@ -410,7 +442,11 @@ function toggleNewExchange() {
 }
 function neToggleSpan() {
   const dt = document.getElementById('ne-dt').value;
-  document.getElementById('ne-span-wrap').style.display = dt==='ohlc' ? '' : 'none';
+  document.getElementById('ne-span-wrap').style.display = hasSpan(dt) ? '' : 'none';
+  // Span choices and pair hint depend on the data type.
+  document.getElementById('ne-span').innerHTML = spansFor(dt)
+    .map(s=>`<option value="${s[0]}"${s[0]===3600?' selected':''}>${s[1]}</option>`).join('');
+  document.getElementById('ne-pair').placeholder = pairPlaceholder(dt);
 }
 async function createNew() {
   const ex = document.getElementById('ne-ex').value;
@@ -420,7 +456,7 @@ async function createNew() {
   const payload = { operation:'backfill', exchange:ex, symbol:pair, data_type:dt,
                     start: document.getElementById('ne-date').value || 'last',
                     trigger_kind:'manual' };
-  if (dt==='ohlc') payload.span = parseInt(document.getElementById('ne-span').value,10);
+  if (hasSpan(dt)) payload.span = parseInt(document.getElementById('ne-span').value,10);
   try { await api('POST','/api/jobs/create', payload);
     toast('Job created','ok'); toggleNewExchange();
     if (location.hash.slice(1)!==dt) { location.hash = dt; }

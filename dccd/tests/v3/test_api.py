@@ -463,6 +463,32 @@ class TestJobCrudEndpoints:
         job_id = r.json()["job_id"]
         jobs = client.get("/api/jobs").json()["jobs"]
         assert any(j["id"] == job_id for j in jobs)
+        # Round-trip: delete drops it from the listing.
+        d = client.post("/api/jobs/delete", json={"job_id": job_id})
+        assert d.status_code == 200
+        jobs = client.get("/api/jobs").json()["jobs"]
+        assert not any(j["id"] == job_id for j in jobs)
+
+    def test_create_funding_job_roundtrip(self, client):
+        """Funding jobs (no span) create, list with data_type, and delete."""
+        r = client.post("/api/jobs/create", json={
+            "operation": "backfill", "exchange": "binance",
+            "symbol": "BTC/USDT:perp", "data_type": "funding",
+            "start": "2024-01-01",
+        })
+        assert r.status_code == 200, r.text
+        job_id = r.json()["job_id"]
+        jobs = client.get("/api/jobs").json()["jobs"]
+        created = next((j for j in jobs if j["id"] == job_id), None)
+        assert created is not None
+        # The UI's Funding tab filters on these fields — they must round-trip.
+        assert created["data_type"] == "funding"
+        assert created["span"] is None
+        assert created["symbol"] == "BTC/USDT:perp"
+        d = client.post("/api/jobs/delete", json={"job_id": job_id})
+        assert d.status_code == 200
+        jobs = client.get("/api/jobs").json()["jobs"]
+        assert not any(j["id"] == job_id for j in jobs)
 
     def test_update_start(self, client):
         job_id = client.post("/api/jobs/create", json={

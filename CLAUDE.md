@@ -119,9 +119,9 @@ Pure, synchronous, no I/O. Never import from transport/sources/storage.
 
 | Module | Contents |
 |--------|----------|
-| `symbol.py` | `Symbol(base, quote)` — normalises XBT→BTC |
-| `types.py` | `DataType` enum: `ohlc`, `trades`, `orderbook` |
-| `records.py` | `OHLCBar`, `Trade`, `OrderBookSnapshot` (ns timestamps) |
+| `symbol.py` | `Symbol(base, quote, market)` — normalises XBT→BTC; `market` = `spot`/`perp`/`quarter`/`next_quarter` (`BTC/USDT:perp` syntax, `_PERP` slugs on disk) |
+| `types.py` | `DataType` enum: `ohlc`, `trades`, `orderbook`, `funding`, `open_interest` |
+| `records.py` | `OHLCBar`, `Trade`, `OrderBookSnapshot`, `FundingRate`, `OpenInterest` (ns timestamps) |
 | `dataset.py` | `DatasetId`, `Provenance` |
 | `capability.py` | `Capability` — declared per adapter per (data_type × transport × mode) |
 | `timeutils.py` | Helpers: `s_to_ns`, `align_ns`, `span_label`, `binance_interval`, … |
@@ -161,10 +161,10 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 
 | Exchange | Notes |
 |----------|-------|
-| `binance.py` | Full history OHLC+trades, depth 5000 |
+| `binance.py` | Full history OHLC+trades, depth 5000; perp/quarterly continuous futures klines, funding (full), open interest (30-day window only) |
 | `coinbase.py` | 300 candles/req (Paginator handles automatically) |
 | `kraken.py` | OHLC: 720 recent only (`history="recent"`); trades: full via `since` cursor |
-| `bybit.py` | No spot trades history (capability not declared → `NoCapability` early) |
+| `bybit.py` | No spot trades history (capability not declared → `NoCapability` early); funding + open interest full history (perp) |
 | `okx.py` | `history-candles` + `history-trades` for deep history |
 | `bitfinex.py` | Up to 10 000 items per request |
 | `bitmex.py` | Bucketed OHLC (1m/5m/1h/1d only), full trades |
@@ -201,8 +201,8 @@ Adapters declare their capabilities via `capabilities() -> list[Capability]`.
 - `api/app.py` — FastAPI `create_app()`, lifespan context manager, module-level Pydantic request models. Job CRUD lives here: `POST /api/jobs/{create,delete,update}` (body-based to allow `/`/`:` in ids), all routed through the async `_persist_and_refresh` helper (writes YAML, updates `app.state`, calls `scheduler.sync_streams` **and** `scheduler.sync_intervals` to reconcile recurring backfills live). `POST /api/jobs/update` edits `start` and/or the recurring `every` (schedule). `GET /api/jobs` exposes `start`/`every`/`trigger`/`snapshot_interval`/`depth` so the UI can render and preserve them. `POST /api/jobs/run` + `/api/jobs/run-all` trigger configured backfills on demand. SSE at `GET /api/events` uses `add_queue`/`remove_queue` for multi-consumer fan-out.
 - `cli/main.py` — Typer commands, all import from `service_factory`
 - `ui/` — Jinja2 templates + static files. Nav: `Dashboard` · `Data` flat, plus `Collect ▾` (Historical/Live) and `System ▾` (Logs/Config/Storage) dropdowns. Pages are **split by concern**:
-  - **Data** (`data.html`, route `/data`; `/inventory` 307-redirects here) — read-only view of what's on disk: DataType tabs → per-exchange accordions with totals, freshness dot, OHLC gap %, on-disk size, file count. No action buttons.
-  - **Historical** (`historical.html`) — backfill jobs (**OHLC + Trades only**; order books have no REST history): DataType tabs → exchange accordions → one row per dataset with editable `first_date` (defaults to the dataset's earliest stored bar), a **Schedule** select (Off/hourly/daily/custom → `every`; `manual` trigger when off), real coverage bar, inline Run/Delete. **Run all** (header) + per-exchange **Run all**. New jobs default to `manual`.
+  - **Data** (`data.html`, route `/data`; `/inventory` 307-redirects here) — read-only view of what's on disk: DataType tabs (incl. Funding + Open Interest) → per-exchange accordions with totals, freshness dot, OHLC/OI gap %, on-disk size, file count. No action buttons.
+  - **Historical** (`historical.html`) — backfill jobs (**OHLC, Trades, Funding + Open Interest**; order books have no REST history): DataType tabs → exchange accordions → one row per dataset with editable `first_date` (defaults to the dataset's earliest stored bar), a **Schedule** select (Off/hourly/daily/custom → `every`; `manual` trigger when off), real coverage bar, inline Run/Delete. Span column/select is gated by `hasSpan(dt)` (OHLC + open interest); funding has no span. Pair fields accept the `:perp` market suffix (placeholder hints it on the derivative tabs). **Run all** (header) + per-exchange **Run all**. New jobs default to `manual`.
   - **Live** (`live.html`) — stream jobs (**Trades + Order Book only**; OHLC is collected via the Historical schedule, not streamed): same tab/accordion shape, with a liveness indicator fed by `StreamSampleEvent` over SSE (numeric `value`/`bid`/`ask`, formatted client-side via `fmtNum`). Liveness is **seeded from the last on-disk point** (inventory `max_ts`) so a refresh shows freshness without waiting for a live sample. The dot's "fresh" window is span-aware (order-book `snapshot_interval` / short for trades); the freshness label is a relative "N ago" under 24h (`fmtFreshness`) and an absolute date beyond, or the last-run date-time when stopped. Cadence column + `snapshot_interval` field for order book. Inline Start/Stop/Delete.
   - Single top bar carries the brand (logo · `dccd` · version) left and the nav right. Dates render in `settings.timezone` (`local`/`UTC`/zoneinfo) via `DCCD_TZ` in `fmtNs`/`fmtDate`; relative ages are tz-independent.
   - `dashboard.html` (KPIs + Active now / Recent runs / Data), `logs.html` (recent runs first, live console secondary, human run labels), `config.html` (Settings incl. `timezone`/Alerts/Storage + Raw JSON — **no jobs form**; jobs are managed on Historical/Live), `storage.html` (sizes via `fmtBytes`; no migrate tool).

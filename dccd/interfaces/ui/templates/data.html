@@ -17,16 +17,25 @@
   <button class="tab" data-tab="ohlc">OHLC</button>
   <button class="tab" data-tab="trades">Trades</button>
   <button class="tab" data-tab="orderbook">Order Book</button>
+  <button class="tab" data-tab="funding">Funding</button>
+  <button class="tab" data-tab="open_interest">Open Interest</button>
 </div>
 
 <div data-pane="ohlc"><span class="muted">Loading…</span></div>
 <div data-pane="trades"><span class="muted">Loading…</span></div>
 <div data-pane="orderbook"><span class="muted">Loading…</span></div>
+<div data-pane="funding"><span class="muted">Loading…</span></div>
+<div data-pane="open_interest"><span class="muted">Loading…</span></div>
 {% endblock %}
 {% block scripts %}
 <script>
 const SPANS = {60:'1m',300:'5m',900:'15m',1800:'30m',3600:'1h',14400:'4h',86400:'1d',604800:'1w'};
 function spanLabel(s){ return s ? (SPANS[s]||s+'s') : '—'; }
+// Span-typed data types get a Span column and a coverage/gap cell — the
+// inventory only computes expected_rows/missing_rows for these.
+function hasSpan(dt){ return dt==='ohlc' || dt==='open_interest'; }
+const DT_LABEL = {ohlc:'OHLC', trades:'trades', orderbook:'order book',
+                  funding:'funding', open_interest:'open interest'};
 let DATASETS = [];
 
 async function loadData() {
@@ -46,7 +55,7 @@ async function loadData() {
     document.getElementById('data-summary').innerHTML =
       `<div class="muted" style="font-size:.85rem">
         ${DATASETS.length} dataset(s) · ${fmtNum(totRows)} rows · ${fmtBytes(totBytes)} on disk</div>`;
-    for (const dt of ['ohlc','trades','orderbook']) renderPane(dt);
+    for (const dt of ['ohlc','trades','orderbook','funding','open_interest']) renderPane(dt);
   } catch (e) {
     document.querySelectorAll('[data-pane]').forEach(p =>
       p.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`);
@@ -58,7 +67,7 @@ function renderPane(dt) {
   const ds = DATASETS.filter(d => d.data_type === dt);
   if (!ds.length) {
     pane.innerHTML = `<div class="card muted" style="text-align:center;padding:1.5rem">
-      No ${dt} datasets stored.</div>`;
+      No ${DT_LABEL[dt]||dt} datasets stored.</div>`;
     return;
   }
   const byEx = {};
@@ -68,17 +77,19 @@ function renderPane(dt) {
   for (const ex of Object.keys(byEx).sort()) {
     const rows = byEx[ex].reduce((a,d)=>a+(d.rows||0),0);
     const bytes = byEx[ex].reduce((a,d)=>a+(d.bytes||0),0);
+    const coverageTip = dt==='ohlc'
+      ? 'Fraction of clock-time slots that contain a candle. Exchanges emit no candle for minutes without trades — low coverage on a quiet pair is normal, not data loss.'
+      : 'Fraction of clock-time slots that contain an open-interest point.';
     html += `<details class="ex" open><summary>
       <span class="ex-name">${escapeHtml(ex)}</span>
       <span class="ex-meta">${byEx[ex].length} dataset(s) · ${fmtNum(rows)} rows · ${fmtBytes(bytes)}</span>
     </summary><div class="ex-body">
     <table><thead><tr>
-      <th>Pair</th>${dt==='ohlc'?'<th>Span</th>':''}<th>Rows</th><th>From</th><th>To</th>
-      <th>Freshness</th>${dt==='ohlc'?'<th title="Fraction of clock-time slots that contain a candle. Exchanges emit no candle for minutes without trades — low coverage on a quiet pair is normal, not data loss.">Coverage ⓘ</th>':''}<th>Size</th><th>Files</th>
+      <th>Pair</th>${hasSpan(dt)?'<th>Span</th>':''}<th>Rows</th><th>From</th><th>To</th>
+      <th>Freshness</th>${hasSpan(dt)?`<th title="${coverageTip}">Coverage ⓘ</th>`:''}<th>Size</th><th>Files</th>
     </tr></thead><tbody>`;
     for (const d of byEx[ex]) {
       const fcls = stalenessClass(d.max_ts);
-      const coverageTip = 'Exchanges emit no candle for minutes without trades — low coverage on a quiet pair is normal, not data loss.';
       const gap = d.expected_rows
         ? (() => {
             const pct = 100 * (1 - d.missing_rows / d.expected_rows);
@@ -92,12 +103,12 @@ function renderPane(dt) {
         : '<td><span class="muted">n/a</span></td>';
       html += `<tr>
         <td><strong>${escapeHtml(d.pair)}</strong></td>
-        ${dt==='ohlc'?`<td>${spanLabel(d.span)}</td>`:''}
+        ${hasSpan(dt)?`<td>${spanLabel(d.span)}</td>`:''}
         <td class="muted">${fmtNum(d.rows||0)}</td>
         <td class="muted" style="font-size:.8rem">${fmtNs(d.min_ts)}</td>
         <td class="muted" style="font-size:.8rem">${fmtNs(d.max_ts)}</td>
         <td style="font-size:.8rem"><span class="live-dot ${fcls}"></span>${fmtAge(d.max_ts)}</td>
-        ${dt==='ohlc'?gap:''}
+        ${hasSpan(dt)?gap:''}
         <td class="muted" style="font-size:.8rem">${fmtBytes(d.bytes)}</td>
         <td class="muted">${d.files??'—'}</td>
       </tr>`;

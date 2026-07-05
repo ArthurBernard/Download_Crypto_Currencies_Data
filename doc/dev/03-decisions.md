@@ -120,7 +120,24 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-07-04 — Binance OI walk is endTime-bounded, not fullness-driven (PR #190)  [accepted]
+### 2026-07-05 — Liquidations descoped from the derivative-markets epic (PR #191)  [rejected]
+- **Choice**: the derivative-markets epic shipped funding (Binance + Bybit),
+  open interest (Bybit deep + Binance 30-day forward) and quarterly-futures
+  klines — and deliberately did **not** implement liquidations, although the
+  original roadmap line named them.
+- **Why**: market-wide liquidations have **no REST history on any surveyed
+  exchange** — public access is WS-stream-only, forward-only from connection
+  time, and Binance throttles the public feed to the largest order per second
+  per symbol, so even forward capture is a lossy sample, not a tape (scan row
+  8, [`plans/data-sources-scan-2026-07.md`](plans/data-sources-scan-2026-07.md)).
+  It is dccd's first would-be stream-only/no-backstop data type —
+  architecturally unlike everything the epic built. Do not silently re-add it
+  as "one more adapter method"; if it ever returns, it is its own epic with a
+  stream-first design and an explicit lossy-capture caveat in the capability
+  model.
+- **Rejected alternatives**: shipping the WS collector anyway (permanent,
+  invisible data-quality ceiling); emulating history from OHLC wicks
+  (fabricated data — violates provenance honesty).
 - **Choice**: `BinanceSource.fetch_oi_page` bounds every request to
   `endTime = min(global_end, startTime + (limit−1)·span)`, continues on
   *window-left* (`last_ts + span ≤ global_end`) rather than page fullness, and

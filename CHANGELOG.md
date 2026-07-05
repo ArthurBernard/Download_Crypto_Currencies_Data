@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `endTime`-anchored over-full windows that would otherwise silently drop all
   but the newest 500 rows (per-request `endTime` bounding + window-left
   continuation). (#190)
+- Funding and open-interest surfaced in the web UI: Data + Historical tabs
+  (span/coverage columns for OI, `:perp` pair hints, OI span select), plus a
+  `how-to/derivatives` guide (funding, OI forward collection, quarterly klines
+  → basis recipe) and the per-exchange capability matrix updated. (#191)
 
 ### Changed
 
