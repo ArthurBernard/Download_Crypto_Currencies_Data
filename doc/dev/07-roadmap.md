@@ -81,6 +81,25 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
+## Research-driven data asks (fynance-research, 2026-07-06)
+
+Filed after the allweather-wave campaign (E59–E74). Note: the **funding-rate ask is
+resolved** — the derivative-markets epic's series (`<exchange>/funding/…`, 8 h,
+Binance/Bybit/krakenfutures, 2019+) landed and the research repo now consumes it
+directly. What remains:
+
+- [ ] **P2 — Native-USD spot backfill for bybit/okx (BTC/ETH-USD).** bybit's USD
+  legs only start 2026-01, okx's 2024-01, so every cross-venue premium/dispersion
+  measurement (fynance-research E53/E61/E65/E71) substitutes the USDT legs under a
+  USD≈USDT parity assumption. Backfilling deeper native-USD history (as far as the
+  venues' REST archives allow — verify depth empirically per the honesty invariant)
+  removes the proxy from an entire measurement family.
+- [ ] **P3 — Quarterly futures klines: intraday granularity + pre-2021 backfill.**
+  `BTC/ETH-USDT_QUARTER` exists only at 1d from 2021-02; fynance-research E60
+  (basis-regime, null at that resolution/window) could not see the 2020–21 euphoria
+  top and cannot study roll behaviour intraday. Cheap follow-on of the
+  derivative-markets epic; opportunistic only.
+
 ## Deferred — M3 (post-3.0)
 
 Larger axes intentionally parked until after the 3.0 release. Not started; do not
