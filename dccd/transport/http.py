@@ -133,7 +133,17 @@ class AsyncHTTPClient:
                 if resp.status_code >= 400:
                     raise HTTPError(resp.status_code, url, resp.text)
                 return resp.json()
-            except (httpx.NetworkError, httpx.TimeoutException) as exc:
+            except (
+                httpx.NetworkError,
+                httpx.TimeoutException,
+                # A server closing the connection mid-exchange ("Server
+                # disconnected without sending a response") is as transient as
+                # a network error — some exchanges (e.g. Kraken Futures charts)
+                # shed long-lived keep-alive connections under load. Its
+                # sibling LocalProtocolError is deliberately NOT retried: that
+                # one means *we* built a bad request.
+                httpx.RemoteProtocolError,
+            ) as exc:
                 wait = self._backoff_base ** attempt
                 logger.warning("Network error %s (attempt %d), retry in %.1fs", exc, attempt + 1, wait)
                 await asyncio.sleep(wait)

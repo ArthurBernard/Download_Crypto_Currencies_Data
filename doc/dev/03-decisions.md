@@ -120,7 +120,22 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-07-05 — Kraken Futures: separate adapter, relative rate stored, FUNDING clamp generalised (PR #196)  [accepted]
+### 2026-07-06 — Retry server disconnects; keep local protocol errors fatal (PR #200)  [accepted]
+- **Choice**: `AsyncHTTPClient.get()` adds `httpx.RemoteProtocolError` to the
+  retryable set (alongside `NetworkError`/`TimeoutException`);
+  `LocalProtocolError` — the other `ProtocolError` child — deliberately stays
+  outside the retry loop.
+- **Why**: "Server disconnected without sending a response" is the server
+  shedding a keep-alive connection — as transient as a dropped socket. Under
+  the 2026-07-05 17-pair 1m expansion, Kraken Futures reset ~21 long deep-run
+  connections; each escaped the retry loop and killed a multi-hour backfill
+  that a 1-second retry would have saved. A local protocol error, by
+  contrast, means dccd built a malformed request — retrying would loop on our
+  own bug.
+- **Rejected alternatives**: catching `httpx.ProtocolError` wholesale (hides
+  our own request bugs); per-adapter try/except (N copies of transport
+  policy in source files); connection-per-request (kills pooling — the #129
+  pool-lifetime decision).
 - **Choice**: Kraken Futures is a **new adapter** (`sources/kraken_futures.py`,
   exchange `krakenfutures`) rather than methods on spot `KrakenSource`;
   `FundingRate.rate` stores `relativeFundingRate` (the comparable per-period

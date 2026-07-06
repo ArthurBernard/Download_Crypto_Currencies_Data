@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `AsyncHTTPClient` retries `httpx.RemoteProtocolError` ("Server disconnected
+  without sending a response") like other transient network errors — some
+  exchanges (Kraken Futures charts API) shed long-lived keep-alive connections
+  under concurrent load, and the escaping exception killed entire deep
+  backfill runs that a single retry saves (observed: 21 killed runs during
+  the 2026-07-05 17-pair 1m expansion, all recovered by re-trigger).
+  `LocalProtocolError` stays fatal (a malformed request is our bug). (#200)
+
 ### Deprecated
 
 ### Removed
