@@ -88,6 +88,13 @@ resolved** — the derivative-markets epic's series (`<exchange>/funding/…`, 8
 Binance/Bybit/krakenfutures, 2019+) landed and the research repo now consumes it
 directly. What remains:
 
+- [ ] **P1 — Atomic parquet writes (write temp + `os.replace`).** The live collector's
+  parquet writes are observably non-atomic: a concurrent reader caught **6 truncated
+  files mid-write** (`PAR1` footer check fails; e.g. `binance/ohlc/UNI-USDT/1m/2026.parquet`,
+  observed 2026-07-06 by fynance-research while backtesting against the live store —
+  transient, self-heals on the next write, but any reader race can crash or silently
+  read a partial year). Fix: write to `<file>.tmp` then atomic rename; cheap and
+  store-wide.
 - [ ] **P2 — Native-USD spot backfill for bybit/okx (BTC/ETH-USD).** bybit's USD
   legs only start 2026-01, okx's 2024-01, so every cross-venue premium/dispersion
   measurement (fynance-research E53/E61/E65/E71) substitutes the USDT legs under a
