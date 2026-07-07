@@ -88,6 +88,19 @@ resolved** — the derivative-markets epic's series (`<exchange>/funding/…`, 8
 Binance/Bybit/krakenfutures, 2019+) landed and the research repo now consumes it
 directly. What remains:
 
+- [ ] **P0/URGENT — kraken order-book collector writes an internally CROSSED book.**
+  Found by fynance-research E81 (2026-07-07, first research read of the book store):
+  on every kraken USD/EUR pair, **89.9–99.6% of snapshot instants have
+  best_bid > best_ask** (sampled BTC-USD instant: bid >$1,100 above ask; ETH-BTC
+  10.6%; binance/bybit/okx 0.0% on the same window) — almost certainly the bid/ask
+  sub-books are captured/flushed asynchronously and stamped under one batch TS. The
+  kraken book data collected so far is unusable for point-in-time reconstruction.
+  Fix: capture bid/ask atomically from a single WS message; add a crossed-book
+  assertion to the collector health checks so this is caught at write time.
+  Related (lower urgency, same audit): `is_snapshot=False` delta rows have **no
+  removal marker** (0 zero-amount rows in 1.37M) and batch many events under one
+  coarse TS — deltas are not point-in-time reconstructible as stored; okx depth is
+  5 levels (top-of-book only).
 - [ ] **P1 — Atomic parquet writes (write temp + `os.replace`).** The live collector's
   parquet writes are observably non-atomic: a concurrent reader caught **6 truncated
   files mid-write** (`PAR1` footer check fails; e.g. `binance/ohlc/UNI-USDT/1m/2026.parquet`,
