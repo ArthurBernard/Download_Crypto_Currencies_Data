@@ -72,6 +72,17 @@ jobs:
     operation: stream
     trigger_kind: supervised
 
+  # Historical Binance Futures trades supplied by CryptoHFTData.
+  # Install dccd[cryptohftdata]; set CRYPTOHFTDATA_API_KEY for authenticated access.
+  # - exchange: cryptohftdata-binance-futures
+  #   pairs:
+  #     - BTC/USDT:perp
+  #   data_type: trades
+  #   operation: backfill
+  #   trigger_kind: interval
+  #   every: 3600
+  #   start: last
+
   # Live order-book snapshots every 60 s.
   # - exchange: binance
   #   pairs:

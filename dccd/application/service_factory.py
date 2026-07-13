@@ -39,6 +39,7 @@ def build_registry() -> "SourceRegistry":
     from dccd.sources.bitmex import BitMEXSource
     from dccd.sources.bybit import BybitSource
     from dccd.sources.coinbase import CoinbaseSource
+    from dccd.sources.cryptohftdata import build_cryptohftdata_sources
     from dccd.sources.kraken import KrakenSource
     from dccd.sources.kraken_futures import KrakenFuturesSource
     from dccd.sources.okx import OKXSource
@@ -53,6 +54,8 @@ def build_registry() -> "SourceRegistry":
     reg.register("okx", OKXSource())
     reg.register("bitfinex", BitfinexSource())
     reg.register("bitmex", BitMEXSource())
+    for exchange, source in build_cryptohftdata_sources().items():
+        reg.register(exchange, source)
     return reg
 
 

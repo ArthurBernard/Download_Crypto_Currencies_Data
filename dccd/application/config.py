@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
 from dccd.domain.symbol import Symbol
 from dccd.domain.types import DataType
+from dccd.sources.cryptohftdata import CRYPTOHFTDATA_VENUES
 
 __all__ = [
     "AlertConfig",
@@ -33,7 +34,7 @@ DEFAULT_CONFIG_PATH = _XDG_CONFIG_HOME / "dccd" / "config.yml"
 
 SUPPORTED_EXCHANGES: frozenset[str] = frozenset(
     {"binance", "kraken", "krakenfutures", "bybit", "okx", "coinbase",
-     "bitfinex", "bitmex"}
+     "bitfinex", "bitmex", *CRYPTOHFTDATA_VENUES}
 )
 
 

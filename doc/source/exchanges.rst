@@ -2,7 +2,7 @@
 Exchanges
 =========
 
-dccd supports **8 exchanges**: the 7 spot venues below plus **Kraken Futures**
+dccd supports **8 direct exchange adapters**: the 7 spot venues below plus **Kraken Futures**
 (``krakenfutures``), a derivatives-only adapter (hourly funding + deep perp
 klines — see :doc:`/how-to/derivatives`). Each adapter declares its
 :class:`~dccd.domain.capability.Capability` per data type and transport, and the
@@ -12,6 +12,10 @@ silently returning wrong or partial data.
 Binance and Bybit additionally serve derivative data (funding, open interest,
 futures klines) on their ``:perp``/``:quarter`` markets — also covered in
 :doc:`/how-to/derivatives`.
+
+An optional :doc:`cryptohftdata` provider adds historical trades for 15
+provider-qualified spot and derivatives venues without replacing the direct
+exchange adapters.
 
 Capabilities
 ============
@@ -49,6 +53,9 @@ operation; the notes below qualify the limits.
    * - BitMEX
      - OHLC (1m/5m/1h/1d) · trades · book
      - OHLC · trades · book
+   * - CryptoHFTData venues
+     - trades
+     - —
 
 .. note::
 
@@ -115,6 +122,9 @@ Per-exchange pages
    .. grid-item-card:: BitMEX
       :link: bitmex
       :link-type: doc
+   .. grid-item-card:: CryptoHFTData
+      :link: cryptohftdata
+      :link-type: doc
 
 .. toctree::
    :hidden:
@@ -126,6 +136,7 @@ Per-exchange pages
    okx
    bitfinex
    bitmex
+   cryptohftdata
 
 Adding an exchange
 ==================

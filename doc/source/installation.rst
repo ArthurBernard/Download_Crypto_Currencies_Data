@@ -26,6 +26,12 @@ With daemon extras (CLI scheduler, APScheduler, YAML config, rclone sync):
 
    pip install dccd[daemon]
 
+With CryptoHFTData historical venue adapters:
+
+.. code-block:: bash
+
+   pip install dccd[cryptohftdata]
+
 Extras summary
 ~~~~~~~~~~~~~~
 
@@ -42,6 +48,9 @@ Extras summary
    * - ``daemon``
      - ``pip install dccd[daemon]``
      - CLI (``dccd`` command), APScheduler, PyYAML, Typer, rclone sync
+   * - ``cryptohftdata``
+     - ``pip install dccd[cryptohftdata]``
+     - Historical trades from 15 CryptoHFTData spot and derivatives venues
    * - ``ui``
      - ``pip install dccd[daemon,ui]``
      - Web UI / JSON API (``dccd ui``): FastAPI, uvicorn, Jinja2

@@ -9,6 +9,8 @@ window past a single capped page — the regression that silently dropped >95% o
 trades on every exchange but Binance.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 
 from dccd.application.jobs import JobParams, JobSpec, JobTarget, Trigger
@@ -98,3 +100,35 @@ async def test_binance_ohlc_backfill_roundtrip(tmp_path):
     ts = df["TS"].to_list()
     assert ts == sorted(ts)  # monotonic, deduplicated
     assert df["quote_volume"].null_count() == 0  # Binance provides it natively
+
+
+@pytest.mark.asyncio
+async def test_cryptohftdata_trades_exact_window():
+    """CryptoHFTData returns canonical trades bounded to the requested hour."""
+    pytest.importorskip("cryptohftdata")
+    from dccd.sources.cryptohftdata import CryptoHFTDataSource
+
+    source = CryptoHFTDataSource(
+        "cryptohftdata-binance-futures",
+        "binance_futures",
+        ["perp"],
+    )
+    start = int(datetime(2026, 7, 11, tzinfo=timezone.utc).timestamp() * NS)
+    end = start + 3600 * NS - 1
+    cursor = None
+    trades = []
+    while True:
+        page, cursor = await source.fetch_trades_page(
+            Symbol(base="KAVA", quote="USDT", market="perp"),
+            start,
+            end,
+            10_000,
+            cursor,
+        )
+        trades.extend(page)
+        if cursor is None:
+            break
+
+    assert len(trades) > 500
+    assert all(start <= trade.ts <= end for trade in trades)
+    assert {trade.side for trade in trades} == {"buy", "sell"}

@@ -27,7 +27,8 @@
    </div>
 
 ``dccd`` downloads crypto-currency data (OHLCV, trades, order book) from
-7 exchanges and stores it as nanosecond-precision Parquet — backfill history or
+8 direct exchange adapters, with optional CryptoHFTData historical venues, and
+stores it as nanosecond-precision Parquet — backfill history or
 stream live, from Python, a CLI, or a web UI. No API key required.
 
 .. code-block:: bash
@@ -74,7 +75,8 @@ New here? Start with :doc:`tutorials/first-backfill`.
 
 .. rubric:: Key features
 
-- **7 exchanges** — Binance, Coinbase, Kraken, Bybit, OKX, Bitfinex, BitMEX
+- **8 direct adapters** — Binance, Coinbase, Kraken, Kraken Futures, Bybit, OKX,
+  Bitfinex, BitMEX — plus 15 optional CryptoHFTData historical venue adapters
 - **3 data types** — OHLCV candles, trade history, order book snapshots
 - **Async-first** — ``async with Client() as c: await c.backfill(...)``; httpx + websockets
 - **Cursor-paginated trades** — backfills drain the full window (no silent loss)
@@ -138,6 +140,9 @@ the data types an exchange supports for that operation.
    * - BitMEX
      - OHLC · trades · book
      - OHLC · trades · book
+   * - CryptoHFTData venues
+     - trades
+     - —
 
 .. [#recent] Coinbase trades backfill returns recent trades only (no deep
    history). Bybit spot has no trade history at all.

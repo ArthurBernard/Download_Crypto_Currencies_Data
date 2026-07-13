@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CryptoHFTData as an optional historical trade provider across 15 spot and
+  derivatives venues, with provider-qualified source IDs, bounded cursor pages,
+  canonical nanosecond records, keyless/API-key access, and end-to-end tests.
+
 ### Changed
 
 ### Fixed

@@ -29,3 +29,9 @@ Source protocols
 .. automodule:: dccd.sources.base
    :members:
    :show-inheritance:
+
+CryptoHFTData provider
+======================
+
+.. autoclass:: dccd.sources.cryptohftdata.CryptoHFTDataSource
+   :members:

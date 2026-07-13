@@ -15,8 +15,9 @@
 ---
 
 **dccd** downloads crypto-currency market data (OHLCV, trades, order book)
-from 7 exchanges via REST and WebSocket. Data is stored as Parquet files with
-nanosecond-precision timestamps.
+from 8 direct exchange adapters via REST and WebSocket. CryptoHFTData can also
+serve deep historical trades across 15 provider-qualified venues. Data is stored
+as Parquet files with nanosecond-precision timestamps.
 
 ## Architecture (v3)
 
@@ -52,6 +53,7 @@ You pick a **data type** (OHLC · trades · order book) and an **operation** —
 | OKX      | OHLC · trades · book | OHLC · trades · book |
 | Bitfinex | OHLC · trades · book | OHLC · trades |
 | BitMEX   | OHLC *(1m/5m/1h/1d)* · trades · book | OHLC · trades · book |
+| CryptoHFTData venues | trades | — |
 
 Trades backfill is **cursor-paginated** (drains the full window, not just the
 first page). *recent* = no deep history via the public API (a deeper request is
@@ -81,6 +83,9 @@ pip install dccd
 # With scheduler, CLI, and web UI
 pip install "dccd[daemon]"
 
+# With CryptoHFTData historical venues
+pip install "dccd[cryptohftdata]"
+
 # Development
 pip install "dccd[dev]"
 ```
@@ -102,6 +107,23 @@ async def main():
 
 asyncio.run(main())
 ```
+
+CryptoHFTData uses provider-qualified exchange names so provenance remains
+unambiguous. For example, the following resumes Binance Futures trade history
+from CryptoHFTData instead of calling Binance directly:
+
+```python
+async with Client() as c:
+    result = await c.backfill(
+        "cryptohftdata-binance-futures",
+        "BTC/USDT:perp",
+        data_type="trades",
+        start="last",
+    )
+```
+
+Keyless access uses the public free tier. Set `CRYPTOHFTDATA_API_KEY` for
+authenticated access. See the [provider documentation](https://cryptohftdata.com/docs).
 
 ### CLI
 
