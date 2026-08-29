@@ -1,5 +1,20 @@
 # Contributing to dccd
 
+## Scope — new data sources
+
+dccd collects from venues it queries **directly**: an adapter talks to the
+exchange that produced the data, and the store records where every row came
+from. Third-party data providers and archive re-publishers are out of scope as
+sources, however good their data — provenance is the property the whole project
+is built on (see [`doc/dev/03-decisions.md`](doc/dev/03-decisions.md)).
+
+A new **direct** exchange adapter is welcome: one `dccd/sources/<venue>.py`
+implementing the protocol mixins from `sources/base.py`, an honest
+`capabilities()`, tests, and one line in `service_factory.build_registry()`.
+For anything larger than a single adapter — a new data type, a new storage
+shape, a new axis in the architecture — open an issue first; those need a design
+discussion and an ADR before the code.
+
 ## Setup
 
 ```bash

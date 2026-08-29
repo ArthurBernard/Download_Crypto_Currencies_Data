@@ -120,6 +120,40 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-08-29 — Third-party commercial data providers are not dccd sources (PR #203)  [rejected]
+- **Choice**: an external PR adding CryptoHFTData — a commercial archive
+  re-publisher — as 15 provider-qualified entries in `SUPPORTED_EXCHANGES`
+  (`cryptohftdata-binance-futures`, …) was declined. A dccd source is a venue
+  dccd fetches from *directly*; a re-publisher is not a source, whatever the
+  data quality.
+- **Why**: the store's value is that every record was fetched by dccd from the
+  venue that produced it — provenance is the product, not a nice-to-have, and
+  it is what makes the archive auditable. A normalised republication is
+  second-hand and lands under its own dataset key, so it duplicates the
+  existing `binance`/`kraken`/… datasets instead of repairing them; none of the
+  open data asks in [`07-roadmap.md`](07-roadmap.md) would have been closed by
+  it. The costs it carried are the general shape of this class of PR:
+  `history="full"` declared for 15 venues with exactly one verified (the
+  honesty invariant asserted rather than established); one symbol renderer
+  (`f"{base}{quote}"`) guessed for venues whose naming the provider serves from
+  its own registry; the vendor SDK sitting outside the `shared_limiter`/retry
+  seam; and README/index/installation placement for a paid product on a project
+  whose pitch is "No API key required".
+- **Rejected alternatives**: (a) merging it behind the optional extra — the
+  extra bounds the *dependency*, not the provenance nor the maintenance surface
+  (15 venue IDs, a symbol registry and a schema all owned by a third party);
+  (b) accepting it as a bulk-ingest path — `TradesHistory` is a per-record REST
+  protocol, so day-partitioned Parquet pushed through it materialises a full day
+  as `list[Trade]` (~1.1 kB per pydantic `Trade`, several GB for one liquid perp
+  day) and runs the conversion on the event loop: REST costs paid on bulk data,
+  cancelling the format's only advantage. If a bulk path is ever wanted its
+  shape is a `provider` axis orthogonal to `exchange`, feeding
+  Parquet → polars → `canonicalize()` with no per-record objects — which would
+  also serve the M3 `DerivedOHLCSource` line — and it needs its own ADR first.
+  The standing counter-offer for such contributions is a **direct** adapter for
+  an uncovered venue (hyperliquid, bitget, lighter, aster — free public APIs,
+  effort S/M per [`plans/data-sources-scan-2026-07.md`](plans/data-sources-scan-2026-07.md)).
+
 ### 2026-07-06 — Retry server disconnects; keep local protocol errors fatal (PR #200)  [accepted]
 - **Choice**: `AsyncHTTPClient.get()` adds `httpx.RemoteProtocolError` to the
   retryable set (alongside `NetworkError`/`TimeoutException`);
