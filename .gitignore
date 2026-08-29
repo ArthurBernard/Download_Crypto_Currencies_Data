@@ -8,6 +8,7 @@ logs/
 old_scripts/
 
 # Ignore files
+.env
 Exemple_excel_dccd.png
 setup.cfg
 dccd/version.py
