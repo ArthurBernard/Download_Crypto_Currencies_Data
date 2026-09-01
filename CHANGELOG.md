@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+### Deprecated
+
+### Removed
+
+## [3.8.1] - 2026-09-01
+
+### Fixed
+
 - `AsyncHTTPClient` retries `httpx.RemoteProtocolError` ("Server disconnected
   without sending a response") like other transient network errors — some
   exchanges (Kraken Futures charts API) shed long-lived keep-alive connections
