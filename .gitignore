@@ -45,3 +45,9 @@ scripts/
 
 # Archived (pre-rewrite) developer docs — local snapshot, not tracked
 doc/dev/_archive/
+
+# Claude Code workflow — local-only state (shared workflow.json / settings.json
+# and hooks ARE committed; per-machine overrides are not)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
