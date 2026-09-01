@@ -37,7 +37,8 @@ def _branch() -> str:
 
 def main() -> None:
     cfg = _cfg()
-    lines = [f"dccd workflow — branch: {_branch()}"]
+    label = cfg.get("package_dir", ROOT.name)
+    lines = [f"{label} workflow — branch: {_branch()}"]
 
     roadmap_rel = cfg.get("roadmap", "doc/dev/07-roadmap.md")
     roadmap = ROOT / roadmap_rel

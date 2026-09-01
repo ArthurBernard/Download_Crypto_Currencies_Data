@@ -4,7 +4,7 @@
 If the branch changes structural code under <package_dir>/ (excluding tests) but
 adds no entry to the decision journal (<decisions>), ask the user to confirm
 before the PR is opened. This is only a net — the real capture is the
-`/finish-task` "décision" step; here we just make the omission visible.
+`/finish-task` decision step; here we just make the omission visible.
 
 Emits a PreToolUse "ask" decision (human confirms / overrides) rather than a hard
 deny, so a genuinely decision-free PR isn't deterministically blocked. No-op for
@@ -67,7 +67,7 @@ def main() -> None:
     if touched_code and decisions not in changed:
         reason = (
             f"This branch changes structural code under {pkg}/ but adds no entry "
-            f"to {decisions}. Capture the *why* (the /finish-task 'décision' step) "
+            f"to {decisions}. Capture the *why* (the /finish-task decision step) "
             f"before opening the PR — or confirm this PR genuinely needs no "
             f"decision entry."
         )

@@ -533,3 +533,41 @@ async def test_ws_stream_delegates_to_parse_message() -> None:
 
     assert collected == ["parsed:msg1", "parsed:msg2"]
 
+
+
+@pytest.mark.asyncio
+async def test_get_retries_remote_disconnect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A server closing the connection mid-exchange is retried, not fatal.
+
+    Regression: Kraken Futures' charts API sheds long-lived keep-alive
+    connections under load; ``RemoteProtocolError`` ("Server disconnected
+    without sending a response") previously escaped the retry loop and killed
+    whole deep backfill runs that a single retry would have saved.
+    """
+    calls = {"n": 0}
+
+    async def flaky_get(self: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return httpx.Response(200, json={"ok": True}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", flaky_get)
+    http = AsyncHTTPClient(backoff_base=0.0)
+    async with http as client:
+        data = await client.get("https://example.test/x")
+    assert data == {"ok": True}
+    assert calls["n"] == 3
+
+
+@pytest.mark.asyncio
+async def test_get_remote_disconnect_exhausts_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Persistent disconnects still fail after max_retries (no infinite loop)."""
+    async def always_dead(self: httpx.AsyncClient, url: str, **kwargs: Any) -> httpx.Response:
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", always_dead)
+    http = AsyncHTTPClient(max_retries=3, backoff_base=0.0)
+    async with http as client:
+        with pytest.raises(httpx.RemoteProtocolError):
+            await client.get("https://example.test/x")
