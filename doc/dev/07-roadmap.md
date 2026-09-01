@@ -81,6 +81,45 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
+## Research-driven data asks (fynance-research, 2026-07-06)
+
+Filed after the allweather-wave campaign (E59–E74). Note: the **funding-rate ask is
+resolved** — the derivative-markets epic's series (`<exchange>/funding/…`, 8 h,
+Binance/Bybit/krakenfutures, 2019+) landed and the research repo now consumes it
+directly. What remains:
+
+- [ ] **P0/URGENT — kraken order-book collector writes an internally CROSSED book.**
+  Found by fynance-research E81 (2026-07-07, first research read of the book store):
+  on every kraken USD/EUR pair, **89.9–99.6% of snapshot instants have
+  best_bid > best_ask** (sampled BTC-USD instant: bid >$1,100 above ask; ETH-BTC
+  10.6%; binance/bybit/okx 0.0% on the same window) — almost certainly the bid/ask
+  sub-books are captured/flushed asynchronously and stamped under one batch TS. The
+  kraken book data collected so far is unusable for point-in-time reconstruction.
+  Fix: capture bid/ask atomically from a single WS message; add a crossed-book
+  assertion to the collector health checks so this is caught at write time.
+  Related (lower urgency, same audit): `is_snapshot=False` delta rows have **no
+  removal marker** (0 zero-amount rows in 1.37M) and batch many events under one
+  coarse TS — deltas are not point-in-time reconstructible as stored; okx depth is
+  5 levels (top-of-book only).
+- [ ] **P1 — Atomic parquet writes (write temp + `os.replace`).** The live collector's
+  parquet writes are observably non-atomic: a concurrent reader caught **6 truncated
+  files mid-write** (`PAR1` footer check fails; e.g. `binance/ohlc/UNI-USDT/1m/2026.parquet`,
+  observed 2026-07-06 by fynance-research while backtesting against the live store —
+  transient, self-heals on the next write, but any reader race can crash or silently
+  read a partial year). Fix: write to `<file>.tmp` then atomic rename; cheap and
+  store-wide.
+- [ ] **P2 — Native-USD spot backfill for bybit/okx (BTC/ETH-USD).** bybit's USD
+  legs only start 2026-01, okx's 2024-01, so every cross-venue premium/dispersion
+  measurement (fynance-research E53/E61/E65/E71) substitutes the USDT legs under a
+  USD≈USDT parity assumption. Backfilling deeper native-USD history (as far as the
+  venues' REST archives allow — verify depth empirically per the honesty invariant)
+  removes the proxy from an entire measurement family.
+- [ ] **P3 — Quarterly futures klines: intraday granularity + pre-2021 backfill.**
+  `BTC/ETH-USDT_QUARTER` exists only at 1d from 2021-02; fynance-research E60
+  (basis-regime, null at that resolution/window) could not see the 2020–21 euphoria
+  top and cannot study roll behaviour intraday. Cheap follow-on of the
+  derivative-markets epic; opportunistic only.
+
 ## Deferred — M3 (post-3.0)
 
 Larger axes intentionally parked until after the 3.0 release. Not started; do not
