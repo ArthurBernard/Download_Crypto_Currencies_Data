@@ -78,6 +78,28 @@ Small, well-scoped items surfaced while operating v3.5.0 in production.
   replicate a collector (e.g. arthurserver's 50 jobs) in one command. One
   leaf.
 
+### Vanished instruments & alert noise (prod incident, 2026-09-30)
+
+OKX delisted its BTC-USD / ETH-USD spot pairs (~08:07 UTC; only EUR + USDT-USD
+quotes remain). The 4 affected arthurserver jobs were deleted, but the incident
+exposed three gaps:
+
+- [ ] **Backfill of a vanished instrument must fail loudly.** The two OKX USD
+  OHLC `start=last` backfills kept "succeeding" with 0 rows for 8 h — no error,
+  no alert; only the stream failures revealed it. An empty page on an instrument
+  the venue now reports as unknown (OKX `51001`) should raise, mark the run
+  `failed`, and reach `HealthMonitor`. One leaf.
+- [ ] **Permanent WS subscription rejections should stop the stream, not retry
+  forever.** OKX `60018` ("instId doesn't exist") restarted each stream every
+  60 s (360+ failures/stream, one ntfy alert/hour each). Classify
+  non-retryable subscribe errors per adapter → stop the worker, mark it
+  `failed`, send a single alert. One leaf.
+- [ ] **Collapse remote-sync alerts when the backup target is simply off.**
+  ~364 hourly `remote-sync failed` alerts in Sept 2026 while the PC was
+  down (`dial tcp …:22: i/o timeout`) — a known, accepted limitation. Alert once
+  on the transition to unreachable (and once on recovery) instead of every
+  retry. One leaf.
+
 P2 (append+compaction writes) and P3 (filename-based pruning in `load()`)
 stay parked as perf ideas until load demands them (see the audit doc).
 
