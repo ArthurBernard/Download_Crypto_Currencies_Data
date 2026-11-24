@@ -120,6 +120,19 @@ Template:
 
 <!-- new entries below, newest first -->
 
+### 2026-11-24 — Home-screen web app without a service worker (PR #XX)  [accepted]
+- **Choice**: make the UI installable on an iPhone home screen with only a web
+  manifest (`display: standalone`), an opaque 180×180 `apple-touch-icon.png` and the
+  `apple-mobile-web-app-*` meta tags, served from the already-public `/static`.
+  No service worker, no offline cache.
+- **Why**: the goal is an app-like launcher for the live dashboard, which is useless
+  offline anyway; a service worker needs HTTPS (the tailnet UI is plain HTTP) and
+  would add cache-invalidation risk to a monitoring page. The icon is opaque because
+  iOS fills transparency with black; it lives in `/static` so iOS can fetch it without
+  the session cookie (the app keeps its own cookie jar and logs in once).
+- **Rejected alternatives**: full PWA with a service worker (HTTPS prerequisite, no
+  benefit for live data); a native wrapper app (out of scope for a self-hosted daemon).
+
 ### 2026-08-29 — Third-party commercial data providers are not dccd sources (PR #203)  [rejected]
 - **Choice**: an external PR adding CryptoHFTData — a commercial archive
   re-publisher — as 15 provider-qualified entries in `SUPPORTED_EXCHANGES`
