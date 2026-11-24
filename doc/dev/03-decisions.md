@@ -120,7 +120,7 @@ Template:
 
 <!-- new entries below, newest first -->
 
-### 2026-11-24 — Home-screen web app without a service worker (PR #XX)  [accepted]
+### 2026-11-24 — Home-screen web app without a service worker (PR #207)  [accepted]
 - **Choice**: make the UI installable on an iPhone home screen with only a web
   manifest (`display: standalone`), an opaque 180×180 `apple-touch-icon.png` and the
   `apple-mobile-web-app-*` meta tags, served from the already-public `/static`.

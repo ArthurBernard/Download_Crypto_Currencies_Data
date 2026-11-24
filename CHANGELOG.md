@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - UI can be installed as a home-screen web app (iOS "Add to Home Screen"):
   `static/manifest.webmanifest` (standalone display) and a 180×180
-  `static/apple-touch-icon.png`, linked from `base.html` and `login.html` (#XX).
+  `static/apple-touch-icon.png`, linked from `base.html` and `login.html` (#207).
 
 ### Changed
 
