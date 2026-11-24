@@ -143,6 +143,7 @@ ws-subscription-honesty):
   longer templated into pages; API hardening (`ui_rate_limit` → 429, `ui_readonly` →
   403, `ui_trusted_proxy`, CORS-never-wildcard test); mobile-responsive pass
   (table-scroll wrappers, tap targets, `@media`; `ui_smoke.py` 390px overflow check).
+  Installable as a home-screen web app (manifest + `apple-touch-icon`, no service worker).
   All verified live over Tailscale / a headless mobile viewport.
 - **Scripts**: `scripts/repair_kraken_okx.py` (one-off data repair).
 - **Examples**: `examples/` (v3 config sample, `Client` downloader script, and a

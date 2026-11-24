@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in — dccd UI</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  {# Same home-screen tags as base.html: iOS may install from the login page. #}
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="dccd">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#0a0d13">
   <style>
     :root { --bg:#0f1419; --fg:#e6e6e6; --muted:#8b98a5; --accent:#4a9eff;
             --border:#2a3038; --card:#161b22; --ok:#3fb950; --err:#f85149; }
