@@ -115,6 +115,20 @@ class TestAuthSession:
         assert r.status_code == 200
         assert "token" in r.text.lower()
 
+    def test_home_screen_assets_public_and_linked(self, auth_client):
+        # iOS fetches the icon/manifest without the session cookie, and the app
+        # may be installed from the login page itself.
+        page = auth_client.get("/login").text
+        assert 'href="/static/manifest.webmanifest"' in page
+        assert 'href="/static/apple-touch-icon.png"' in page
+        icon = auth_client.get("/static/apple-touch-icon.png")
+        assert icon.status_code == 200
+        assert icon.headers["content-type"] == "image/png"
+        manifest = auth_client.get("/static/manifest.webmanifest")
+        assert manifest.status_code == 200
+        assert manifest.json()["display"] == "standalone"
+        assert manifest.json()["start_url"] == "/"
+
     def test_login_wrong_token_401(self, auth_client):
         r = auth_client.post(
             "/login", data={"token": "nope", "next": "/"}, follow_redirects=False

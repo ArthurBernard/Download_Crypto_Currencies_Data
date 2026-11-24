@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}dccd{% endblock %} — dccd UI</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  {# Home-screen web app (iOS "Add to Home Screen" / installable PWA). #}
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="dccd">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#0a0d13">
   <style>
     /* Self-hosted fonts (woff2, latin subset) — the daemon serves them from
        /static itself, so the UI needs no external network and leaks nothing to
